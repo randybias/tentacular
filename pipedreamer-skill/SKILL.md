@@ -51,6 +51,53 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 | `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml. |
 | `ctx.secrets` | `Record<string, Record<string, string>>` | Secrets loaded from `.secrets.yaml` (local) or K8s Secret volume at `/app/secrets` (production). Keyed by service name. |
 
+## Trigger Types
+
+| Type | Mechanism | Required Fields | K8s Resources | Status |
+|------|-----------|----------------|---------------|--------|
+| `manual` | HTTP POST `/run` | none | — | Implemented |
+| `cron` | K8s CronJob → curl POST `/run` | `schedule`, optional `name` | CronJob | Implemented |
+| `queue` | NATS subscription → execute | `subject` | — | Implemented |
+| `webhook` | Future: gateway → NATS bridge | `path` | — | Roadmap |
+
+### Trigger Name Field
+
+Triggers can have an optional `name` field (must match `[a-z][a-z0-9_-]*`, unique within workflow). Named cron triggers POST `{"trigger": "<name>"}` to `/run`. Root nodes receive this as `input.trigger` to branch behavior.
+
+### Cron Trigger Lifecycle
+
+1. Define in workflow.yaml: `type: cron`, `schedule: "0 9 * * *"`, optional `name`
+2. `pipedreamer deploy` generates CronJob manifest(s) alongside Deployment and Service
+3. CronJob naming: `{wf}-cron` (single) or `{wf}-cron-0`, `{wf}-cron-1` (multiple)
+4. CronJob curls `http://{wf}.{ns}.svc.cluster.local:8080/run` with trigger payload
+5. `pipedreamer undeploy` deletes CronJobs by label selector (automatic cleanup)
+
+### Queue Trigger (NATS)
+
+Queue triggers subscribe to NATS subjects. The engine connects using config and secrets:
+
+- **URL**: `config.nats_url` in workflow.yaml (e.g., `nats.ospo-dev.miralabs.dev:18453`)
+- **Auth**: `secrets.nats.token` (token authentication)
+- **TLS**: Uses system CA trust store (Let's Encrypt certs work automatically)
+
+If either `nats_url` or `nats.token` is missing, the engine warns and skips NATS setup (graceful degradation).
+
+Messages are parsed as JSON and passed as input to root nodes. If the NATS message has a reply subject, the workflow result is sent back (request-reply pattern).
+
+## Config Block
+
+The `config:` block is **open** — it accepts arbitrary keys alongside `timeout` and `retries`. Custom keys flow through to `ctx.config` in nodes. This is the standard mechanism for non-secret workflow configuration.
+
+```yaml
+config:
+  timeout: 30s
+  retries: 2
+  nats_url: "nats.ospo-dev.miralabs.dev:18453"
+  custom_setting: "value"
+```
+
+In Go, extra keys are stored in `WorkflowConfig.Extras` (via `yaml:",inline"`). Use `ToMap()` to get a flat merged map.
+
 ## Minimal workflow.yaml
 
 ```yaml

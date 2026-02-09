@@ -229,6 +229,162 @@ func TestK8sManifestNamespace(t *testing.T) {
 	}
 }
 
+func TestK8sManifestCronTriggerSingle(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "cron-wf",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "manual"},
+			{Type: "cron", Schedule: "0 9 * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+	}
+	manifests := GenerateK8sManifests(wf, "cron-wf:1-0", "default", DeployOptions{})
+
+	if len(manifests) != 3 {
+		t.Fatalf("expected 3 manifests (Deployment, Service, CronJob), got %d", len(manifests))
+	}
+	if manifests[2].Kind != "CronJob" {
+		t.Errorf("expected third manifest kind CronJob, got %s", manifests[2].Kind)
+	}
+	if manifests[2].Name != "cron-wf-cron" {
+		t.Errorf("expected CronJob name cron-wf-cron, got %s", manifests[2].Name)
+	}
+	if !strings.Contains(manifests[2].Content, `schedule: "0 9 * * *"`) {
+		t.Error("expected schedule in CronJob manifest")
+	}
+	if !strings.Contains(manifests[2].Content, "concurrencyPolicy: Forbid") {
+		t.Error("expected concurrencyPolicy: Forbid")
+	}
+	if !strings.Contains(manifests[2].Content, "successfulJobsHistoryLimit: 3") {
+		t.Error("expected successfulJobsHistoryLimit: 3")
+	}
+	if !strings.Contains(manifests[2].Content, "failedJobsHistoryLimit: 3") {
+		t.Error("expected failedJobsHistoryLimit: 3")
+	}
+}
+
+func TestK8sManifestCronTriggerMultiple(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "multi-cron",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "cron", Name: "daily", Schedule: "0 9 * * *"},
+			{Type: "cron", Name: "hourly", Schedule: "0 * * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+	}
+	manifests := GenerateK8sManifests(wf, "multi-cron:1-0", "default", DeployOptions{})
+
+	if len(manifests) != 4 {
+		t.Fatalf("expected 4 manifests (Deployment, Service, 2 CronJobs), got %d", len(manifests))
+	}
+	if manifests[2].Name != "multi-cron-cron-0" {
+		t.Errorf("expected first CronJob name multi-cron-cron-0, got %s", manifests[2].Name)
+	}
+	if manifests[3].Name != "multi-cron-cron-1" {
+		t.Errorf("expected second CronJob name multi-cron-cron-1, got %s", manifests[3].Name)
+	}
+}
+
+func TestK8sManifestCronTriggerNamedPostBody(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "named-cron",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "cron", Name: "daily-digest", Schedule: "0 9 * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+	}
+	manifests := GenerateK8sManifests(wf, "named-cron:1-0", "default", DeployOptions{})
+
+	cronContent := manifests[2].Content
+	if !strings.Contains(cronContent, `daily-digest`) {
+		t.Error("expected trigger name in POST body")
+	}
+}
+
+func TestK8sManifestCronTriggerUnnamedPostBody(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "unnamed-cron",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "cron", Schedule: "0 9 * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+	}
+	manifests := GenerateK8sManifests(wf, "unnamed-cron:1-0", "default", DeployOptions{})
+
+	cronContent := manifests[2].Content
+	// Should contain {} (not a trigger name)
+	if strings.Contains(cronContent, `"trigger"`) {
+		t.Error("unnamed trigger should not include trigger field in POST body")
+	}
+}
+
+func TestK8sManifestCronTriggerLabels(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "label-cron",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "cron", Schedule: "0 9 * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+	}
+	manifests := GenerateK8sManifests(wf, "label-cron:1-0", "default", DeployOptions{})
+
+	cronContent := manifests[2].Content
+	if !strings.Contains(cronContent, "app.kubernetes.io/name: label-cron") {
+		t.Error("expected app.kubernetes.io/name label in CronJob")
+	}
+	if !strings.Contains(cronContent, "app.kubernetes.io/managed-by: pipedreamer") {
+		t.Error("expected app.kubernetes.io/managed-by label in CronJob")
+	}
+}
+
+func TestK8sManifestManualOnlyNoRegression(t *testing.T) {
+	wf := makeTestWorkflow("manual-only")
+	manifests := GenerateK8sManifests(wf, "manual-only:1-0", "default", DeployOptions{})
+
+	if len(manifests) != 2 {
+		t.Fatalf("expected 2 manifests for manual-only (no CronJobs), got %d", len(manifests))
+	}
+	for _, m := range manifests {
+		if m.Kind == "CronJob" {
+			t.Error("manual-only workflow should not have CronJob manifests")
+		}
+	}
+}
+
+func TestK8sManifestCronTriggerServiceURL(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "svc-url-test",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "cron", Schedule: "0 9 * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+	}
+	manifests := GenerateK8sManifests(wf, "svc-url-test:1-0", "prod", DeployOptions{})
+
+	cronContent := manifests[2].Content
+	if !strings.Contains(cronContent, "http://svc-url-test.prod.svc.cluster.local:8080/run") {
+		t.Error("expected correct service URL in CronJob manifest")
+	}
+}
+
 func TestDockerfileDistrolessBase(t *testing.T) {
 	df := GenerateDockerfile()
 	if !strings.Contains(df, "FROM denoland/deno:distroless") {

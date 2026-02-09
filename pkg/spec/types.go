@@ -13,8 +13,10 @@ type Workflow struct {
 
 type Trigger struct {
 	Type     string `yaml:"type"`
+	Name     string `yaml:"name,omitempty"`
 	Schedule string `yaml:"schedule,omitempty"`
 	Path     string `yaml:"path,omitempty"`
+	Subject  string `yaml:"subject,omitempty"`
 }
 
 type NodeSpec struct {
@@ -28,6 +30,23 @@ type Edge struct {
 }
 
 type WorkflowConfig struct {
-	Timeout string `yaml:"timeout,omitempty"`
-	Retries int    `yaml:"retries,omitempty"`
+	Timeout string                 `yaml:"timeout,omitempty"`
+	Retries int                    `yaml:"retries,omitempty"`
+	Extras  map[string]interface{} `yaml:",inline"`
+}
+
+// ToMap returns a flat map merging typed fields and extras.
+// Zero-valued typed fields are omitted.
+func (c WorkflowConfig) ToMap() map[string]interface{} {
+	m := make(map[string]interface{})
+	for k, v := range c.Extras {
+		m[k] = v
+	}
+	if c.Timeout != "" {
+		m["timeout"] = c.Timeout
+	}
+	if c.Retries != 0 {
+		m["retries"] = c.Retries
+	}
+	return m
 }

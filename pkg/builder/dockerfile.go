@@ -21,6 +21,6 @@ RUN ["deno", "cache", "engine/main.ts"]
 
 EXPOSE 8080
 
-ENTRYPOINT ["deno", "run", "--allow-net", "--allow-read=/app", "--allow-write=/tmp", "engine/main.ts", "--workflow", "/app/workflow.yaml", "--port", "8080"]
+ENTRYPOINT ["deno", "run", "--allow-net", "--allow-read=/app", "--allow-write=/tmp", "--allow-env", "engine/main.ts", "--workflow", "/app/workflow.yaml", "--port", "8080"]
 `
 }

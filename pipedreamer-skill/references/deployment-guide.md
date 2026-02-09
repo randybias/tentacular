@@ -41,7 +41,7 @@ RUN ["deno", "cache", "engine/main.ts"]
 
 EXPOSE 8080
 
-ENTRYPOINT ["deno", "run", "--allow-net", "--allow-read=/app", "--allow-write=/tmp", "engine/main.ts", "--workflow", "/app/workflow.yaml", "--port", "8080"]
+ENTRYPOINT ["deno", "run", "--allow-net", "--allow-read=/app", "--allow-write=/tmp", "--allow-env", "engine/main.ts", "--workflow", "/app/workflow.yaml", "--port", "8080"]
 ```
 
 ### Image Tag
@@ -63,9 +63,11 @@ When `--registry` is set, the tag becomes `<registry>/<tag>`.
 pipedreamer deploy [dir]
 ```
 
-Generates and applies Kubernetes manifests.
+Generates and applies Kubernetes manifests. Runs preflight checks automatically before applying.
 
 ### Generated Manifests
+
+Manifests always include a Deployment and Service. CronJob manifests are added for each `type: cron` trigger.
 
 **Deployment** with gVisor RuntimeClass:
 
@@ -155,7 +157,9 @@ Runs preflight validation to ensure the cluster is ready for deployment.
 - Target namespace exists
 - gVisor RuntimeClass is available
 - Required Secrets exist (convention: `<workflow-name>-secrets`)
-- RBAC permissions
+- RBAC permissions (including `batch/cronjobs` and `batch/jobs` for cron triggers)
+
+Preflight checks run automatically during `pipedreamer deploy`. Failures abort the deploy with remediation instructions.
 
 ### Flags
 
@@ -229,7 +233,7 @@ pipedreamer undeploy my-workflow -n production
 pipedreamer undeploy my-workflow -n production --yes
 ```
 
-Deletes the Service, Deployment, and Secret (`<name>-secrets`). Prompts for confirmation unless `--yes` is passed. Resources that don't exist are silently skipped.
+Deletes the Service, Deployment, Secret (`<name>-secrets`), and all CronJobs matching the workflow's labels. Prompts for confirmation unless `--yes` is passed. Resources that don't exist are silently skipped.
 
 ### Full Lifecycle (No kubectl)
 
@@ -244,6 +248,115 @@ pipedreamer logs my-workflow -n production --tail 20
 pipedreamer undeploy my-workflow -n production --yes
 ```
 
+## Triggers
+
+### Cron Triggers
+
+Cron triggers generate K8s CronJob manifests automatically during `pipedreamer deploy`.
+
+#### Setup
+
+```yaml
+# workflow.yaml
+triggers:
+  - type: cron
+    name: daily-digest
+    schedule: "0 9 * * *"
+  - type: cron
+    name: hourly-check
+    schedule: "0 * * * *"
+```
+
+#### What Gets Generated
+
+Each cron trigger produces a CronJob that curls the workflow's ClusterIP service:
+
+- **Single cron**: CronJob named `{wf}-cron`
+- **Multiple crons**: CronJobs named `{wf}-cron-0`, `{wf}-cron-1`, etc.
+- **Named trigger**: POSTs `{"trigger": "<name>"}` to `/run`
+- **Unnamed trigger**: POSTs `{}` to `/run`
+
+CronJob properties:
+- Image: `curlimages/curl:latest`
+- Target: `http://{wf}.{ns}.svc.cluster.local:8080/run`
+- `concurrencyPolicy: Forbid` (no overlapping runs)
+- `successfulJobsHistoryLimit: 3`, `failedJobsHistoryLimit: 3`
+- Labels: `app.kubernetes.io/name`, `app.kubernetes.io/managed-by: pipedreamer`
+
+#### Viewing CronJobs
+
+```bash
+kubectl get cronjobs -n <namespace> -l app.kubernetes.io/managed-by=pipedreamer
+```
+
+#### Parameterized Execution
+
+With named triggers, the first node receives `{"trigger": "daily-digest"}` as input. Use this to branch behavior:
+
+```typescript
+export default async function run(ctx: Context, input: { trigger?: string }) {
+  if (input.trigger === "daily-digest") {
+    // Full digest logic
+  } else if (input.trigger === "hourly-check") {
+    // Quick health check
+  }
+}
+```
+
+### Queue Triggers (NATS)
+
+Queue triggers subscribe to NATS subjects. Messages trigger workflow execution.
+
+#### Setup
+
+```yaml
+# workflow.yaml
+triggers:
+  - type: queue
+    subject: events.github.push
+
+config:
+  nats_url: "nats.ospo-dev.miralabs.dev:18453"
+```
+
+Secrets (`.secrets.yaml`):
+```yaml
+nats:
+  token: "your-nats-token"
+```
+
+#### NATS Connection
+
+- **Server**: Specified in `config.nats_url`
+- **Authentication**: Token from `secrets.nats.token`
+- **TLS**: Uses system CA trust store. Let's Encrypt certificates work automatically — no special TLS configuration needed.
+- **Graceful degradation**: If `nats_url` or `nats.token` is missing, the engine warns and skips NATS setup (HTTP triggers still work).
+
+#### Message Flow
+
+1. Message published to NATS subject (e.g., `events.github.push`)
+2. Engine receives message, parses payload as JSON
+3. Payload passed as input to root nodes
+4. If message has a reply subject, execution result is sent back (request-reply)
+
+#### Graceful Shutdown
+
+On SIGTERM/SIGINT, the engine:
+1. Drains NATS subscriptions (in-flight messages complete)
+2. Shuts down the HTTP server
+3. Exits cleanly
+
+### Undeploy Cleanup
+
+`pipedreamer undeploy` removes all resources for a workflow:
+
+- Service
+- Deployment
+- Secret (`{name}-secrets`)
+- **All CronJobs** matching labels `app.kubernetes.io/name={name},app.kubernetes.io/managed-by=pipedreamer`
+
+CronJob cleanup uses label selectors, so it catches all CronJobs regardless of how many triggers existed.
+
 ## Security Model (Fortress)
 
 Pipedreamer uses a three-layer security model:
@@ -254,13 +367,12 @@ The engine runs with restricted Deno permissions:
 
 | Flag | Scope | Purpose |
 |------|-------|---------|
-| `--allow-net` | All network | Nodes make HTTP requests via ctx.fetch |
+| `--allow-net` | All network | Nodes make HTTP requests via ctx.fetch, NATS connections |
 | `--allow-read=/app` | `/app` only | Read workflow files, engine code, secrets |
 | `--allow-write=/tmp` | `/tmp` only | Temporary file operations only |
+| `--allow-env` | All env vars | Environment variable access for NATS and runtime config |
 
-No file system access outside `/app` (read) and `/tmp` (write). No environment variable access, no subprocess spawning, no FFI.
-
-During local development, `--allow-env` is also included.
+No file system access outside `/app` (read) and `/tmp` (write). No subprocess spawning, no FFI.
 
 ### Layer 2: Distroless Container
 

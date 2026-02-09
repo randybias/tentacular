@@ -133,6 +133,11 @@ func (c *Client) checkRBACPermissions(ctx context.Context, namespace string) Che
 		{group: "", resource: "secrets", verb: "create"},
 		{group: "", resource: "secrets", verb: "update"},
 		{group: "", resource: "secrets", verb: "delete"},
+		{group: "batch", resource: "cronjobs", verb: "create"},
+		{group: "batch", resource: "cronjobs", verb: "update"},
+		{group: "batch", resource: "cronjobs", verb: "delete"},
+		{group: "batch", resource: "cronjobs", verb: "list"},
+		{group: "batch", resource: "jobs", verb: "list"},
 	}
 
 	var missing []string

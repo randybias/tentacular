@@ -73,6 +73,27 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating k8s client: %w", err)
 	}
 
+	// Auto-preflight checks before applying manifests
+	secretNames := []string{wf.Name + "-secrets"}
+	results, err := client.PreflightCheck(namespace, false, secretNames)
+	if err != nil {
+		return fmt.Errorf("preflight check failed: %w", err)
+	}
+	failed := false
+	for _, r := range results {
+		if !r.Passed {
+			fmt.Printf("  ✗ %s\n", r.Name)
+			if r.Remediation != "" {
+				fmt.Printf("    → %s\n", r.Remediation)
+			}
+			failed = true
+		}
+	}
+	if failed {
+		return fmt.Errorf("preflight checks failed — fix the issues above and retry")
+	}
+	fmt.Println("  ✓ Preflight checks passed")
+
 	// Auto-provision secrets from local .secrets.yaml or .secrets/ directory
 	secretManifest, err := buildSecretManifest(absDir, wf.Name, namespace)
 	if err != nil {

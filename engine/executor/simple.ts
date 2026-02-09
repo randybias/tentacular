@@ -14,7 +14,7 @@ export class SimpleExecutor implements WorkflowExecutor {
     this.maxRetries = opts?.maxRetries ?? 0;
   }
 
-  async execute(graph: CompiledDAG, runner: NodeRunner, ctx: Context): Promise<ExecutionResult> {
+  async execute(graph: CompiledDAG, runner: NodeRunner, ctx: Context, input?: unknown): Promise<ExecutionResult> {
     const startedAt = Date.now();
     const outputs: Record<string, unknown> = {};
     const errors: Record<string, string> = {};
@@ -29,11 +29,11 @@ export class SimpleExecutor implements WorkflowExecutor {
           const nodeStart = Date.now();
           try {
             // Build input for this node from its dependencies' outputs
-            const input = this.resolveInput(nodeId, inputMap, outputs);
+            const nodeInput = this.resolveInput(nodeId, inputMap, outputs, input);
 
             // Execute with timeout and retries
             const output = await this.executeWithRetry(
-              () => this.executeWithTimeout(runner, nodeId, ctx, input),
+              () => this.executeWithTimeout(runner, nodeId, ctx, nodeInput),
               this.maxRetries,
             );
 
@@ -95,9 +95,10 @@ export class SimpleExecutor implements WorkflowExecutor {
     nodeId: string,
     inputMap: Map<string, string[]>,
     outputs: Record<string, unknown>,
+    initialInput?: unknown,
   ): unknown {
     const deps = inputMap.get(nodeId);
-    if (!deps || deps.length === 0) return {};
+    if (!deps || deps.length === 0) return initialInput ?? {};
     if (deps.length === 1) return outputs[deps[0]!];
     // Multiple inputs: merge into a keyed object
     const merged: Record<string, unknown> = {};

@@ -12,9 +12,11 @@ export interface WorkflowSpec {
 }
 
 export interface Trigger {
-  type: "manual" | "cron" | "webhook";
+  type: "manual" | "cron" | "webhook" | "queue";
+  name?: string;
   schedule?: string;
   path?: string;
+  subject?: string;
 }
 
 export interface NodeSpec {
@@ -30,6 +32,7 @@ export interface Edge {
 export interface WorkflowConfig {
   timeout?: string;
   retries?: number;
+  [key: string]: unknown;
 }
 
 /** Compiled DAG — topologically sorted stages of nodes */

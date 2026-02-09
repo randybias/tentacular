@@ -17,6 +17,7 @@ var validTriggerTypes = map[string]bool{
 	"manual":  true,
 	"cron":    true,
 	"webhook": true,
+	"queue":   true,
 }
 
 // Parse parses and validates a workflow YAML spec.
@@ -46,15 +47,28 @@ func Parse(data []byte) (*Workflow, []string) {
 	if len(wf.Triggers) == 0 {
 		errs = append(errs, "at least one trigger is required")
 	}
+	triggerNames := make(map[string]bool)
 	for i, t := range wf.Triggers {
 		if !validTriggerTypes[t.Type] {
-			errs = append(errs, fmt.Sprintf("trigger[%d]: invalid type %q (must be manual, cron, or webhook)", i, t.Type))
+			errs = append(errs, fmt.Sprintf("trigger[%d]: invalid type %q (must be manual, cron, webhook, or queue)", i, t.Type))
 		}
 		if t.Type == "cron" && t.Schedule == "" {
 			errs = append(errs, fmt.Sprintf("trigger[%d]: cron trigger requires schedule", i))
 		}
 		if t.Type == "webhook" && t.Path == "" {
 			errs = append(errs, fmt.Sprintf("trigger[%d]: webhook trigger requires path", i))
+		}
+		if t.Type == "queue" && t.Subject == "" {
+			errs = append(errs, fmt.Sprintf("trigger[%d]: queue trigger requires subject", i))
+		}
+		if t.Name != "" {
+			if !identRe.MatchString(t.Name) {
+				errs = append(errs, fmt.Sprintf("trigger[%d]: name must match [a-z][a-z0-9_-]*, got: %q", i, t.Name))
+			}
+			if triggerNames[t.Name] {
+				errs = append(errs, fmt.Sprintf("trigger[%d]: duplicate trigger name %q", i, t.Name))
+			}
+			triggerNames[t.Name] = true
 		}
 	}
 

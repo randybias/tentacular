@@ -109,7 +109,7 @@ async function main() {
   }
 
   // Start HTTP server
-  startServer({
+  const server = startServer({
     port,
     graph,
     runner,
@@ -117,6 +117,49 @@ async function main() {
     timeoutMs,
     maxRetries: spec.config?.retries ?? 0,
   });
+
+  // Start NATS triggers for queue-type triggers
+  let natsHandle: { close(): Promise<void> } | null = null;
+  const queueTriggers = spec.triggers.filter((t) => t.type === "queue");
+  if (queueTriggers.length > 0) {
+    const config = spec.config as Record<string, unknown> ?? {};
+    const natsUrl = config.nats_url as string | undefined;
+    const natsToken = secrets.nats?.token;
+
+    if (!natsUrl) {
+      console.warn("Queue triggers defined but config.nats_url is not set — skipping NATS setup");
+    } else if (!natsToken) {
+      console.warn("Queue triggers defined but secrets.nats.token is not set — skipping NATS setup");
+    } else {
+      try {
+        const { startNATSTriggers } = await import("./triggers/nats.ts");
+        natsHandle = await startNATSTriggers({
+          url: natsUrl,
+          token: natsToken,
+          triggers: queueTriggers,
+          graph,
+          runner,
+          ctx,
+          timeoutMs,
+          maxRetries: spec.config?.retries ?? 0,
+        });
+      } catch (err) {
+        console.error("Failed to start NATS triggers:", err);
+      }
+    }
+  }
+
+  // Graceful shutdown on SIGTERM/SIGINT
+  const shutdown = async () => {
+    console.log("Shutting down...");
+    if (natsHandle) {
+      await natsHandle.close();
+    }
+    server.shutdown();
+    Deno.exit(0);
+  };
+  Deno.addSignalListener("SIGTERM", shutdown);
+  Deno.addSignalListener("SIGINT", shutdown);
 
   // File watcher for hot-reload
   if (flags.watch) {

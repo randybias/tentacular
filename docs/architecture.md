@@ -109,7 +109,9 @@ pkg/
 8.  Create NodeRunner (per-node context creation)
 9.  Parse timeout/retry config
 10. Start HTTP server on configured port
-11. (Optional) Start file watcher for hot-reload
+11. Start NATS triggers if queue triggers defined (dynamic import)
+12. Register signal handlers (SIGTERM/SIGINT) for graceful shutdown
+13. (Optional) Start file watcher for hot-reload
 ```
 
 ### Compilation Pipeline
@@ -153,7 +155,8 @@ interface Context {
 
 - **`ctx.fetch(service, path)`** — resolves to `https://api.{service}.com{path}`, auto-injects auth headers from secrets (Bearer token or X-API-Key)
 - **`ctx.log`** — structured logging with node ID prefix
-- **`ctx.secrets`** — loaded from cascade (see Section 6)
+- **`ctx.config`** — workflow-level config from `config:` block. The config block is **open**: arbitrary keys (e.g., `nats_url`) are preserved alongside typed fields (`timeout`, `retries`). In Go, extra keys flow into `WorkflowConfig.Extras` via `yaml:",inline"`. Use `ToMap()` to get a flat merged map.
+- **`ctx.secrets`** — loaded from cascade (see Section 7)
 
 ### Module Loader
 
@@ -177,7 +180,56 @@ interface Context {
 
 Nodes import types via: `import type { Context } from "pipedreamer"`
 
-## 4. Security Model
+## 4. Triggers
+
+Triggers define how workflow execution is initiated. Each workflow specifies one or more triggers in its `triggers:` array.
+
+| Type | Mechanism | Required Fields | K8s Resources | Status |
+|------|-----------|----------------|---------------|--------|
+| `manual` | HTTP POST `/run` | none | — | Implemented |
+| `cron` | K8s CronJob → curl POST `/run` | `schedule`, optional `name` | CronJob | Implemented |
+| `queue` | NATS subscription → execute | `subject` | — | Implemented |
+| `webhook` | Future: gateway → NATS bridge | `path` | — | Roadmap |
+
+### Named Triggers
+
+Triggers can have an optional `name` field for parameterized execution. CronJobs POST `{"trigger": "<name>"}` to `/run`, and root nodes receive this as input. This supports workflows with multiple cron schedules that branch behavior based on `input.trigger`.
+
+```yaml
+triggers:
+  - type: cron
+    name: daily-digest
+    schedule: "0 9 * * *"
+  - type: cron
+    name: hourly-check
+    schedule: "0 * * * *"
+```
+
+### Cron Triggers
+
+Cron triggers generate K8s CronJob manifests during `pipedreamer deploy`. Each CronJob uses `curlimages/curl` to POST to the workflow's ClusterIP service at `http://{name}.{namespace}.svc.cluster.local:8080/run`.
+
+- **Naming**: `{wf}-cron` (single trigger) or `{wf}-cron-0`, `{wf}-cron-1` (multiple)
+- **concurrencyPolicy**: `Forbid` (no overlapping runs)
+- **historyLimits**: 3 successful, 3 failed
+- **Labels**: `app.kubernetes.io/name` and `app.kubernetes.io/managed-by: pipedreamer`
+- **Cleanup**: `pipedreamer undeploy` deletes CronJobs by label selector
+
+### Queue Triggers (NATS)
+
+Queue triggers subscribe to NATS subjects. Messages trigger workflow execution with the message payload as input.
+
+- **Connection**: TLS + token auth via `config.nats_url` and `secrets.nats.token`
+- **Dynamic import**: NATS library only loaded when queue triggers exist
+- **Request-reply**: If a message has a reply subject, the execution result is sent back
+- **Graceful shutdown**: SIGTERM/SIGINT drain NATS subscriptions before exit
+- **Degradation**: Engine warns and skips if `nats_url` or `nats.token` is missing
+
+### POST Body Passthrough
+
+The `/run` endpoint parses POST body as JSON and passes it as initial input to root nodes (nodes with no incoming edges). GET requests and empty bodies default to `{}`.
+
+## 5. Security Model
 
 Five layers of defense-in-depth, from innermost to outermost:
 
@@ -218,7 +270,7 @@ securityContext:                    # Container level
 
 Secrets are mounted as read-only files at `/app/secrets` from a K8s Secret resource (`optional: true`). They are never exposed as environment variables — env vars are visible in `kubectl describe pod`, process listings, and crash dumps.
 
-## 5. Deployment Pipeline
+## 6. Deployment Pipeline
 
 ### Build Phase
 
@@ -268,8 +320,9 @@ pipedreamer cluster check        Preflight: API, gVisor, namespace, RBAC, secret
 | Deployment | `{workflow-name}` | 1 replica, gVisor RuntimeClass, security contexts, probes, resource limits |
 | Service | `{workflow-name}` | ClusterIP, port 8080 |
 | Secret | `{workflow-name}-secrets` | Opaque, stringData from .secrets/ or .secrets.yaml |
+| CronJob | `{wf}-cron` or `{wf}-cron-{i}` | Per cron trigger. curlimages/curl, concurrencyPolicy: Forbid, historyLimit: 3 |
 
-## 6. Secrets Management
+## 7. Secrets Management
 
 ### Cascade Precedence
 
@@ -314,20 +367,20 @@ stripe:
 - `secrets[service].token` → `Authorization: Bearer {token}`
 - `secrets[service].api_key` → `X-API-Key: {api_key}`
 
-## 7. Testing Architecture
+## 8. Testing Architecture
 
-### Go Tests (39 total)
+### Go Tests (51 total)
 
 | Package | File | Tests | Coverage |
 |---------|------|-------|----------|
-| `pkg/spec` | `parse_test.go` | 6 | Parser: valid spec, missing name, invalid name, cycles, edge refs, triggers |
-| `pkg/builder` | `k8s_test.go` | 18 | K8s manifests: security contexts, probes, RuntimeClass, labels, volumes, resources, Dockerfile |
+| `pkg/spec` | `parse_test.go` | 16 | Parser: valid spec, missing name, invalid name, cycles, edge refs, triggers, config extras, ToMap, trigger names, queue triggers |
+| `pkg/builder` | `k8s_test.go` | 25 | K8s manifests: security contexts, probes, RuntimeClass, labels, volumes, resources, Dockerfile, CronJob generation/naming/labels/POST body |
 | `pkg/cli` | `deploy_secrets_test.go` | 12 | Secret provisioning: dir/YAML cascade, hidden files, empty dirs, whitespace, error handling |
 | `pkg/k8s` | `preflight_test.go` | 3 | CheckResultsJSON: warning omitempty, round-trip parsing |
 
 Run: `go test ./pkg/...`
 
-### Deno Tests (41 total)
+### Deno Tests (47 total)
 
 | Module | File | Tests | Coverage |
 |--------|------|-------|----------|
@@ -336,6 +389,7 @@ Run: `go test ./pkg/...`
 | `context` | `secrets_test.ts` | 6 | Secret loading: YAML, directory, missing, hidden, invalid, plain text |
 | `context` | `cascade_test.ts` | 7 | Cascade: explicit precedence, dir/YAML merge, empty, fallback, key preservation |
 | `executor` | `simple_test.ts` | 7 | Execution: single, chain, failure, parallel, retry, retry exhaustion, timeout |
+| `triggers` | `nats_test.ts` | 6 | NATS options validation: URL, token, triggers, subject, valid options |
 
 Run: `deno test --allow-read --allow-write=/tmp --allow-net --allow-env` in `engine/`
 
@@ -353,7 +407,7 @@ pipedreamer test myworkflow/fetch     Run single node test
 pipedreamer test --pipeline           Run full workflow end-to-end
 ```
 
-## 8. Data Flow
+## 9. Data Flow
 
 Trace of a workflow execution from spec to response:
 
@@ -410,7 +464,7 @@ Compiles to:
 - Stage 2: `[summarize]` — receives repos array, produces summary text
 - Stage 3: `[notify]` — receives summary, sends notification
 
-## 9. Infrastructure
+## 10. Infrastructure
 
 ### k0s Cluster
 
@@ -435,7 +489,7 @@ Installation: `sudo bash deploy/gvisor/install.sh && kubectl apply -f deploy/gvi
 
 Preflight check: `pipedreamer cluster check` validates RuntimeClass exists (warning if missing, not a hard failure).
 
-## 10. Extension Points
+## 11. Extension Points
 
 ### Adding a CLI Command
 
@@ -453,14 +507,15 @@ Preflight check: `pipedreamer cluster check` validates RuntimeClass exists (warn
 
 1. Add type name to `validTriggerTypes` in `pkg/spec/parse.go`
 2. Add validation logic (e.g., required fields) in the trigger validation loop
-3. Implement trigger handling in the engine server (currently only HTTP `/run`)
+3. Add fields to `Trigger` struct in `pkg/spec/types.go` and `engine/types.ts`
+4. Implement trigger handling: K8s resource generation in `pkg/builder/k8s.go` (for external triggers like cron) or engine subscription in `engine/triggers/` (for in-process triggers like NATS queue)
 
 ### Adding an Executor Implementation
 
 1. Implement the `WorkflowExecutor` interface in `engine/executor/`:
    ```typescript
    interface WorkflowExecutor {
-     execute(graph: CompiledDAG, runner: NodeRunner, ctx: Context): Promise<ExecutionResult>;
+     execute(graph: CompiledDAG, runner: NodeRunner, ctx: Context, input?: unknown): Promise<ExecutionResult>;
    }
    ```
 2. Wire it into `engine/server.ts` in place of `SimpleExecutor`

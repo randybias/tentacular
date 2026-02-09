@@ -5,7 +5,7 @@ import type { CompiledDAG, Context, ExecutionResult } from "../types.ts";
  * SimpleExecutor implements this now; TemporalExecutor can be swapped in later.
  */
 export interface WorkflowExecutor {
-  execute(graph: CompiledDAG, nodeRunner: NodeRunner, ctx: Context): Promise<ExecutionResult>;
+  execute(graph: CompiledDAG, nodeRunner: NodeRunner, ctx: Context, input?: unknown): Promise<ExecutionResult>;
 }
 
 /**

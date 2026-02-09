@@ -32,7 +32,20 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
 
     if (url.pathname === "/run" && (req.method === "POST" || req.method === "GET")) {
       try {
-        const result = await executor.execute(opts.graph, opts.runner, opts.ctx);
+        // Parse POST body as initial input for root nodes
+        let input: unknown = {};
+        if (req.method === "POST") {
+          try {
+            const body = await req.text();
+            if (body.trim()) {
+              input = JSON.parse(body);
+            }
+          } catch {
+            // Invalid JSON or empty body — use default empty object
+          }
+        }
+
+        const result = await executor.execute(opts.graph, opts.runner, opts.ctx, input);
 
         return new Response(JSON.stringify(result, null, 2), {
           status: result.success ? 200 : 500,

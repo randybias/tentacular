@@ -126,5 +126,75 @@ spec:
 		Kind: "Service", Name: wf.Name, Content: service,
 	})
 
+	// CronJobs for cron triggers
+	var cronTriggers []cronTriggerInfo
+	for i, t := range wf.Triggers {
+		if t.Type == "cron" {
+			cronTriggers = append(cronTriggers, cronTriggerInfo{index: i, trigger: t})
+		}
+	}
+	for i, ct := range cronTriggers {
+		cronName := wf.Name + "-cron"
+		if len(cronTriggers) > 1 {
+			cronName = fmt.Sprintf("%s-cron-%d", wf.Name, i)
+		}
+		cronManifest := generateCronJobManifest(wf.Name, cronName, namespace, labels, ct.trigger)
+		manifests = append(manifests, cronManifest)
+	}
+
 	return manifests
+}
+
+type cronTriggerInfo struct {
+	index   int
+	trigger spec.Trigger
+}
+
+func generateCronJobManifest(wfName, cronName, namespace, labels string, trigger spec.Trigger) Manifest {
+	postBody := "{}"
+	if trigger.Name != "" {
+		postBody = fmt.Sprintf(`{\"trigger\":\"%s\"}`, trigger.Name)
+	}
+
+	svcURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080/run", wfName, namespace)
+
+	content := fmt.Sprintf(`apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: %s
+  namespace: %s
+  labels:
+    %s
+spec:
+  schedule: "%s"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trigger
+              image: curlimages/curl:latest
+              command:
+                - curl
+                - -sf
+                - -X
+                - POST
+                - -H
+                - "Content-Type: application/json"
+                - -d
+                - "%s"
+                - %s
+              resources:
+                limits:
+                  memory: "32Mi"
+                  cpu: "100m"
+`, cronName, namespace, labels, trigger.Schedule, postBody, svcURL)
+
+	return Manifest{
+		Kind: "CronJob", Name: cronName, Content: content,
+	}
 }

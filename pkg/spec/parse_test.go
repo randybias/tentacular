@@ -134,6 +134,231 @@ edges:
 	}
 }
 
+func TestParseConfigExtras(t *testing.T) {
+	yaml := `
+name: test-workflow
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+config:
+  timeout: 30s
+  retries: 2
+  nats_url: "nats://localhost:4222"
+  custom_key: "custom_value"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	// Typed fields still work
+	if wf.Config.Timeout != "30s" {
+		t.Errorf("expected timeout 30s, got %s", wf.Config.Timeout)
+	}
+	if wf.Config.Retries != 2 {
+		t.Errorf("expected retries 2, got %d", wf.Config.Retries)
+	}
+
+	// Custom keys land in Extras
+	if wf.Config.Extras == nil {
+		t.Fatal("expected Extras to be non-nil")
+	}
+	if wf.Config.Extras["nats_url"] != "nats://localhost:4222" {
+		t.Errorf("expected nats_url in extras, got %v", wf.Config.Extras["nats_url"])
+	}
+	if wf.Config.Extras["custom_key"] != "custom_value" {
+		t.Errorf("expected custom_key in extras, got %v", wf.Config.Extras["custom_key"])
+	}
+}
+
+func TestConfigToMapMerged(t *testing.T) {
+	cfg := WorkflowConfig{
+		Timeout: "30s",
+		Retries: 2,
+		Extras:  map[string]interface{}{"nats_url": "test"},
+	}
+	m := cfg.ToMap()
+	if m["timeout"] != "30s" {
+		t.Errorf("expected timeout in map, got %v", m["timeout"])
+	}
+	if m["retries"] != 2 {
+		t.Errorf("expected retries in map, got %v", m["retries"])
+	}
+	if m["nats_url"] != "test" {
+		t.Errorf("expected nats_url in map, got %v", m["nats_url"])
+	}
+}
+
+func TestConfigToMapOmitsZero(t *testing.T) {
+	cfg := WorkflowConfig{
+		Extras: map[string]interface{}{"nats_url": "test"},
+	}
+	m := cfg.ToMap()
+	if _, ok := m["timeout"]; ok {
+		t.Error("expected timeout to be omitted when zero")
+	}
+	if _, ok := m["retries"]; ok {
+		t.Error("expected retries to be omitted when zero")
+	}
+	if m["nats_url"] != "test" {
+		t.Errorf("expected nats_url in map, got %v", m["nats_url"])
+	}
+}
+
+func TestConfigToMapNilExtras(t *testing.T) {
+	cfg := WorkflowConfig{
+		Timeout: "10s",
+	}
+	m := cfg.ToMap()
+	if m["timeout"] != "10s" {
+		t.Errorf("expected timeout in map, got %v", m["timeout"])
+	}
+	if len(m) != 1 {
+		t.Errorf("expected 1 entry in map, got %d", len(m))
+	}
+}
+
+func TestParseTriggerNameValid(t *testing.T) {
+	yaml := `
+name: test-workflow
+version: "1.0"
+triggers:
+  - type: cron
+    name: daily-digest
+    schedule: "0 9 * * *"
+  - type: cron
+    name: hourly-check
+    schedule: "0 * * * *"
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Triggers[0].Name != "daily-digest" {
+		t.Errorf("expected trigger name daily-digest, got %s", wf.Triggers[0].Name)
+	}
+	if wf.Triggers[1].Name != "hourly-check" {
+		t.Errorf("expected trigger name hourly-check, got %s", wf.Triggers[1].Name)
+	}
+}
+
+func TestParseTriggerNameDuplicate(t *testing.T) {
+	yaml := `
+name: test-workflow
+version: "1.0"
+triggers:
+  - type: cron
+    name: daily-digest
+    schedule: "0 9 * * *"
+  - type: cron
+    name: daily-digest
+    schedule: "0 18 * * *"
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for duplicate trigger names")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "duplicate trigger name") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'duplicate trigger name' error, got: %v", errs)
+	}
+}
+
+func TestParseTriggerNameInvalid(t *testing.T) {
+	yaml := `
+name: test-workflow
+version: "1.0"
+triggers:
+  - type: cron
+    name: "Invalid Name"
+    schedule: "0 9 * * *"
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for invalid trigger name")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "name must match") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected name format error, got: %v", errs)
+	}
+}
+
+func TestParseQueueTriggerValid(t *testing.T) {
+	yaml := `
+name: queue-wf
+version: "1.0"
+triggers:
+  - type: queue
+    subject: events.github.push
+nodes:
+  handler:
+    path: ./nodes/handler.ts
+edges: []
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Triggers[0].Type != "queue" {
+		t.Errorf("expected trigger type queue, got %s", wf.Triggers[0].Type)
+	}
+	if wf.Triggers[0].Subject != "events.github.push" {
+		t.Errorf("expected subject events.github.push, got %s", wf.Triggers[0].Subject)
+	}
+}
+
+func TestParseQueueTriggerMissingSubject(t *testing.T) {
+	yaml := `
+name: queue-wf
+version: "1.0"
+triggers:
+  - type: queue
+nodes:
+  handler:
+    path: ./nodes/handler.ts
+edges: []
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for queue trigger missing subject")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "queue trigger requires subject") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'queue trigger requires subject' error, got: %v", errs)
+	}
+}
+
 func TestParseTriggerValidation(t *testing.T) {
 	yaml := `
 name: bad-trigger

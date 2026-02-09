@@ -123,6 +123,7 @@ func (c *Client) findResource(group, version, kind string) (schema.GroupVersionR
 		"Service":    "services",
 		"ConfigMap":  "configmaps",
 		"Secret":     "secrets",
+		"CronJob":    "cronjobs",
 	}
 
 	resource, ok := resourceMap[kind]
@@ -311,6 +312,27 @@ func (c *Client) DeleteResources(namespace, name string) ([]string, error) {
 		return deleted, fmt.Errorf("deleting secret %s: %w", secretName, err)
 	} else {
 		deleted = append(deleted, "Secret/"+secretName)
+	}
+
+	// Delete CronJobs by label selector
+	labelSelector := fmt.Sprintf("app.kubernetes.io/name=%s,app.kubernetes.io/managed-by=pipedreamer", name)
+	cronJobs, err := c.clientset.BatchV1().CronJobs(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return deleted, fmt.Errorf("listing cronjobs for %s: %w", name, err)
+	}
+	for _, cj := range cronJobs.Items {
+		err = c.clientset.BatchV1().CronJobs(namespace).Delete(ctx, cj.Name, metav1.DeleteOptions{
+			PropagationPolicy: &propagation,
+		})
+		if errors.IsNotFound(err) {
+			// skip
+		} else if err != nil {
+			return deleted, fmt.Errorf("deleting cronjob %s: %w", cj.Name, err)
+		} else {
+			deleted = append(deleted, "CronJob/"+cj.Name)
+		}
 	}
 
 	return deleted, nil
