@@ -20,7 +20,8 @@ func NewDeployCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runDeploy,
 	}
-	cmd.Flags().String("cluster-registry", "", "In-cluster registry URL for manifest image references")
+	cmd.Flags().String("image", "", "Base engine image (default: read from .pipedreamer/base-image.txt or use pipedreamer-engine:latest)")
+	cmd.Flags().String("cluster-registry", "", "DEPRECATED: Use --image instead")
 	cmd.Flags().String("runtime-class", "gvisor", "RuntimeClass name (empty to disable)")
 	return cmd
 }
@@ -48,16 +49,33 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	namespace, _ := cmd.Flags().GetString("namespace")
-	registry, _ := cmd.Flags().GetString("registry")
+	imageFlagValue, _ := cmd.Flags().GetString("image")
 	clusterRegistry, _ := cmd.Flags().GetString("cluster-registry")
 	runtimeClass, _ := cmd.Flags().GetString("runtime-class")
 
-	// Image tag for the manifest uses cluster-registry if provided
-	imageTag := wf.Name + ":" + strings.ReplaceAll(wf.Version, ".", "-")
+	// Check for deprecated --cluster-registry flag
 	if clusterRegistry != "" {
-		imageTag = clusterRegistry + "/" + imageTag
-	} else if registry != "" {
-		imageTag = registry + "/" + imageTag
+		return fmt.Errorf("--cluster-registry is deprecated; use --image instead")
+	}
+
+	// Image resolution cascade: --image flag > .pipedreamer/base-image.txt > pipedreamer-engine:latest
+	imageTag := imageFlagValue
+	if imageTag == "" {
+		// Try reading from .pipedreamer/base-image.txt
+		tagFilePath := ".pipedreamer/base-image.txt"
+		if tagData, err := os.ReadFile(tagFilePath); err == nil {
+			imageTag = strings.TrimSpace(string(tagData))
+		}
+	}
+	if imageTag == "" {
+		// Fallback to default
+		imageTag = "pipedreamer-engine:latest"
+	}
+
+	// Generate ConfigMap for workflow code
+	configMap, err := builder.GenerateCodeConfigMap(wf, absDir, namespace)
+	if err != nil {
+		return fmt.Errorf("generating ConfigMap: %w", err)
 	}
 
 	// Generate K8s manifests
@@ -65,6 +83,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		RuntimeClassName: runtimeClass,
 	}
 	manifests := builder.GenerateK8sManifests(wf, imageTag, namespace, opts)
+
+	// Prepend ConfigMap to manifest list
+	manifests = append([]builder.Manifest{configMap}, manifests...)
 
 	fmt.Printf("Deploying %s to namespace %s...\n", wf.Name, namespace)
 
@@ -106,6 +127,12 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	if err := client.Apply(namespace, manifests); err != nil {
 		return fmt.Errorf("applying manifests: %w", err)
 	}
+
+	// Trigger rollout restart to pick up new ConfigMap
+	if err := client.RolloutRestart(namespace, wf.Name); err != nil {
+		return fmt.Errorf("triggering rollout restart: %w", err)
+	}
+	fmt.Println("  ✓ Triggered rollout restart")
 
 	fmt.Printf("✓ Deployed %s to %s\n", wf.Name, namespace)
 	return nil

@@ -2,6 +2,10 @@ package builder
 
 import (
 	"fmt"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
 
 	"github.com/randyb/pipedreamer2/pkg/spec"
 )
@@ -16,6 +20,95 @@ type Manifest struct {
 // DeployOptions controls optional features in generated manifests.
 type DeployOptions struct {
 	RuntimeClassName string // If empty, omit runtimeClassName from pod spec
+}
+
+// GenerateCodeConfigMap produces a ConfigMap containing workflow code (workflow.yaml + nodes/*.ts).
+// Returns error if total data size exceeds 900KB limit.
+func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Manifest, error) {
+	data := make(map[string]string)
+	var totalSize int
+
+	// Read workflow.yaml
+	workflowPath := filepath.Join(workflowDir, "workflow.yaml")
+	workflowContent, err := os.ReadFile(workflowPath)
+	if err != nil {
+		return Manifest{}, fmt.Errorf("reading workflow.yaml: %w", err)
+	}
+	data["workflow.yaml"] = string(workflowContent)
+	totalSize += len(workflowContent)
+
+	// Read nodes/*.ts files (if directory exists)
+	nodesDir := filepath.Join(workflowDir, "nodes")
+	entries, err := os.ReadDir(nodesDir)
+	if err == nil {
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ts") {
+				continue
+			}
+			nodePath := filepath.Join(nodesDir, entry.Name())
+			nodeContent, err := os.ReadFile(nodePath)
+			if err != nil {
+				return Manifest{}, fmt.Errorf("reading %s: %w", nodePath, err)
+			}
+			dataKey := "nodes/" + entry.Name()
+			data[dataKey] = string(nodeContent)
+			totalSize += len(nodeContent)
+		}
+	} else if !os.IsNotExist(err) {
+		return Manifest{}, fmt.Errorf("reading nodes directory: %w", err)
+	}
+
+	// Check size limit (900KB = 921600 bytes)
+	const maxSize = 921600
+	if totalSize > maxSize {
+		return Manifest{}, fmt.Errorf("workflow code size (%d bytes) exceeds ConfigMap limit of %d bytes (900KB)", totalSize, maxSize)
+	}
+
+	// Build data section with sorted keys for deterministic output
+	keys := make([]string, 0, len(data))
+	for k := range data {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+
+	var dataEntries []string
+	for _, k := range keys {
+		v := data[k]
+		// Escape the value for YAML
+		dataEntries = append(dataEntries, fmt.Sprintf("  %s: |\n%s", k, indentString(v, 4)))
+	}
+
+	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
+    app.kubernetes.io/managed-by: pipedreamer`, wf.Name)
+
+	content := fmt.Sprintf(`apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: %s-code
+  namespace: %s
+  labels:
+    %s
+data:
+%s
+`, wf.Name, namespace, labels, strings.Join(dataEntries, "\n"))
+
+	return Manifest{
+		Kind:    "ConfigMap",
+		Name:    wf.Name + "-code",
+		Content: content,
+	}, nil
+}
+
+// indentString indents each line of s by n spaces.
+func indentString(s string, n int) string {
+	prefix := strings.Repeat(" ", n)
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if line != "" {
+			lines[i] = prefix + line
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 // GenerateK8sManifests produces K8s manifests for deploying a workflow.
@@ -79,6 +172,9 @@ spec:
             initialDelaySeconds: 3
             periodSeconds: 5
           volumeMounts:
+            - name: code
+              mountPath: /app/workflow
+              readOnly: true
             - name: secrets
               mountPath: /app/secrets
               readOnly: true
@@ -92,13 +188,16 @@ spec:
               memory: "256Mi"
               cpu: "500m"
       volumes:
+        - name: code
+          configMap:
+            name: %s-code
         - name: secrets
           secret:
             secretName: %s-secrets
             optional: true
         - name: tmp
           emptyDir: {}
-`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, wf.Name)
+`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, wf.Name, wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,

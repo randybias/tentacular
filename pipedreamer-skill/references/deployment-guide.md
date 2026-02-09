@@ -12,14 +12,15 @@ Builds a container image for the workflow.
 
 ### What It Does
 
-1. Parses and validates `workflow.yaml`.
-2. Generates a `Dockerfile.pipedreamer` (temporary, deleted after build).
+1. Parses and validates `workflow.yaml` (for project context validation).
+2. Generates an engine-only `Dockerfile.pipedreamer` (temporary, deleted after build).
 3. Copies the engine into the build context as `.engine/`.
-4. Runs `docker build` to produce the image.
+4. Runs `docker build` to produce the base engine image.
+5. Saves the image tag to `.pipedreamer/base-image.txt` for deploy to use.
 
 ### Generated Dockerfile
 
-The generated Dockerfile uses the distroless Deno base image:
+The generated Dockerfile produces an engine-only image (workflow code delivered separately via ConfigMap):
 
 ```dockerfile
 FROM denoland/deno:distroless
@@ -29,33 +30,36 @@ WORKDIR /app
 # Copy engine
 COPY .engine/ /app/engine/
 
-# Copy workflow files
-COPY workflow.yaml /app/
-COPY nodes/ /app/nodes/
-
 # Copy deno.json for import map resolution
 COPY .engine/deno.json /app/deno.json
 
-# Cache dependencies
+# Cache engine dependencies
 RUN ["deno", "cache", "engine/main.ts"]
+
+# Set DENO_DIR for runtime caching of node dependencies
+ENV DENO_DIR=/tmp/deno-cache
 
 EXPOSE 8080
 
-ENTRYPOINT ["deno", "run", "--allow-net", "--allow-read=/app", "--allow-write=/tmp", "--allow-env", "engine/main.ts", "--workflow", "/app/workflow.yaml", "--port", "8080"]
+ENTRYPOINT ["deno", "run", "--no-lock", "--unstable-net", "--allow-net", "--allow-read=/app,/var/run/secrets", "--allow-write=/tmp", "--allow-env", "engine/main.ts", "--workflow", "/app/workflow/workflow.yaml", "--port", "8080"]
 ```
+
+The engine-only image contains no workflow code. Workflow code (workflow.yaml + nodes/*.ts) is mounted at `/app/workflow` via ConfigMap during deployment.
 
 ### Image Tag
 
-Default tag format: `<workflow-name>:<version-with-dashes>` (e.g., `my-workflow:1-0`).
+Default tag: `pipedreamer-engine:latest` (engine-only, no workflow-specific versioning).
 
 Override with `--tag`:
 
 ```bash
-pipedreamer build --tag my-workflow:v2.1
-pipedreamer build -r registry.example.com   # prepends registry
+pipedreamer build --tag my-engine:v2.1
+pipedreamer build -r registry.example.com --tag my-engine:v2.1
 ```
 
 When `--registry` is set, the tag becomes `<registry>/<tag>`.
+
+The tag is saved to `.pipedreamer/base-image.txt` for `pipedreamer deploy` to use. Workflow-specific versioning is handled separately at deploy time via ConfigMap updates.
 
 ## Deploy
 
@@ -67,9 +71,31 @@ Generates and applies Kubernetes manifests. Runs preflight checks automatically 
 
 ### Generated Manifests
 
-Manifests always include a Deployment and Service. CronJob manifests are added for each `type: cron` trigger.
+Manifests always include a ConfigMap, Deployment, and Service. CronJob manifests are added for each `type: cron` trigger.
 
-**Deployment** with gVisor RuntimeClass:
+**ConfigMap** with workflow code:
+
+```yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: <workflow-name>-code
+  namespace: <namespace>
+  labels:
+    app.kubernetes.io/name: <workflow-name>
+    app.kubernetes.io/managed-by: pipedreamer
+data:
+  workflow.yaml: |
+    name: my-workflow
+    version: "1.0"
+    ...
+  nodes/fetch.ts: |
+    export default async function run(ctx, input) {
+      ...
+    }
+```
+
+**Deployment** with gVisor RuntimeClass and code volume:
 
 ```yaml
 apiVersion: apps/v1
@@ -94,6 +120,9 @@ spec:
           ports:
             - containerPort: 8080
           volumeMounts:
+            - name: code
+              mountPath: /app/workflow
+              readOnly: true
             - name: secrets
               mountPath: /app/secrets
               readOnly: true
@@ -107,6 +136,9 @@ spec:
               memory: "256Mi"
               cpu: "500m"
       volumes:
+        - name: code
+          configMap:
+            name: <workflow-name>-code
         - name: secrets
           secret:
             secretName: <workflow-name>-secrets
@@ -137,11 +169,58 @@ spec:
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--namespace` | `-n` | `default` | Kubernetes namespace for deployment |
-| `--registry` | `-r` | (none) | Container registry prefix for image tag |
+| `--image` | | (cascade) | Base engine image tag. Resolves via: --image flag > .pipedreamer/base-image.txt > pipedreamer-engine:latest |
+| `--runtime-class` | | `gvisor` | RuntimeClass name for pod sandboxing (empty to disable) |
 
 ```bash
-pipedreamer deploy -n production -r gcr.io/my-project
+pipedreamer deploy -n production
+pipedreamer deploy -n production --image my-registry.com/engine:v2
+pipedreamer deploy --runtime-class "" # disable gVisor
 ```
+
+The `--cluster-registry` flag has been deprecated. Use `--image` to specify the full image reference.
+
+## Fast Iteration
+
+The engine-only image architecture enables rapid code iteration without Docker rebuilds.
+
+### Workflow
+
+1. **Build the engine image once:**
+   ```bash
+   pipedreamer build --push -r my-registry.com
+   ```
+   This produces `my-registry.com/pipedreamer-engine:latest` and saves the tag to `.pipedreamer/base-image.txt`.
+
+2. **Edit workflow code** (workflow.yaml or nodes/*.ts files)
+
+3. **Deploy the changes:**
+   ```bash
+   pipedreamer deploy
+   ```
+   This updates the ConfigMap with new code and triggers a rollout restart. No Docker build needed!
+
+### What Happens on Deploy
+
+- `GenerateCodeConfigMap()` reads current workflow.yaml and nodes/*.ts
+- ConfigMap is created/updated via K8s API
+- `RolloutRestart()` patches the Deployment to trigger a pod restart
+- New pods mount the updated ConfigMap at `/app/workflow`
+- Engine loads the new workflow code at startup
+
+### Time Comparison
+
+**Old flow (monolithic image):**
+```
+Edit code → docker build (30-60s) → docker push (10-30s) → kubectl apply → rollout (15s) = ~1-2 min
+```
+
+**New flow (ConfigMap):**
+```
+Edit code → pipedreamer deploy (ConfigMap update + rollout) = ~5-10s
+```
+
+The ConfigMap update is instant (YAML over HTTP), and the rollout restart triggers a pod restart without re-pulling the image.
 
 ## Cluster Check
 
@@ -238,15 +317,28 @@ Deletes the Service, Deployment, Secret (`<name>-secrets`), and all CronJobs mat
 ### Full Lifecycle (No kubectl)
 
 ```bash
+# Initial setup: validate and build engine image (one time)
 pipedreamer validate my-workflow
-pipedreamer build my-workflow -r localhost:30500 --push
-pipedreamer deploy my-workflow -n production --cluster-registry registry.registry.svc.cluster.local:5000
+pipedreamer build my-workflow -r my-registry.com --push
+
+# Deploy workflow code (repeatable, fast)
+pipedreamer deploy my-workflow -n production --image my-registry.com/pipedreamer-engine:latest
+
+# Operations
 pipedreamer list -n production
 pipedreamer status my-workflow -n production --detail
 pipedreamer run my-workflow -n production
 pipedreamer logs my-workflow -n production --tail 20
+
+# Edit workflow code, then redeploy (no build needed!)
+# ... edit nodes/fetch.ts ...
+pipedreamer deploy my-workflow -n production
+
+# Cleanup
 pipedreamer undeploy my-workflow -n production --yes
 ```
+
+After the initial `build`, subsequent code changes only require `deploy` (no Docker build/push).
 
 ## Triggers
 

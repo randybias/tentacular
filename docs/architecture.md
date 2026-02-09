@@ -11,16 +11,17 @@ Pipedreamer v2 is a workflow execution platform that runs TypeScript DAGs on Kub
                 │  pipedreamer CLI (Go)    │          │   ┌────────────────────────┐   │
                 │  ┌────────────────────┐  │  deploy  │   │  Pod (gVisor sandbox)  │   │
                 │  │ init / validate    │  │ ───────> │   │  ┌──────────────────┐  │   │
-                │  │ dev / test         │  │          │   │  │ Deno Engine (TS) │  │   │
-                │  │ build / deploy     │  │  status  │   │  │ ┌──────────────┐ │  │   │
-                │  │ status / cluster   │  │ <─────── │   │  │ │ Workflow DAG │ │  │   │
-                │  │ visualize          │  │          │   │  │ └──────────────┘ │  │   │
+                │  │ dev / test         │  │ (config  │   │  │ Deno Engine (TS) │  │   │
+                │  │ build / deploy     │  │  +code)  │   │  │ ┌──────────────┐ │  │   │
+                │  │ status / cluster   │  │  status  │   │  │ │ Workflow DAG │ │  │   │
+                │  │ visualize          │  │ <─────── │   │  │ └──────────────┘ │  │   │
                 │  └────────────────────┘  │          │   │  └──────────────────┘  │   │
-                │           │              │          │   │  /app/secrets (vol)     │   │
-                │      ┌────┴────┐         │          │   └────────────────────────┘   │
-                │      │ Docker  │         │  push    │   K8s Secret ──┘               │
-                │      │ Build   │ ────────│────────> │   Zot Registry                 │
-                │      └─────────┘         │          │                                │
+                │           │              │          │   │  /app/workflow (CM)     │   │
+                │      ┌────┴────┐         │          │   │  /app/secrets (vol)     │   │
+                │      │ Docker  │         │  push    │   └────────────────────────┘   │
+                │      │ Build   │ ────────│────────> │   ConfigMap (code) ──┘         │
+                │      └─────────┘         │  (once)  │   K8s Secret                   │
+                │                          │          │   Zot Registry                 │
                 └──────────────────────────┘          └────────────────────────────────┘
 ```
 
@@ -65,7 +66,7 @@ pkg/
 │   ├── types.go        Workflow, NodeSpec, Edge, Trigger, WorkflowConfig
 │   └── parse.go        Parse(), checkCycles() — kebab-case, semver, DAG validation
 ├── builder/        Artifact generation (no runtime deps)
-│   ├── dockerfile.go   GenerateDockerfile() → distroless Deno container
+│   ├── dockerfile.go   GenerateDockerfile() → engine-only distroless Deno container
 │   └── k8s.go          GenerateK8sManifests() → Deployment + Service YAML
 ├── cli/            Cobra command implementations
 │   ├── init.go         Scaffold: workflow.yaml, nodes/hello.ts, fixtures
@@ -276,13 +277,15 @@ Secrets are mounted as read-only files at `/app/secrets` from a K8s Secret resou
 
 ```
 pipedreamer build [dir]
-  1. Parse workflow.yaml → derive image tag (name:version)
+  1. Parse and validate workflow.yaml
   2. Locate engine directory (relative to binary)
   3. Copy engine → .engine/ in build context
-  4. Generate Dockerfile.pipedreamer
+  4. Generate engine-only Dockerfile.pipedreamer (no workflow code)
   5. docker build -f Dockerfile.pipedreamer -t <tag> .
+     Default tag: pipedreamer-engine:latest (override with --tag)
   6. Cleanup: remove .engine/ and Dockerfile.pipedreamer
   7. (Optional) docker push with --push flag
+  8. Save image tag to .pipedreamer/base-image.txt for deploy cascade
 ```
 
 ### Deploy Phase
@@ -290,10 +293,13 @@ pipedreamer build [dir]
 ```
 pipedreamer deploy [dir]
   1. Parse workflow.yaml → validate spec
-  2. Derive image tag (with --cluster-registry or --registry prefix)
-  3. GenerateK8sManifests() → Deployment + Service
-  4. buildSecretManifest() → K8s Secret from .secrets/ or .secrets.yaml
-  5. k8s.Client.Apply() → create-or-update all manifests
+  2. Resolve base image tag via cascade:
+     --image flag > .pipedreamer/base-image.txt > pipedreamer-engine:latest
+  3. GenerateCodeConfigMap() → ConfigMap with workflow.yaml + nodes/*.ts
+  4. GenerateK8sManifests() → Deployment + Service (+ CronJobs if cron triggers)
+  5. buildSecretManifest() → K8s Secret from .secrets/ or .secrets.yaml
+  6. k8s.Client.Apply() → create-or-update ConfigMap, Deployment, Service, Secret
+  7. k8s.Client.RolloutRestart() → trigger pod restart to pick up new ConfigMap
 ```
 
 ### Operations Phase
@@ -317,7 +323,8 @@ pipedreamer cluster check        Preflight: API, gVisor, namespace, RBAC, secret
 
 | Resource | Name | Key Fields |
 |----------|------|------------|
-| Deployment | `{workflow-name}` | 1 replica, gVisor RuntimeClass, security contexts, probes, resource limits |
+| ConfigMap | `{workflow-name}-code` | Contains workflow.yaml + nodes/*.ts (max 900KB). Mounted at /app/workflow |
+| Deployment | `{workflow-name}` | 1 replica, gVisor RuntimeClass, code volume mount at /app/workflow, security contexts, probes, resource limits |
 | Service | `{workflow-name}` | ClusterIP, port 8080 |
 | Secret | `{workflow-name}-secrets` | Opaque, stringData from .secrets/ or .secrets.yaml |
 | CronJob | `{wf}-cron` or `{wf}-cron-{i}` | Per cron trigger. curlimages/curl, concurrencyPolicy: Forbid, historyLimit: 3 |

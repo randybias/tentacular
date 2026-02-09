@@ -1,6 +1,8 @@
 package builder
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -386,30 +388,38 @@ func TestK8sManifestCronTriggerServiceURL(t *testing.T) {
 }
 
 func TestDockerfileDistrolessBase(t *testing.T) {
-	df := GenerateDockerfile("")
+	df := GenerateDockerfile()
 	if !strings.Contains(df, "FROM denoland/deno:distroless") {
 		t.Error("expected distroless base image")
 	}
 }
 
 func TestDockerfileWorkdir(t *testing.T) {
-	df := GenerateDockerfile("")
+	df := GenerateDockerfile()
 	if !strings.Contains(df, "WORKDIR /app") {
 		t.Error("expected WORKDIR /app")
 	}
 }
 
 func TestDockerfileCopyInstructions(t *testing.T) {
-	df := GenerateDockerfile("")
-	for _, expected := range []string{".engine/", "workflow.yaml", "nodes/", "deno.json"} {
+	df := GenerateDockerfile()
+	// Assert engine and deno.json are present
+	for _, expected := range []string{".engine/", "deno.json"} {
 		if !strings.Contains(df, expected) {
 			t.Errorf("expected COPY instruction for %s", expected)
 		}
 	}
+	// Assert workflow.yaml and nodes/ COPY instructions are ABSENT
+	if strings.Contains(df, "COPY workflow.yaml") {
+		t.Error("expected NO COPY workflow.yaml instruction (engine-only image)")
+	}
+	if strings.Contains(df, "COPY nodes/") {
+		t.Error("expected NO COPY nodes/ instruction (engine-only image)")
+	}
 }
 
 func TestDockerfileCacheAndEntrypoint(t *testing.T) {
-	df := GenerateDockerfile("")
+	df := GenerateDockerfile()
 	if !strings.Contains(df, `"deno", "cache"`) {
 		t.Error("expected deno cache instruction")
 	}
@@ -422,14 +432,188 @@ func TestDockerfileCacheAndEntrypoint(t *testing.T) {
 	if !strings.Contains(df, "--allow-write=/tmp") {
 		t.Error("expected --allow-write=/tmp in entrypoint")
 	}
+	if !strings.Contains(df, "--workflow") || !strings.Contains(df, "/app/workflow/workflow.yaml") {
+		t.Error("expected --workflow /app/workflow/workflow.yaml in entrypoint")
+	}
 	if !strings.Contains(df, "EXPOSE 8080") {
 		t.Error("expected EXPOSE 8080")
 	}
 }
 
 func TestDockerfileNoCLIArtifacts(t *testing.T) {
-	df := GenerateDockerfile("")
+	df := GenerateDockerfile()
 	if strings.Contains(df, "COPY cmd/") || strings.Contains(df, "COPY pkg/") {
 		t.Error("Dockerfile should not copy cmd/ or pkg/ directories")
+	}
+}
+
+func TestConfigMapGeneration(t *testing.T) {
+	// Create temp directory with workflow.yaml and nodes/
+	tmpDir := t.TempDir()
+	workflowContent := `name: test-workflow
+version: 1.0
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "workflow.yaml"), []byte(workflowContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nodesDir := filepath.Join(tmpDir, "nodes")
+	if err := os.Mkdir(nodesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nodeContent := `export default async function run(ctx, input) { return input; }`
+	if err := os.WriteFile(filepath.Join(nodesDir, "fetch.ts"), []byte(nodeContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wf := makeTestWorkflow("test-workflow")
+	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	if err != nil {
+		t.Fatalf("GenerateCodeConfigMap failed: %v", err)
+	}
+
+	if cm.Kind != "ConfigMap" {
+		t.Errorf("expected kind ConfigMap, got %s", cm.Kind)
+	}
+	if cm.Name != "test-workflow-code" {
+		t.Errorf("expected name test-workflow-code, got %s", cm.Name)
+	}
+	if !strings.Contains(cm.Content, "namespace: default") {
+		t.Error("expected namespace: default")
+	}
+	if !strings.Contains(cm.Content, "app.kubernetes.io/name: test-workflow") {
+		t.Error("expected app.kubernetes.io/name label")
+	}
+	if !strings.Contains(cm.Content, "app.kubernetes.io/managed-by: pipedreamer") {
+		t.Error("expected app.kubernetes.io/managed-by label")
+	}
+	if !strings.Contains(cm.Content, "workflow.yaml:") {
+		t.Error("expected workflow.yaml data key")
+	}
+	if !strings.Contains(cm.Content, "nodes/fetch.ts:") {
+		t.Error("expected nodes/fetch.ts data key")
+	}
+}
+
+func TestConfigMapSizeValidation(t *testing.T) {
+	tmpDir := t.TempDir()
+	// Create a workflow.yaml that's > 900KB
+	largeContent := strings.Repeat("x", 950000)
+	workflowContent := "name: test\nversion: 1.0\ntriggers:\n  - type: manual\ndata: " + largeContent
+	if err := os.WriteFile(filepath.Join(tmpDir, "workflow.yaml"), []byte(workflowContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wf := makeTestWorkflow("test")
+	_, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	if err == nil {
+		t.Error("expected error for oversized ConfigMap")
+	}
+	if !strings.Contains(err.Error(), "exceeds ConfigMap limit") {
+		t.Errorf("expected size limit error, got: %v", err)
+	}
+}
+
+func TestConfigMapMissingNodesDir(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowContent := `name: test-workflow
+version: 1.0
+triggers:
+  - type: manual
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "workflow.yaml"), []byte(workflowContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wf := makeTestWorkflow("test-workflow")
+	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	if err != nil {
+		t.Fatalf("GenerateCodeConfigMap failed when nodes/ missing: %v", err)
+	}
+
+	if !strings.Contains(cm.Content, "workflow.yaml:") {
+		t.Error("expected workflow.yaml data key")
+	}
+	if strings.Contains(cm.Content, "nodes/") {
+		t.Error("expected NO nodes/ keys when directory doesn't exist")
+	}
+}
+
+func TestConfigMapSkipsNonTsFiles(t *testing.T) {
+	tmpDir := t.TempDir()
+	workflowContent := `name: test
+version: 1.0
+triggers:
+  - type: manual
+`
+	if err := os.WriteFile(filepath.Join(tmpDir, "workflow.yaml"), []byte(workflowContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	nodesDir := filepath.Join(tmpDir, "nodes")
+	if err := os.Mkdir(nodesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create .ts and non-.ts files
+	if err := os.WriteFile(filepath.Join(nodesDir, "valid.ts"), []byte("// ts file"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodesDir, "README.md"), []byte("# readme"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodesDir, "config.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wf := makeTestWorkflow("test")
+	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	if err != nil {
+		t.Fatalf("GenerateCodeConfigMap failed: %v", err)
+	}
+
+	if !strings.Contains(cm.Content, "nodes/valid.ts:") {
+		t.Error("expected nodes/valid.ts data key")
+	}
+	if strings.Contains(cm.Content, "README.md") {
+		t.Error("expected README.md to be skipped")
+	}
+	if strings.Contains(cm.Content, "config.json") {
+		t.Error("expected config.json to be skipped")
+	}
+}
+
+func TestDeploymentHasCodeVolumeMount(t *testing.T) {
+	wf := makeTestWorkflow("vol-test")
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	if !strings.Contains(dep, "name: code") {
+		t.Error("expected code volume")
+	}
+	if !strings.Contains(dep, "configMap:") {
+		t.Error("expected configMap volume source")
+	}
+	if !strings.Contains(dep, "name: vol-test-code") {
+		t.Error("expected ConfigMap name vol-test-code")
+	}
+	if !strings.Contains(dep, "mountPath: /app/workflow") {
+		t.Error("expected code volume mount at /app/workflow")
+	}
+	if !strings.Contains(dep, "readOnly: true") {
+		t.Error("expected readOnly: true on code volume mount")
+	}
+}
+
+func TestDeploymentNoContainerArgs(t *testing.T) {
+	wf := makeTestWorkflow("args-test")
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	// Verify NO args field in container spec (relies on ENTRYPOINT defaults)
+	if strings.Contains(dep, "args:") {
+		t.Error("expected NO container args field (ENTRYPOINT provides defaults)")
 	}
 }

@@ -15,6 +15,9 @@ vendor/
 *.secret
 .credentials/
 
+# Build artifacts
+.pipedreamer/
+
 # Scratch (agent/dev temp files)
 scratch/
 

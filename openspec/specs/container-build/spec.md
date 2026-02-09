@@ -15,23 +15,23 @@ The `pkg/builder/dockerfile.go` `GenerateDockerfile()` function SHALL produce a 
 - **THEN** the returned Dockerfile string SHALL set `WORKDIR /app`
 
 ### Requirement: Dockerfile copies engine, workflow, and nodes
-The generated Dockerfile SHALL copy the engine directory, workflow.yaml, and nodes/ directory into the container.
+The generated Dockerfile SHALL copy only the engine directory and import map into the container. Workflow code (workflow.yaml, nodes/) is no longer copied.
 
 #### Scenario: Engine copied
 - **WHEN** `GenerateDockerfile()` is called
 - **THEN** the Dockerfile SHALL contain `COPY .engine/ /app/engine/`
 
-#### Scenario: Workflow spec copied
-- **WHEN** `GenerateDockerfile()` is called
-- **THEN** the Dockerfile SHALL contain `COPY workflow.yaml /app/`
-
-#### Scenario: Nodes copied
-- **WHEN** `GenerateDockerfile()` is called
-- **THEN** the Dockerfile SHALL contain `COPY nodes/ /app/nodes/`
-
 #### Scenario: Import map copied
 - **WHEN** `GenerateDockerfile()` is called
 - **THEN** the Dockerfile SHALL contain `COPY .engine/deno.json /app/deno.json` so Deno import map resolution works inside the container
+
+#### Scenario: Workflow spec NOT copied
+- **WHEN** `GenerateDockerfile()` is called
+- **THEN** the Dockerfile SHALL NOT contain `COPY workflow.yaml`
+
+#### Scenario: Nodes NOT copied
+- **WHEN** `GenerateDockerfile()` is called
+- **THEN** the Dockerfile SHALL NOT contain `COPY nodes/`
 
 ### Requirement: Dockerfile caches Deno dependencies
 The generated Dockerfile SHALL run `deno cache` to pre-cache dependencies at build time.
@@ -41,18 +41,19 @@ The generated Dockerfile SHALL run `deno cache` to pre-cache dependencies at bui
 - **THEN** the Dockerfile SHALL contain a `RUN` instruction that caches `engine/main.ts` dependencies
 
 ### Requirement: Dockerfile sets secure Deno entrypoint
-The generated Dockerfile SHALL use a Deno entrypoint with minimal permissions.
+The generated Dockerfile SHALL use a Deno entrypoint with minimal permissions and a default workflow path.
 
 #### Scenario: Permission flags
 - **WHEN** `GenerateDockerfile()` is called
 - **THEN** the ENTRYPOINT SHALL include `--allow-net` (for HTTP trigger server)
-- **AND** the ENTRYPOINT SHALL include `--allow-read=/app` (read workflow and engine files)
+- **AND** the ENTRYPOINT SHALL include `--allow-read=/app,/var/run/secrets` (read engine, workflow, and secret files)
 - **AND** the ENTRYPOINT SHALL include `--allow-write=/tmp` (temporary file writes only)
-- **AND** the ENTRYPOINT SHALL NOT include `--allow-all` or `--allow-env`
+- **AND** the ENTRYPOINT SHALL include `--allow-env` (runtime configuration)
+- **AND** the ENTRYPOINT SHALL NOT include `--allow-all`
 
 #### Scenario: Workflow path argument
 - **WHEN** `GenerateDockerfile()` is called
-- **THEN** the ENTRYPOINT SHALL pass `--workflow /app/workflow.yaml` to `engine/main.ts`
+- **THEN** the ENTRYPOINT SHALL pass `--workflow /app/workflow/workflow.yaml` to `engine/main.ts`
 
 #### Scenario: Port exposed
 - **WHEN** `GenerateDockerfile()` is called
@@ -82,20 +83,19 @@ The `pipedreamer build` command SHALL generate a temporary Dockerfile, copy the 
 - **AND** it SHALL return an error indicating the docker build failed
 
 ### Requirement: Image tag derivation
-The build command SHALL derive the image tag from the workflow name and version.
+The build command SHALL use `pipedreamer-engine:latest` as the default image tag when `--tag` is not specified.
 
 #### Scenario: Default tag
 - **WHEN** `pipedreamer build` is executed without `--tag`
-- **THEN** the image tag SHALL be `<workflow-name>:<version-with-dots-as-dashes>`
-- **EXAMPLE** workflow name `data-pipeline` version `1.0` produces tag `data-pipeline:1-0`
+- **THEN** the image tag SHALL be `pipedreamer-engine:latest`
 
 #### Scenario: Custom tag
 - **WHEN** `pipedreamer build --tag my-image:latest` is executed
 - **THEN** the image tag SHALL be `my-image:latest`
 
 #### Scenario: Registry prefix
-- **WHEN** `pipedreamer build --registry gcr.io/myproject` is executed
-- **THEN** the image tag SHALL be prefixed with the registry: `gcr.io/myproject/data-pipeline:1-0`
+- **WHEN** `pipedreamer build --registry gcr.io/myproject` is executed without `--tag`
+- **THEN** the image tag SHALL be `gcr.io/myproject/pipedreamer-engine:latest`
 
 ### Requirement: Build validates workflow spec
 The build command SHALL validate the workflow spec before building.

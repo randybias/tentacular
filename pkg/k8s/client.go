@@ -24,6 +24,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/apimachinery/pkg/types"
 )
 
 // Client wraps K8s client-go for pipedreamer operations.
@@ -601,4 +602,37 @@ func (c *Client) GetDetailedStatus(namespace, name string) (*DetailedStatus, err
 	}
 
 	return ds, nil
+}
+
+// RolloutRestart triggers a rolling restart of a deployment by updating the restartedAt annotation.
+func (c *Client) RolloutRestart(namespace, deploymentName string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	// Use strategic merge patch to update the pod template annotation
+	timestamp := time.Now().Format(time.RFC3339)
+	patchData := fmt.Sprintf(`{
+		"spec": {
+			"template": {
+				"metadata": {
+					"annotations": {
+						"kubectl.kubernetes.io/restartedAt": "%s"
+					}
+				}
+			}
+		}
+	}`, timestamp)
+
+	_, err := c.clientset.AppsV1().Deployments(namespace).Patch(
+		ctx,
+		deploymentName,
+		types.StrategicMergePatchType,
+		[]byte(patchData),
+		metav1.PatchOptions{},
+	)
+	if err != nil {
+		return fmt.Errorf("patching deployment %s: %w", deploymentName, err)
+	}
+
+	return nil
 }

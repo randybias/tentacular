@@ -4,7 +4,7 @@
 TBD - created by archiving change build-and-deploy. Update Purpose after archive.
 ## Requirements
 ### Requirement: K8s Deployment manifest generation
-The `pkg/builder/k8s.go` `GenerateK8sManifests()` function SHALL generate a Deployment manifest with gVisor RuntimeClass.
+The `pkg/builder/k8s.go` `GenerateK8sManifests()` function SHALL generate a Deployment manifest that includes a code ConfigMap volume mount.
 
 #### Scenario: Deployment manifest structure
 - **WHEN** `GenerateK8sManifests(wf, imageTag, namespace)` is called
@@ -15,28 +15,30 @@ The `pkg/builder/k8s.go` `GenerateK8sManifests()` function SHALL generate a Depl
   - `metadata.namespace` set to the target namespace
   - `spec.replicas` set to 1
 
-#### Scenario: gVisor RuntimeClass
-- **WHEN** a Deployment manifest is generated
-- **THEN** `spec.template.spec.runtimeClassName` SHALL be `gvisor`
-
 #### Scenario: Container spec
 - **WHEN** a Deployment manifest is generated
 - **THEN** the container SHALL:
   - Be named `engine`
   - Use the provided `imageTag` as the image
   - Expose `containerPort: 8080` with `protocol: TCP`
+  - NOT have an `args` field (relies on base image ENTRYPOINT defaults)
 
-#### Scenario: Pipedreamer labels
-- **WHEN** a Deployment manifest is generated
-- **THEN** both the Deployment and Pod template SHALL have labels:
-  - `app.kubernetes.io/name: <workflow-name>`
-  - `app.kubernetes.io/managed-by: pipedreamer`
+#### Scenario: Code volume mount
+- **WHEN** a Deployment manifest is generated for workflow `my-workflow`
+- **THEN** the container SHALL have a volumeMount:
+  - `name: code`
+  - `mountPath: /app/workflow`
+  - `readOnly: true`
 
-#### Scenario: Resource limits
+#### Scenario: Code volume source
+- **WHEN** a Deployment manifest is generated for workflow `my-workflow`
+- **THEN** the pod spec SHALL have a volume:
+  - `name: code`
+  - `configMap.name: my-workflow-code`
+
+#### Scenario: Existing volumes preserved
 - **WHEN** a Deployment manifest is generated
-- **THEN** the container SHALL have resource requests and limits:
-  - Requests: `memory: 64Mi`, `cpu: 100m`
-  - Limits: `memory: 256Mi`, `cpu: 500m`
+- **THEN** the pod spec SHALL still include the `secrets` volume (secret mount at `/app/secrets`) and `tmp` volume (emptyDir at `/tmp`)
 
 ### Requirement: K8s Service manifest generation
 The `GenerateK8sManifests()` function SHALL generate a ClusterIP Service manifest.
@@ -84,12 +86,13 @@ Secrets SHALL be mounted from a K8s Secret as a read-only volume, never as envir
 - **THEN** the pod spec SHALL include an `emptyDir` volume mounted at `/tmp` for temporary file writes
 
 ### Requirement: Deploy command applies manifests via client-go
-The `pipedreamer deploy` command SHALL generate K8s manifests and apply them to the cluster using client-go.
+The `pipedreamer deploy` command SHALL generate K8s manifests including a code ConfigMap, apply them to the cluster, and trigger a rollout restart.
 
 #### Scenario: Successful deployment
-- **WHEN** `pipedreamer deploy` is executed in a directory with a valid `workflow.yaml`
-- **THEN** it SHALL generate K8s manifests (Deployment + Service)
+- **WHEN** `pipedreamer deploy` is executed in a directory containing a valid `workflow.yaml`
+- **THEN** it SHALL generate K8s manifests (Deployment + Service + ConfigMap)
 - **AND** it SHALL apply them to the target namespace via client-go
+- **AND** it SHALL trigger a rollout restart of the Deployment
 - **AND** it SHALL print confirmation with the workflow name and namespace
 
 #### Scenario: Create-or-update semantics
@@ -116,15 +119,34 @@ The deploy command SHALL validate the workflow spec before deploying.
 - **AND** it SHALL NOT apply any manifests to the cluster
 
 ### Requirement: Deploy uses registry flag for image tag
-The deploy command SHALL construct the image tag using the workflow spec and optional registry flag.
+The deploy command SHALL resolve the base image tag using a cascade: `--image` flag > `.pipedreamer/base-image.txt` > `pipedreamer-engine:latest`.
 
-#### Scenario: Image tag with registry
-- **WHEN** `pipedreamer deploy --registry gcr.io/myproject` is executed for workflow `data-pipeline` version `1.0`
-- **THEN** the Deployment manifest SHALL reference image `gcr.io/myproject/data-pipeline:1-0`
+#### Scenario: Image from --image flag
+- **WHEN** `pipedreamer deploy --image gcr.io/proj/engine:v2` is executed
+- **THEN** the Deployment manifest SHALL reference image `gcr.io/proj/engine:v2`
 
-#### Scenario: Image tag without registry
-- **WHEN** `pipedreamer deploy` is executed without `--registry` for workflow `data-pipeline` version `1.0`
-- **THEN** the Deployment manifest SHALL reference image `data-pipeline:1-0`
+#### Scenario: Image from base-image.txt
+- **WHEN** `pipedreamer deploy` is executed without `--image` and `.pipedreamer/base-image.txt` contains `gcr.io/proj/pipedreamer-engine:latest`
+- **THEN** the Deployment manifest SHALL reference image `gcr.io/proj/pipedreamer-engine:latest`
+
+#### Scenario: Image from default fallback
+- **WHEN** `pipedreamer deploy` is executed without `--image` and `.pipedreamer/base-image.txt` does not exist
+- **THEN** the Deployment manifest SHALL reference image `pipedreamer-engine:latest`
+
+#### Scenario: Deprecated --cluster-registry flag
+- **WHEN** `pipedreamer deploy --cluster-registry gcr.io/proj` is executed
+- **THEN** it SHALL return an error indicating `--cluster-registry` is removed and to use `--image` instead
+
+### Requirement: Deploy generates code ConfigMap
+The deploy command SHALL generate a code ConfigMap from the workflow directory and include it in the applied manifests.
+
+#### Scenario: ConfigMap included in apply
+- **WHEN** `pipedreamer deploy` is executed in a valid workflow directory
+- **THEN** the manifests applied to the cluster SHALL include a ConfigMap named `{workflow-name}-code`
+
+#### Scenario: ConfigMap size exceeded
+- **WHEN** `pipedreamer deploy` is executed and workflow code exceeds 900KB
+- **THEN** it SHALL return an error before applying any manifests
 
 ### Requirement: K8s client initialization
 The `pkg/k8s/client.go` `NewClient()` function SHALL create a K8s client from available configuration.

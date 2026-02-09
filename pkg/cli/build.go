@@ -5,7 +5,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
 	"github.com/randyb/pipedreamer2/pkg/builder"
 	"github.com/randyb/pipedreamer2/pkg/spec"
@@ -19,7 +18,7 @@ func NewBuildCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runBuild,
 	}
-	cmd.Flags().StringP("tag", "t", "", "Image tag (default: workflow name)")
+	cmd.Flags().StringP("tag", "t", "", "Image tag (default: pipedreamer-engine:latest)")
 	cmd.Flags().Bool("push", false, "Push image to registry after build")
 	cmd.Flags().String("platform", "", "Target platform (e.g., linux/arm64)")
 	return cmd
@@ -42,7 +41,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading workflow spec: %w", err)
 	}
 
-	wf, errs := spec.Parse(data)
+	_, errs := spec.Parse(data)
 	if len(errs) > 0 {
 		return fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
 	}
@@ -53,7 +52,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	platform, _ := cmd.Flags().GetString("platform")
 
 	if tag == "" {
-		tag = wf.Name + ":" + strings.ReplaceAll(wf.Version, ".", "-")
+		tag = "pipedreamer-engine:latest"
 	}
 	if registry != "" {
 		tag = registry + "/" + tag
@@ -70,7 +69,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate Dockerfile
-	dockerfile := builder.GenerateDockerfile(absDir)
+	dockerfile := builder.GenerateDockerfile()
 	dockerfilePath := filepath.Join(absDir, "Dockerfile.pipedreamer")
 	if err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644); err != nil {
 		return fmt.Errorf("writing Dockerfile: %w", err)
@@ -115,6 +114,16 @@ func runBuild(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("docker push failed: %w", err)
 		}
 		fmt.Printf("✓ Pushed image: %s\n", tag)
+	}
+
+	// Save image tag to .pipedreamer/base-image.txt (relative to workflow directory)
+	pipedreamerDir := filepath.Join(absDir, ".pipedreamer")
+	if err := os.MkdirAll(pipedreamerDir, 0o755); err != nil {
+		return fmt.Errorf("creating .pipedreamer directory: %w", err)
+	}
+	tagFilePath := filepath.Join(pipedreamerDir, "base-image.txt")
+	if err := os.WriteFile(tagFilePath, []byte(tag), 0o644); err != nil {
+		return fmt.Errorf("writing base-image.txt: %w", err)
 	}
 
 	return nil
