@@ -11,6 +11,7 @@ vendor/
 # Secrets & credentials
 .secrets.yaml
 .secrets/
+.secrets.bak/
 *.secret
 .credentials/
 
