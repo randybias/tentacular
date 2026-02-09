@@ -10,11 +10,16 @@
     "std/path": "https://deno.land/std@0.224.0/path/mod.ts",
     "std/flags": "https://deno.land/std@0.224.0/flags/mod.ts",
     "std/assert": "https://deno.land/std@0.224.0/assert/mod.ts",
-    "@nats-io/transport-deno": "jsr:@nats-io/transport-deno@3.3.0"
+    "@nats-io/transport-deno": "jsr:@nats-io/transport-deno@3.3.0",
+    "@std/fmt/colors": "https://deno.land/std@0.224.0/fmt/colors.ts",
+    "@std/io": "https://deno.land/std@0.224.0/io/mod.ts",
+    "@std/bytes": "https://deno.land/std@0.224.0/bytes/mod.ts"
   },
   "lint": {
     "rules": {
-      "tags": ["recommended"]
+      "tags": [
+        "recommended"
+      ]
     }
   },
   "fmt": {
