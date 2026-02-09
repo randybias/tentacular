@@ -25,6 +25,7 @@ scratch/
 .claude/
 .codex/
 .gemini/
+CLAUDE.md
 
 # IDE
 .vscode/

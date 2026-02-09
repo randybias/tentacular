@@ -50,16 +50,86 @@ Support deploying workflows across multiple K8s clusters with a single command. 
 
 Support running multiple versions of a workflow simultaneously with traffic splitting. CronJobs and NATS subscriptions route to the active version. Canary deploys send a percentage of traffic to the new version.
 
+## Workflow Version Tracking in Deployment Metadata
+
+**Status:** IDENTIFIED (Feb 2026)
+
+The `version` field in workflow.yaml is validated but never used for tracking or display. When you deploy a workflow, there's no way to know which version is running.
+
+**Proposal:**
+1. Add `app.kubernetes.io/version` label to all generated K8s resources (Deployment, Service, ConfigMap, CronJobs)
+2. `pipedreamer status <name>` should display the deployed version
+3. `pipedreamer list` should show version column
+
+**Benefits:**
+- Visibility into what's deployed
+- Enables kubectl queries like `kubectl get deploy -l app.kubernetes.io/version=1.0`
+- Follows K8s recommended labels standard
+
+## Immutable Versioned ConfigMaps
+
+**Status:** IDENTIFIED (Feb 2026)
+
+ConfigMap is always named `{name}-code`. Updates overwrite content, destroying the previous version. No rollback capability.
+
+**Proposal:**
+1. Name ConfigMaps as `{name}-code-{version}` (e.g., `uptime-prober-code-1-0`)
+2. Set `immutable: true` on ConfigMaps (K8s 1.21+)
+3. Deployment references the versioned ConfigMap name
+4. Old ConfigMaps are retained for rollback
+
+**Benefits:**
+- Rollback support: change Deployment to reference old ConfigMap, restart pods
+- Audit trail: `kubectl get configmap` shows all historical versions
+- Follows K8s immutable config best practice
+- Enables blue-green deploys (two Deployments, different ConfigMap versions)
+
+**Trade-offs:**
+- ConfigMaps accumulate over time (need cleanup policy or `--prune` flag)
+- Version bumps in workflow.yaml are now meaningful (not just cosmetic)
+
+## Workflow Version History Command
+
+**Status:** IDENTIFIED (Feb 2026)
+
+No way to see what versions have been deployed or what changed between them.
+
+**Proposal:**
+Add `pipedreamer versions <name>` command:
+- Lists all ConfigMaps matching `{name}-code-*` pattern
+- Shows version, creation timestamp, size
+- Optional `--diff v1 v2` flag to show code differences
+
+**Benefits:**
+- Discoverability of deployed versions
+- Debugging aid ("which version had the bug?")
+- Complements rollback feature
+
+## Workflow Rollback Command
+
+**Status:** IDENTIFIED (Feb 2026)
+
+No way to revert to a previous version after a bad deploy.
+
+**Proposal:**
+Add `pipedreamer rollback <name> --version <version>` command:
+1. Finds ConfigMap `{name}-code-{version}`
+2. Patches Deployment to reference it
+3. Runs rollout restart
+
+**Requirements:**
+- Depends on immutable versioned ConfigMaps
+- Should fail fast if target version ConfigMap doesn't exist
+
+**Benefits:**
+- Fast recovery from bad deploys
+- Reduces risk of rapid iteration (easy to undo)
+
 ## Pre-Built Base Image with Dynamic Workflow Loading
 
-Currently `pipedreamer build` generates a full Dockerfile per workflow, copies the engine in, runs `deno cache`, and builds a new container image from scratch every time. This is slow, wasteful, and means every workflow carries its own copy of the engine.
+**Status:** RESOLVED (Feb 2026 — base-engine-image + configmap-code-deploy features)
 
-Instead, publish a versioned base image (`pipedreamer-engine:v2.x`) with the Deno runtime and engine pre-baked. Workflow deployment then becomes:
-
-- **Option A: Thin overlay image** — `FROM pipedreamer-engine:v2.x` + `COPY workflow.yaml nodes/` — fast single-layer build, no `deno cache` needed for the engine
-- **Option B: Dynamic loading** — Base image runs at startup, workflow code is mounted via ConfigMap or PVC, no container rebuild at all for code changes
-
-Benefits: faster builds, smaller image layers, separation of engine versioning from workflow versioning, enables hot-deploy of workflow code without image rebuilds.
+`pipedreamer build` now generates an engine-only Docker image (`pipedreamer-engine:latest`) with no workflow code baked in. `pipedreamer deploy` creates a ConfigMap with workflow.yaml and nodes/*.ts, mounts it at `/app/workflow/`, and triggers a rollout restart. Code changes deploy in ~5-10 seconds without Docker rebuilds.
 
 ## Preflight Secret Provisioning Ordering
 
