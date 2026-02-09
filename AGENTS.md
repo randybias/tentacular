@@ -8,7 +8,7 @@ Before making changes, read **[docs/architecture.md](docs/architecture.md)** to 
 
 - **Go CLI** (`cmd/pipedreamer/`, `pkg/`) — lifecycle management, K8s operations
 - **Deno Engine** (`engine/`) — DAG compilation and execution
-- **Examples** (`examples/`) — runnable workflow examples
+- **Example Workflows** (`example-workflows/`) — runnable workflow examples
 - **Infrastructure** (`deploy/`) — gVisor setup scripts and K8s resources
 
 ## Key Commands

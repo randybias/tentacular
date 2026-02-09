@@ -329,22 +329,26 @@ Convention: secrets are named `<workflow-name>-secrets`.
 
 ## Examples
 
-Three working examples in `examples/`:
+All example workflows live in `example-workflows/`:
 
 | Example | Description | Secrets Required |
 |---------|-------------|-----------------|
 | `hn-digest` | Fetch and filter top Hacker News stories | None |
 | `github-digest` | Fetch GitHub repos and create a summary digest | GitHub token, Slack webhook |
 | `pr-digest` | Summarize PRs with Claude and send to Slack | GitHub token, Anthropic API key, Slack webhook |
+| `uptime-prober` | Probe HTTP endpoints on cron, alert to Slack when down | Slack webhook |
+| `cluster-health-collector` | Fetch K8s cluster state, store to Postgres | Postgres password |
+| `cluster-health-reporter` | Daily AI-analyzed cluster health report to Slack | Postgres password, Anthropic API key, Slack webhook |
+| `word-counter` | Simple word counting example | None |
 
 ```bash
 # Try the no-secrets example
-pipedreamer validate examples/hn-digest
-pipedreamer test examples/hn-digest
-pipedreamer dev examples/hn-digest
+pipedreamer validate example-workflows/hn-digest
+pipedreamer test example-workflows/hn-digest
+pipedreamer dev example-workflows/hn-digest
 
 # Visualize the DAG
-pipedreamer visualize examples/github-digest
+pipedreamer visualize example-workflows/github-digest
 ```
 
 ## Architecture
@@ -373,7 +377,7 @@ pipedreamer
 | `cmd/pipedreamer/` | CLI entry point |
 | `pkg/` | Go packages: spec parser, builder, K8s client, CLI commands |
 | `engine/` | Deno TypeScript engine: compiler, executor, context, server |
-| `examples/` | Runnable example workflows |
+| `example-workflows/` | Runnable example workflows |
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |
 | `docs/` | Detailed architecture reference |
 

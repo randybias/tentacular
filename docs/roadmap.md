@@ -342,24 +342,7 @@ The skill document covers HTTP-based workflows well (ctx.fetch with GitHub, Slac
 
 ### AGENTS.md Missing Example Workflows Directory Convention
 
-**File**: `AGENTS.md`
-
-The project structure section lists `Examples (examples/)` but:
-- There are also workflow directories at the repo root (`word-counter/`, `uptime-prober/`, `cluster-health-collector/`, `cluster-health-reporter/`)
-- There is no mention of the `example-workflows/` convention for new workflows
-- The `examples/` directory contains older examples; newer workflows should go in `example-workflows/`
-
-## Workflow Organization
-
-### Workflows Scattered Across Repo Root
-
-**Problem**: Workflow directories are inconsistently located:
-- `examples/` contains `github-digest`, `hn-digest`, `pr-digest` (older examples)
-- Repo root contains `word-counter/` (test example) and our new workflows (`uptime-prober/`, `cluster-health-collector/`, `cluster-health-reporter/`)
-
-This clutters the repo root and makes it unclear which directories are project infrastructure vs. workflow examples.
-
-**Fix**: Move all example/development workflows into a single `example-workflows/` directory. Reserve the repo root for project infrastructure (`cmd/`, `pkg/`, `engine/`, `docs/`, `deploy/`, `pipedreamer-skill/`). Update `AGENTS.md`, `README.md`, and the skill docs to reference the new location.
+**Status**: RESOLVED. All workflows consolidated into `example-workflows/`. AGENTS.md, README.md, and architecture.md updated.
 
 ## Uptime-Prober v2 (Pending)
 

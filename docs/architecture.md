@@ -29,7 +29,7 @@ Pipedreamer v2 is a workflow execution platform that runs TypeScript DAGs on Kub
 | `cmd/pipedreamer/` | CLI entry point (Cobra command tree) |
 | `pkg/` | Go packages: spec parser, builder, K8s client, CLI commands |
 | `engine/` | Deno TypeScript engine: compiler, executor, context, server |
-| `examples/` | Runnable example workflows (github-digest, hn-digest, pr-digest) |
+| `example-workflows/` | Runnable example workflows |
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |
 | `openspec/` | Change tracking and specifications |
 | `docs/` | Project documentation |
