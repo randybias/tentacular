@@ -1,0 +1,16 @@
+{
+  "input": {
+    "stories": [
+      { "id": 1, "title": "High Score Story", "url": "https://example.com/1", "score": 200, "by": "alice", "descendants": 50 },
+      { "id": 2, "title": "Low Score Story", "url": "https://example.com/2", "score": 10, "by": "bob", "descendants": 2 },
+      { "id": 3, "title": "Medium Score Story", "url": "https://example.com/3", "score": 75, "by": "charlie", "descendants": 20 }
+    ]
+  },
+  "expected": {
+    "stories": [
+      { "id": 1, "title": "High Score Story", "url": "https://example.com/1", "score": 200, "by": "alice", "descendants": 50 },
+      { "id": 3, "title": "Medium Score Story", "url": "https://example.com/3", "score": 75, "by": "charlie", "descendants": 20 }
+    ],
+    "filtered": 1
+  }
+}

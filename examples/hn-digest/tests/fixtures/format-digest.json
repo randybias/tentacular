@@ -1,0 +1,12 @@
+{
+  "input": {
+    "stories": [
+      { "id": 1, "title": "Test Story", "url": "https://example.com/1", "score": 200, "by": "alice", "descendants": 50 }
+    ],
+    "filtered": 2
+  },
+  "expected": {
+    "digest": "== Hacker News Top Stories ==\n1 stories (2 filtered out)\n\n1. Test Story (200 pts, 50 comments)\n   https://example.com/1\n   by alice",
+    "count": 1
+  }
+}

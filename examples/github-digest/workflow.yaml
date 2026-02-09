@@ -1,0 +1,30 @@
+name: github-digest
+version: "1.0"
+description: "Fetches GitHub repos and creates a digest summary"
+
+triggers:
+  - type: manual
+  - type: cron
+    schedule: "0 9 * * *"
+
+nodes:
+  fetch-repos:
+    path: ./nodes/fetch-repos.ts
+    capabilities:
+      net: "github.com"
+  summarize:
+    path: ./nodes/summarize.ts
+  notify:
+    path: ./nodes/notify.ts
+    capabilities:
+      net: "slack.com"
+
+edges:
+  - from: fetch-repos
+    to: summarize
+  - from: summarize
+    to: notify
+
+config:
+  timeout: 30s
+  retries: 1

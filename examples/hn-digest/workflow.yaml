@@ -1,0 +1,23 @@
+name: hn-digest
+version: "1.0"
+description: "Fetch and filter top Hacker News stories into a digest"
+
+triggers:
+  - type: manual
+
+nodes:
+  fetch-stories:
+    path: ./nodes/fetch-stories.ts
+  filter-stories:
+    path: ./nodes/filter-stories.ts
+  format-digest:
+    path: ./nodes/format-digest.ts
+
+edges:
+  - from: fetch-stories
+    to: filter-stories
+  - from: filter-stories
+    to: format-digest
+
+config:
+  timeout: 30s

@@ -1,0 +1,32 @@
+name: pr-digest
+version: "1.0"
+description: "Fetch GitHub PRs, summarize with Claude, and send digest to Slack"
+
+triggers:
+  - type: manual
+  - type: cron
+    schedule: "0 9 * * *"
+
+nodes:
+  fetch-prs:
+    path: ./nodes/fetch-prs.ts
+    capabilities:
+      github: "github-token"
+  analyze-prs:
+    path: ./nodes/analyze-prs.ts
+    capabilities:
+      anthropic: "anthropic-api-key"
+  notify-slack:
+    path: ./nodes/notify-slack.ts
+    capabilities:
+      slack: "slack-webhook"
+
+edges:
+  - from: fetch-prs
+    to: analyze-prs
+  - from: analyze-prs
+    to: notify-slack
+
+config:
+  timeout: 60s
+  retries: 1

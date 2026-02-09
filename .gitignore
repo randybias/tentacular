@@ -1,0 +1,36 @@
+# Binaries
+pipedreamer
+*.exe
+
+# Go
+vendor/
+
+# Deno
+.deno/
+
+# Secrets & credentials
+.secrets.yaml
+.secrets/
+*.secret
+.credentials/
+
+# Scratch (agent/dev temp files)
+scratch/
+
+# AI assistant configs
+.claude/
+.codex/
+.gemini/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Temp & logs
+*.log
+*.tmp
+coverage/
+.cache/

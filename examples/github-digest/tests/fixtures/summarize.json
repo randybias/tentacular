@@ -1,0 +1,14 @@
+{
+  "input": {
+    "repos": [
+      { "name": "deno", "description": "A modern runtime for JavaScript and TypeScript", "stars": 95000 },
+      { "name": "fresh", "description": "The next-gen web framework", "stars": 12000 },
+      { "name": "std", "description": "Deno standard library", "stars": 3000 }
+    ]
+  },
+  "expected": {
+    "title": "GitHub Repository Digest",
+    "summary": "Found 3 repositories with 110000 total stars:\n- deno (95000 stars): A modern runtime for JavaScript and TypeScript\n- fresh (12000 stars): The next-gen web framework\n- std (3000 stars): Deno standard library",
+    "repoCount": 3
+  }
+}
