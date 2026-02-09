@@ -1,0 +1,22 @@
+{
+  "input": {
+    "results": [
+      { "url": "https://example.com", "status": 200, "ok": true, "latencyMs": 50 },
+      { "url": "https://httpstat.us/503", "status": 503, "ok": false, "latencyMs": 75 }
+    ],
+    "probedAt": "2025-01-01T00:00:00.000Z"
+  },
+  "expected": {
+    "alert": true,
+    "probedAt": "2025-01-01T00:00:00.000Z",
+    "totalEndpoints": 2,
+    "healthyCount": 1,
+    "unhealthyCount": 1,
+    "unhealthy": [
+      { "url": "https://httpstat.us/503", "status": 503, "ok": false, "latencyMs": 75 }
+    ],
+    "healthy": [
+      { "url": "https://example.com", "status": 200, "ok": true, "latencyMs": 50 }
+    ]
+  }
+}

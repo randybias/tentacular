@@ -1,0 +1,35 @@
+name: uptime-prober
+version: "1.0"
+description: "Probe HTTP endpoints on a cron schedule, alert when any are down"
+
+triggers:
+  - type: manual
+  - type: cron
+    name: scheduled-probe
+    schedule: "*/5 * * * *"
+
+nodes:
+  probe-endpoints:
+    path: ./nodes/probe-endpoints.ts
+  analyze-results:
+    path: ./nodes/analyze-results.ts
+  format-report:
+    path: ./nodes/format-report.ts
+  notify-slack:
+    path: ./nodes/notify-slack.ts
+
+edges:
+  - from: probe-endpoints
+    to: analyze-results
+  - from: analyze-results
+    to: format-report
+  - from: format-report
+    to: notify-slack
+
+config:
+  timeout: 60s
+  retries: 1
+  endpoints:
+    - https://example.com
+    - https://www.google.com
+    - https://thisdomaindoesnotexist.invalid

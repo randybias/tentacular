@@ -1,0 +1,26 @@
+{
+  "input": {
+    "alert": false,
+    "probedAt": "2025-01-01T00:00:00.000Z",
+    "totalEndpoints": 2,
+    "healthyCount": 2,
+    "unhealthyCount": 0,
+    "unhealthy": [],
+    "healthy": [
+      { "url": "https://example.com", "status": 200, "ok": true, "latencyMs": 50 },
+      { "url": "https://httpstat.us/200", "status": 200, "ok": true, "latencyMs": 100 }
+    ]
+  },
+  "expected": {
+    "alert": false,
+    "probedAt": "2025-01-01T00:00:00.000Z",
+    "summary": "All 2 endpoint(s) responding normally",
+    "sections": {
+      "down": "",
+      "healthy": "https://example.com — `200` _(50ms)_\nhttps://httpstat.us/200 — `200` _(100ms)_"
+    },
+    "totalEndpoints": 2,
+    "unhealthyCount": 0,
+    "healthyCount": 2
+  }
+}
