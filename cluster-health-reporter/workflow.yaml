@@ -1,0 +1,31 @@
+name: cluster-health-reporter
+version: "1.0"
+description: "Generate daily cluster health report from Postgres data and send to Slack"
+
+triggers:
+  - type: manual
+  - type: cron
+    name: daily-report
+    schedule: "0 15 * * *"
+
+nodes:
+  query-health-history:
+    path: ./nodes/query-health-history.ts
+  analyze-trends:
+    path: ./nodes/analyze-trends.ts
+  send-report:
+    path: ./nodes/send-report.ts
+
+edges:
+  - from: query-health-history
+    to: analyze-trends
+  - from: analyze-trends
+    to: send-report
+
+config:
+  timeout: 120s
+  retries: 1
+  pg_host: "172.27.18.1"
+  pg_port: 30432
+  pg_database: "appdb"
+  pg_user: "postgres"

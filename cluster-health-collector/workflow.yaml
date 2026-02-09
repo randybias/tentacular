@@ -1,0 +1,27 @@
+name: cluster-health-collector
+version: "1.0"
+description: "Collect K8s cluster health data every 5 minutes and store in Postgres"
+
+triggers:
+  - type: manual
+  - type: cron
+    name: collect-health
+    schedule: "*/5 * * * *"
+
+nodes:
+  fetch-cluster-state:
+    path: ./nodes/fetch-cluster-state.ts
+  store-health-data:
+    path: ./nodes/store-health-data.ts
+
+edges:
+  - from: fetch-cluster-state
+    to: store-health-data
+
+config:
+  timeout: 60s
+  retries: 1
+  pg_host: "172.27.18.1"
+  pg_port: 30432
+  pg_database: "appdb"
+  pg_user: "postgres"
