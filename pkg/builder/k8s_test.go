@@ -386,21 +386,21 @@ func TestK8sManifestCronTriggerServiceURL(t *testing.T) {
 }
 
 func TestDockerfileDistrolessBase(t *testing.T) {
-	df := GenerateDockerfile()
+	df := GenerateDockerfile("")
 	if !strings.Contains(df, "FROM denoland/deno:distroless") {
 		t.Error("expected distroless base image")
 	}
 }
 
 func TestDockerfileWorkdir(t *testing.T) {
-	df := GenerateDockerfile()
+	df := GenerateDockerfile("")
 	if !strings.Contains(df, "WORKDIR /app") {
 		t.Error("expected WORKDIR /app")
 	}
 }
 
 func TestDockerfileCopyInstructions(t *testing.T) {
-	df := GenerateDockerfile()
+	df := GenerateDockerfile("")
 	for _, expected := range []string{".engine/", "workflow.yaml", "nodes/", "deno.json"} {
 		if !strings.Contains(df, expected) {
 			t.Errorf("expected COPY instruction for %s", expected)
@@ -409,7 +409,7 @@ func TestDockerfileCopyInstructions(t *testing.T) {
 }
 
 func TestDockerfileCacheAndEntrypoint(t *testing.T) {
-	df := GenerateDockerfile()
+	df := GenerateDockerfile("")
 	if !strings.Contains(df, `"deno", "cache"`) {
 		t.Error("expected deno cache instruction")
 	}
@@ -428,7 +428,7 @@ func TestDockerfileCacheAndEntrypoint(t *testing.T) {
 }
 
 func TestDockerfileNoCLIArtifacts(t *testing.T) {
-	df := GenerateDockerfile()
+	df := GenerateDockerfile("")
 	if strings.Contains(df, "COPY cmd/") || strings.Contains(df, "COPY pkg/") {
 		t.Error("Dockerfile should not copy cmd/ or pkg/ directories")
 	}

@@ -70,7 +70,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	// Generate Dockerfile
-	dockerfile := builder.GenerateDockerfile()
+	dockerfile := builder.GenerateDockerfile(absDir)
 	dockerfilePath := filepath.Join(absDir, "Dockerfile.pipedreamer")
 	if err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644); err != nil {
 		return fmt.Errorf("writing Dockerfile: %w", err)
