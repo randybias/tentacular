@@ -31,7 +31,7 @@ async function loadSecretsFromFile(path: string): Promise<SecretsConfig> {
 async function loadSecretsFromDir(dirPath: string): Promise<SecretsConfig> {
   const secrets: SecretsConfig = {};
   for await (const entry of Deno.readDir(dirPath)) {
-    if (!entry.isFile) continue;
+    if (!entry.isFile && !entry.isSymlink) continue;
     // Skip hidden files
     if (entry.name.startsWith(".")) continue;
     const content = await Deno.readTextFile(`${dirPath}/${entry.name}`);
