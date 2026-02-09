@@ -1,0 +1,26 @@
+{
+  "input": {
+    "words": ["the", "quick", "brown", "fox", "jumps", "over", "the", "lazy", "dog", "the", "fox"],
+    "counts": {
+      "the": 3,
+      "quick": 1,
+      "brown": 1,
+      "fox": 2,
+      "jumps": 1,
+      "over": 1,
+      "lazy": 1,
+      "dog": 1
+    }
+  },
+  "expected": {
+    "totalWords": 11,
+    "uniqueWords": 8,
+    "topWords": [
+      { "word": "the", "count": 3 },
+      { "word": "fox", "count": 2 },
+      { "word": "quick", "count": 1 },
+      { "word": "brown", "count": 1 },
+      { "word": "jumps", "count": 1 }
+    ]
+  }
+}

@@ -17,7 +17,11 @@ Workflows live in a directory containing a `workflow.yaml` and a `nodes/` direct
 | `test` | `pipedreamer test [dir][/<node>]` | `--pipeline` | Run node-level tests from fixtures, or full pipeline test with `--pipeline` |
 | `build` | `pipedreamer build [dir]` | `-t` tag | Generate Dockerfile (distroless Deno base), build container image via `docker build` |
 | `deploy` | `pipedreamer deploy [dir]` | `-n` namespace, `-r` registry | Generate K8s manifests (Deployment with gVisor, Service) and apply to cluster |
-| `status` | `pipedreamer status <name>` | `-n` namespace, `-o` json | Check deployment status in K8s |
+| `status` | `pipedreamer status <name>` | `-n` namespace, `-o` json, `--detail` | Check deployment status in K8s; `--detail` shows pods, events, resources |
+| `run` | `pipedreamer run <name>` | `-n` namespace, `--timeout` | Trigger a deployed workflow and return JSON result |
+| `logs` | `pipedreamer logs <name>` | `-n` namespace, `-f`/`--follow`, `--tail` | View workflow pod logs; `-f` streams in real time |
+| `list` | `pipedreamer list` | `-n` namespace, `-o` json | List all deployed workflows in a namespace |
+| `undeploy` | `pipedreamer undeploy <name>` | `-n` namespace, `--yes` | Remove a deployed workflow (Service, Deployment, Secret) |
 | `cluster check` | `pipedreamer cluster check` | `--fix`, `-n` namespace | Preflight validation of cluster readiness; `--fix` auto-remediates |
 | `visualize` | `pipedreamer visualize [dir]` | | Generate Mermaid diagram of the workflow DAG |
 
@@ -82,6 +86,10 @@ pipedreamer build                # build container image
 pipedreamer cluster check --fix  # verify K8s cluster readiness
 pipedreamer deploy               # deploy to Kubernetes
 pipedreamer status my-workflow   # check deployment status
+pipedreamer list                 # list all deployed workflows
+pipedreamer run my-workflow      # trigger workflow, get JSON result
+pipedreamer logs my-workflow     # view pod logs
+pipedreamer undeploy my-workflow # remove from cluster
 ```
 
 ## References

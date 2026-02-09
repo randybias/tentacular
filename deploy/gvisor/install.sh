@@ -8,12 +8,11 @@
 # Usage: sudo bash deploy/gvisor/install.sh
 set -euo pipefail
 
-GVISOR_VERSION="latest"
-ARCH="arm64"
+ARCH=$(uname -m)
 INSTALL_DIR="/usr/local/bin"
 K0S_CONTAINERD_DIR="/etc/k0s/containerd.d"
 
-echo "=== gVisor Installer for k0s (ARM64) ==="
+echo "=== gVisor Installer for k0s ==="
 
 # Check root
 if [[ $EUID -ne 0 ]]; then
@@ -21,14 +20,9 @@ if [[ $EUID -ne 0 ]]; then
   exit 1
 fi
 
-# Check architecture
-MACHINE=$(uname -m)
-if [[ "$MACHINE" == "aarch64" || "$MACHINE" == "arm64" ]]; then
-  ARCH="arm64"
-elif [[ "$MACHINE" == "x86_64" ]]; then
-  ARCH="amd64"
-else
-  echo "ERROR: Unsupported architecture: $MACHINE"
+# Validate architecture (gVisor supports x86_64 and aarch64)
+if [[ "$ARCH" != "x86_64" && "$ARCH" != "aarch64" ]]; then
+  echo "ERROR: Unsupported architecture: $ARCH"
   exit 1
 fi
 
@@ -39,13 +33,15 @@ if command -v runsc &>/dev/null; then
 fi
 
 echo "Downloading gVisor for ${ARCH}..."
-GVISOR_URL="https://storage.googleapis.com/gvisor/releases/release/${GVISOR_VERSION}/${ARCH}"
+GVISOR_URL="https://storage.googleapis.com/gvisor/releases/release/latest/${ARCH}"
 
-curl -fsSL "${GVISOR_URL}/runsc" -o "${INSTALL_DIR}/runsc"
-curl -fsSL "${GVISOR_URL}/containerd-shim-runsc-v1" -o "${INSTALL_DIR}/containerd-shim-runsc-v1"
+wget -nv "${GVISOR_URL}/runsc" "${GVISOR_URL}/runsc.sha512" \
+  "${GVISOR_URL}/containerd-shim-runsc-v1" "${GVISOR_URL}/containerd-shim-runsc-v1.sha512"
+sha512sum -c runsc.sha512 -c containerd-shim-runsc-v1.sha512
+rm -f *.sha512
 
-chmod +x "${INSTALL_DIR}/runsc"
-chmod +x "${INSTALL_DIR}/containerd-shim-runsc-v1"
+chmod a+rx runsc containerd-shim-runsc-v1
+mv runsc containerd-shim-runsc-v1 "${INSTALL_DIR}/"
 
 echo "Installed: ${INSTALL_DIR}/runsc"
 echo "Installed: ${INSTALL_DIR}/containerd-shim-runsc-v1"

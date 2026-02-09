@@ -1,0 +1,23 @@
+name: word-counter
+version: "1.0"
+description: "E2E test — tokenize text, count words, produce report"
+
+triggers:
+  - type: manual
+
+nodes:
+  source:
+    path: ./nodes/source.ts
+  tokenize:
+    path: ./nodes/tokenize.ts
+  report:
+    path: ./nodes/report.ts
+
+edges:
+  - from: source
+    to: tokenize
+  - from: tokenize
+    to: report
+
+config:
+  timeout: 10s

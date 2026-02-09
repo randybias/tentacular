@@ -1,19 +1,25 @@
 package k8s
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/randyb/pipedreamer2/pkg/builder"
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -179,4 +185,398 @@ func (c *Client) GetStatus(namespace, name string) (*DeploymentStatus, error) {
 		Replicas:  replicas,
 		Available: dep.Status.AvailableReplicas,
 	}, nil
+}
+
+// WorkflowInfo represents a deployed workflow in a listing.
+type WorkflowInfo struct {
+	Name      string    `json:"name"`
+	Namespace string    `json:"namespace"`
+	Ready     bool      `json:"ready"`
+	Replicas  int32     `json:"replicas"`
+	Available int32     `json:"available"`
+	Image     string    `json:"image"`
+	Created   time.Time `json:"created"`
+}
+
+// PodStatus represents the status of a single pod.
+type PodStatus struct {
+	Name  string `json:"name"`
+	Phase string `json:"phase"`
+	Ready bool   `json:"ready"`
+	IP    string `json:"ip"`
+}
+
+// DetailedStatus extends DeploymentStatus with additional cluster details.
+type DetailedStatus struct {
+	DeploymentStatus
+	Image          string            `json:"image"`
+	RuntimeClass   string            `json:"runtimeClass,omitempty"`
+	ResourceLimits map[string]string `json:"resourceLimits,omitempty"`
+	ServiceEndpoint string           `json:"serviceEndpoint,omitempty"`
+	Pods           []PodStatus       `json:"pods,omitempty"`
+	Events         []string          `json:"events,omitempty"`
+}
+
+func (s *DetailedStatus) JSON() string {
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return fmt.Sprintf(`{"error": "failed to marshal status: %s"}`, err)
+	}
+	return string(data)
+}
+
+func (s *DetailedStatus) Text() string {
+	var b bytes.Buffer
+	fmt.Fprintf(&b, "Workflow: %s\n", s.Name)
+	fmt.Fprintf(&b, "Namespace: %s\n", s.Namespace)
+	status := "not ready"
+	if s.Ready {
+		status = "ready"
+	}
+	fmt.Fprintf(&b, "Status: %s\n", status)
+	fmt.Fprintf(&b, "Replicas: %d/%d\n", s.Available, s.Replicas)
+	fmt.Fprintf(&b, "Image: %s\n", s.Image)
+	if s.RuntimeClass != "" {
+		fmt.Fprintf(&b, "Runtime Class: %s\n", s.RuntimeClass)
+	}
+	if len(s.ResourceLimits) > 0 {
+		fmt.Fprintf(&b, "Resource Limits:\n")
+		for k, v := range s.ResourceLimits {
+			fmt.Fprintf(&b, "  %s: %s\n", k, v)
+		}
+	}
+	if s.ServiceEndpoint != "" {
+		fmt.Fprintf(&b, "Service: %s\n", s.ServiceEndpoint)
+	}
+	if len(s.Pods) > 0 {
+		fmt.Fprintf(&b, "Pods:\n")
+		for _, p := range s.Pods {
+			readyStr := "not ready"
+			if p.Ready {
+				readyStr = "ready"
+			}
+			fmt.Fprintf(&b, "  %s  %s  %s  %s\n", p.Name, p.Phase, readyStr, p.IP)
+		}
+	}
+	if len(s.Events) > 0 {
+		fmt.Fprintf(&b, "Recent Events:\n")
+		for _, e := range s.Events {
+			fmt.Fprintf(&b, "  %s\n", e)
+		}
+	}
+	return b.String()
+}
+
+// DeleteResources removes the Service, Deployment, and Secret for a workflow.
+// Returns the list of deleted resource descriptions. NotFound errors are silently skipped.
+func (c *Client) DeleteResources(namespace, name string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	var deleted []string
+	propagation := metav1.DeletePropagationForeground
+
+	// Delete Service
+	err := c.clientset.CoreV1().Services(namespace).Delete(ctx, name, metav1.DeleteOptions{
+		PropagationPolicy: &propagation,
+	})
+	if errors.IsNotFound(err) {
+		// skip
+	} else if err != nil {
+		return deleted, fmt.Errorf("deleting service %s: %w", name, err)
+	} else {
+		deleted = append(deleted, "Service/"+name)
+	}
+
+	// Delete Deployment
+	err = c.clientset.AppsV1().Deployments(namespace).Delete(ctx, name, metav1.DeleteOptions{
+		PropagationPolicy: &propagation,
+	})
+	if errors.IsNotFound(err) {
+		// skip
+	} else if err != nil {
+		return deleted, fmt.Errorf("deleting deployment %s: %w", name, err)
+	} else {
+		deleted = append(deleted, "Deployment/"+name)
+	}
+
+	// Delete Secret
+	secretName := name + "-secrets"
+	err = c.clientset.CoreV1().Secrets(namespace).Delete(ctx, secretName, metav1.DeleteOptions{
+		PropagationPolicy: &propagation,
+	})
+	if errors.IsNotFound(err) {
+		// skip
+	} else if err != nil {
+		return deleted, fmt.Errorf("deleting secret %s: %w", secretName, err)
+	} else {
+		deleted = append(deleted, "Secret/"+secretName)
+	}
+
+	return deleted, nil
+}
+
+// ListWorkflows returns all deployments managed by pipedreamer in the given namespace.
+func (c *Client) ListWorkflows(namespace string) ([]WorkflowInfo, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	deps, err := c.clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/managed-by=pipedreamer",
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing deployments: %w", err)
+	}
+
+	var workflows []WorkflowInfo
+	for _, dep := range deps.Items {
+		replicas := int32(1)
+		if dep.Spec.Replicas != nil {
+			replicas = *dep.Spec.Replicas
+		}
+
+		image := ""
+		if len(dep.Spec.Template.Spec.Containers) > 0 {
+			image = dep.Spec.Template.Spec.Containers[0].Image
+		}
+
+		workflows = append(workflows, WorkflowInfo{
+			Name:      dep.Name,
+			Namespace: dep.Namespace,
+			Ready:     dep.Status.ReadyReplicas == replicas,
+			Replicas:  replicas,
+			Available: dep.Status.AvailableReplicas,
+			Image:     image,
+			Created:   dep.CreationTimestamp.Time,
+		})
+	}
+
+	return workflows, nil
+}
+
+// GetPodLogs returns a ReadCloser streaming logs from the first running pod matching the workflow name.
+// The caller is responsible for closing the reader and managing ctx cancellation for follow mode.
+func (c *Client) GetPodLogs(ctx context.Context, namespace, name string, follow bool, tailLines int64) (io.ReadCloser, error) {
+	pods, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=" + name,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("listing pods: %w", err)
+	}
+	if len(pods.Items) == 0 {
+		return nil, fmt.Errorf("no pods found for workflow %s", name)
+	}
+
+	// Prefer a Running pod
+	podName := pods.Items[0].Name
+	for _, p := range pods.Items {
+		if p.Status.Phase == corev1.PodRunning {
+			podName = p.Name
+			break
+		}
+	}
+
+	logOpts := &corev1.PodLogOptions{
+		Follow:    follow,
+		TailLines: &tailLines,
+	}
+
+	stream, err := c.clientset.CoreV1().Pods(namespace).GetLogs(podName, logOpts).Stream(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("streaming logs from pod %s: %w", podName, err)
+	}
+
+	return stream, nil
+}
+
+// RunWorkflow triggers a deployed workflow by creating a temporary curl pod that POSTs to the workflow service.
+// Returns the JSON result from stdout. The temp pod is cleaned up on completion.
+func (c *Client) RunWorkflow(ctx context.Context, namespace, name string) (string, error) {
+	svcURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080/run", name, namespace)
+	podName := fmt.Sprintf("pipedreamer-run-%s-%d", name, time.Now().UnixMilli())
+
+	pod := &corev1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      podName,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "pipedreamer",
+				"pipedreamer/run-target":       name,
+			},
+		},
+		Spec: corev1.PodSpec{
+			RestartPolicy: corev1.RestartPolicyNever,
+			Containers: []corev1.Container{
+				{
+					Name:  "curl",
+					Image: "curlimages/curl:latest",
+					Command: []string{
+						"curl", "-sf", "-X", "POST",
+						"-H", "Content-Type: application/json",
+						"-d", "{}",
+						svcURL,
+					},
+					Resources: corev1.ResourceRequirements{
+						Limits: corev1.ResourceList{
+							corev1.ResourceMemory: resource.MustParse("32Mi"),
+							corev1.ResourceCPU:    resource.MustParse("100m"),
+						},
+					},
+				},
+			},
+		},
+	}
+
+	created, err := c.clientset.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
+	if err != nil {
+		return "", fmt.Errorf("creating runner pod: %w", err)
+	}
+
+	// Clean up the temp pod when done
+	defer func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = c.clientset.CoreV1().Pods(namespace).Delete(cleanupCtx, podName, metav1.DeleteOptions{})
+	}()
+
+	// Watch pod until Succeeded or Failed
+	watcher, err := c.clientset.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{
+		FieldSelector: fields.OneTermEqualSelector("metadata.name", podName).String(),
+		Watch:         true,
+	})
+	if err != nil {
+		return "", fmt.Errorf("watching runner pod: %w", err)
+	}
+	defer watcher.Stop()
+
+	// Check if already completed before watching
+	if created.Status.Phase == corev1.PodSucceeded || created.Status.Phase == corev1.PodFailed {
+		// Already done, skip watch
+	} else {
+		for event := range watcher.ResultChan() {
+			if event.Type == watch.Error {
+				return "", fmt.Errorf("watch error")
+			}
+			p, ok := event.Object.(*corev1.Pod)
+			if !ok {
+				continue
+			}
+			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
+				break
+			}
+		}
+	}
+
+	// Get the final pod status to check phase
+	finalPod, err := c.clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
+	if err != nil {
+		return "", fmt.Errorf("getting runner pod status: %w", err)
+	}
+
+	// Capture stdout logs
+	logOpts := &corev1.PodLogOptions{}
+	logStream, err := c.clientset.CoreV1().Pods(namespace).GetLogs(podName, logOpts).Stream(ctx)
+	if err != nil {
+		return "", fmt.Errorf("reading runner pod logs: %w", err)
+	}
+	defer logStream.Close()
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, logStream); err != nil {
+		return "", fmt.Errorf("copying runner pod output: %w", err)
+	}
+
+	if finalPod.Status.Phase == corev1.PodFailed {
+		return "", fmt.Errorf("workflow run failed: %s", buf.String())
+	}
+
+	return buf.String(), nil
+}
+
+// GetDetailedStatus returns extended deployment information including pod details and events.
+func (c *Client) GetDetailedStatus(namespace, name string) (*DetailedStatus, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	dep, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("getting deployment: %w", err)
+	}
+
+	replicas := int32(1)
+	if dep.Spec.Replicas != nil {
+		replicas = *dep.Spec.Replicas
+	}
+
+	ds := &DetailedStatus{
+		DeploymentStatus: DeploymentStatus{
+			Name:      name,
+			Namespace: namespace,
+			Ready:     dep.Status.ReadyReplicas == replicas,
+			Replicas:  replicas,
+			Available: dep.Status.AvailableReplicas,
+		},
+	}
+
+	// Image
+	if len(dep.Spec.Template.Spec.Containers) > 0 {
+		container := dep.Spec.Template.Spec.Containers[0]
+		ds.Image = container.Image
+
+		// Resource limits
+		limits := make(map[string]string)
+		for k, v := range container.Resources.Limits {
+			limits[string(k)] = v.String()
+		}
+		if len(limits) > 0 {
+			ds.ResourceLimits = limits
+		}
+	}
+
+	// RuntimeClass
+	if dep.Spec.Template.Spec.RuntimeClassName != nil {
+		ds.RuntimeClass = *dep.Spec.Template.Spec.RuntimeClassName
+	}
+
+	// Service endpoint
+	svc, err := c.clientset.CoreV1().Services(namespace).Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		if len(svc.Spec.Ports) > 0 {
+			ds.ServiceEndpoint = fmt.Sprintf("%s:%d", svc.Spec.ClusterIP, svc.Spec.Ports[0].Port)
+		}
+	}
+
+	// Pod statuses
+	pods, err := c.clientset.CoreV1().Pods(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: "app.kubernetes.io/name=" + name,
+	})
+	if err == nil {
+		for _, p := range pods.Items {
+			ready := false
+			for _, c := range p.Status.Conditions {
+				if c.Type == corev1.PodReady && c.Status == corev1.ConditionTrue {
+					ready = true
+					break
+				}
+			}
+			ds.Pods = append(ds.Pods, PodStatus{
+				Name:  p.Name,
+				Phase: string(p.Status.Phase),
+				Ready: ready,
+				IP:    p.Status.PodIP,
+			})
+		}
+	}
+
+	// Recent events
+	eventList, err := c.clientset.CoreV1().Events(namespace).List(ctx, metav1.ListOptions{
+		FieldSelector: "involvedObject.name=" + name,
+	})
+	if err == nil {
+		for _, e := range eventList.Items {
+			ds.Events = append(ds.Events, fmt.Sprintf("%s %s: %s", e.LastTimestamp.Format(time.RFC3339), e.Reason, e.Message))
+		}
+	}
+
+	return ds, nil
 }

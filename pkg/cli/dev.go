@@ -44,9 +44,14 @@ func runDev(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("cannot find engine directory; ensure pipedreamer is installed correctly")
 	}
 
+	denoBin := findDeno()
+	if denoBin == "" {
+		return fmt.Errorf("deno not found; install from https://deno.land or set PATH to include ~/.deno/bin")
+	}
+
 	fmt.Printf("Starting dev server for %s on port %d...\n", absDir, port)
 
-	denoCmd := exec.Command("deno", "run",
+	denoCmd := exec.Command(denoBin, "run",
 		"--allow-net", "--allow-read", "--allow-write=/tmp", "--allow-env",
 		filepath.Join(engineDir, "main.ts"),
 		"--workflow", specPath,
@@ -81,6 +86,26 @@ func runDev(cmd *cobra.Command, args []string) error {
 		}
 		return nil
 	}
+}
+
+// findDeno locates the deno binary, checking PATH and common install locations.
+func findDeno() string {
+	// Check PATH first
+	if path, err := exec.LookPath("deno"); err == nil {
+		return path
+	}
+	// Check common install locations
+	home, _ := os.UserHomeDir()
+	candidates := []string{
+		filepath.Join(home, ".deno", "bin", "deno"),
+		"/usr/local/bin/deno",
+	}
+	for _, c := range candidates {
+		if _, err := os.Stat(c); err == nil {
+			return c
+		}
+	}
+	return ""
 }
 
 func findEngineDir() string {

@@ -181,6 +181,69 @@ Output format:
 ✓ Cluster is ready for deployment
 ```
 
+## Operations
+
+Post-deploy commands for managing workflows without kubectl.
+
+### List Deployed Workflows
+
+```bash
+pipedreamer list -n production
+pipedreamer list -n production -o json
+```
+
+Shows all pipedreamer-managed deployments with status, replicas, and age.
+
+### Check Status
+
+```bash
+pipedreamer status my-workflow -n production
+pipedreamer status my-workflow -n production --detail
+```
+
+Basic status shows readiness and replica count. `--detail` adds image, runtime class, resource limits, service endpoint, pod statuses, and recent K8s events.
+
+### Trigger a Workflow
+
+```bash
+pipedreamer run my-workflow -n production
+pipedreamer run my-workflow -n production --timeout 60s
+```
+
+Creates a temporary curl pod that POSTs to the workflow's ClusterIP service. Status messages go to stderr; the JSON result goes to stdout (pipe-friendly).
+
+### View Logs
+
+```bash
+pipedreamer logs my-workflow -n production
+pipedreamer logs my-workflow -n production --tail 50
+pipedreamer logs my-workflow -n production -f
+```
+
+Shows logs from the first Running pod. `--tail` controls how many recent lines (default 100). `-f` streams logs in real time until interrupted.
+
+### Remove a Workflow
+
+```bash
+pipedreamer undeploy my-workflow -n production
+pipedreamer undeploy my-workflow -n production --yes
+```
+
+Deletes the Service, Deployment, and Secret (`<name>-secrets`). Prompts for confirmation unless `--yes` is passed. Resources that don't exist are silently skipped.
+
+### Full Lifecycle (No kubectl)
+
+```bash
+pipedreamer validate my-workflow
+pipedreamer build my-workflow -r localhost:30500 --push
+pipedreamer deploy my-workflow -n production --cluster-registry registry.registry.svc.cluster.local:5000
+pipedreamer list -n production
+pipedreamer status my-workflow -n production --detail
+pipedreamer run my-workflow -n production
+pipedreamer logs my-workflow -n production --tail 20
+pipedreamer undeploy my-workflow -n production --yes
+```
+
 ## Security Model (Fortress)
 
 Pipedreamer uses a three-layer security model:

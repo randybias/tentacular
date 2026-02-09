@@ -70,7 +70,12 @@ func runTest(cmd *cobra.Command, args []string) error {
 		denoArgs = append(denoArgs, "--pipeline")
 	}
 
-	denoCmd := exec.Command("deno", denoArgs...)
+	denoBin := findDeno()
+	if denoBin == "" {
+		return fmt.Errorf("deno not found; install from https://deno.land or set PATH to include ~/.deno/bin")
+	}
+
+	denoCmd := exec.Command(denoBin, denoArgs...)
 	denoCmd.Dir = absDir
 	denoCmd.Stdout = os.Stdout
 	denoCmd.Stderr = os.Stderr

@@ -46,7 +46,11 @@ pipedreamer
 ├── test [dir/node]     Run node or pipeline tests
 ├── build [dir]         Build container image
 ├── deploy [dir]        Deploy to Kubernetes
-├── status <name>       Check deployment health
+├── status <name>       Check deployment health (--detail for extended info)
+├── run <name>          Trigger a deployed workflow
+├── logs <name>         View workflow pod logs (--follow to stream)
+├── list                List deployed workflows
+├── undeploy <name>     Remove a deployed workflow
 ├── cluster check       Preflight cluster validation
 └── visualize [dir]     Generate Mermaid DAG diagram
 ```
@@ -70,11 +74,16 @@ pkg/
 │   ├── test.go         Run Deno test runner against fixtures
 │   ├── build.go        Docker build with engine copy, tag derivation
 │   ├── deploy.go       Generate manifests, provision secrets, k8s.Apply()
-│   ├── status.go       Query deployment via k8s.GetStatus()
+│   ├── status.go       Query deployment via k8s.GetStatus() (--detail for extended info)
+│   ├── run.go          Trigger deployed workflow via temp curl pod
+│   ├── logs.go         Stream/tail pod logs via k8s.GetPodLogs()
+│   ├── list.go         List deployed workflows via k8s.ListWorkflows()
+│   ├── undeploy.go     Remove deployed workflow via k8s.DeleteResources()
 │   ├── cluster.go      Preflight checks with --fix auto-remediation
 │   └── visualize.go    Mermaid graph output
 └── k8s/            Kubernetes client operations
-    ├── client.go       NewClient(), Apply(), GetStatus() via client-go
+    ├── client.go       NewClient(), Apply(), GetStatus(), DeleteResources(),
+    │                   ListWorkflows(), GetPodLogs(), RunWorkflow(), GetDetailedStatus()
     └── preflight.go    PreflightCheck(): API, gVisor, namespace, RBAC, secrets
 ```
 
@@ -235,10 +244,19 @@ pipedreamer deploy [dir]
   5. k8s.Client.Apply() → create-or-update all manifests
 ```
 
-### Verify Phase
+### Operations Phase
 
 ```
 pipedreamer status <name>        Query Deployment readiness/replicas
+  --detail                       Extended info: image, runtime, pods, events
+pipedreamer run <name>           Trigger workflow via temp curl pod, return JSON result
+  --timeout 30s                  Maximum wait time
+pipedreamer logs <name>          View pod logs (last 100 lines by default)
+  --follow/-f                    Stream logs in real time
+  --tail N                       Number of recent lines
+pipedreamer list                 List all pipedreamer-managed deployments
+pipedreamer undeploy <name>      Remove Service, Deployment, and Secret
+  --yes                          Skip confirmation prompt
 pipedreamer cluster check        Preflight: API, gVisor, namespace, RBAC, secrets
   --fix                          Auto-create namespace if missing
 ```
