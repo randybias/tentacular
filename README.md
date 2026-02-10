@@ -22,7 +22,7 @@ A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs i
            │      ┌────┴────┐         │          │   │  /app/secrets (vol)    │   │
            │      │ Docker  │         │  push    │   └────────────────────────┘   │
            │      │ Build   │ ────────│────────> │   ConfigMap (code) ──┘         │
-           │      └─────────┘         │  (once)  │   K8s Secret                   │
+           │      └─────────┘         │  (image) │   K8s Secret                   │
            │                          │          │   Zot Registry                 │
            └──────────────────────────┘          └────────────────────────────────┘
 ```
@@ -162,11 +162,13 @@ Five layers of defense-in-depth, from innermost to outermost:
 4. **K8s SecurityContext** — `runAsNonRoot`, `readOnlyRootFilesystem`, `drop: ALL` capabilities
 5. **Secrets as volumes** — never environment variables, mounted read-only at `/app/secrets`
 
+**Execution Model:** All nodes in a workflow execute within a single Deno process and share memory. Stages run sequentially while nodes within each stage run concurrently via async/await. Isolation is provided at the pod level through gVisor's syscall interception, Deno's permission controls, and Kubernetes SecurityContext hardening. This single-process design prioritizes simplicity and performance while maintaining strong container-level security boundaries.
+
 ### Why Not Monolithic?
 
 | | Monolithic Engines | Pipedreamer |
 |--|-------------------|-------------|
-| **Isolation** | One breach = all compromised | Each node sandboxed in gVisor |
+| **Isolation** | One breach = all processes | Each workflow pod isolated by gVisor |
 | **Scaling** | All or nothing | Per-workflow autoscaling |
 | **Deployment** | Redeploy everything | Update code via ConfigMap, no rebuild |
 | **Security** | Single trust boundary | Five-layer defense-in-depth |

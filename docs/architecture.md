@@ -20,7 +20,7 @@ Pipedreamer v2 is a workflow execution platform that runs TypeScript DAGs on Kub
                 │      ┌────┴────┐         │          │   │  /app/secrets (vol)     │   │
                 │      │ Docker  │         │  push    │   └────────────────────────┘   │
                 │      │ Build   │ ────────│────────> │   ConfigMap (code) ──┘         │
-                │      └─────────┘         │  (once)  │   K8s Secret                   │
+                │      └─────────┘         │  (image) │   K8s Secret                   │
                 │                          │          │   Zot Registry                 │
                 └──────────────────────────┘          └────────────────────────────────┘
 ```
@@ -34,6 +34,30 @@ Pipedreamer v2 is a workflow execution platform that runs TypeScript DAGs on Kub
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |
 | `openspec/` | Change tracking and specifications |
 | `docs/` | Project documentation |
+
+### Execution Isolation Model
+
+Pipedreamer v2 executes all nodes in a workflow within a **single Deno process**. This architectural decision prioritizes simplicity and performance while maintaining strong pod-level security boundaries.
+
+**Process Model:**
+- All nodes share the same Deno runtime and memory space
+- Parallelism achieved via async/await and Promise.all(), not separate processes
+- One compromised node = entire workflow process accessible
+- Isolation provided at the **pod level**, not per-node
+
+**Design Rationale:**
+- Direct TypeScript execution with full Deno ecosystem access
+- Simplified debugging and development workflow
+- Lower overhead than inter-process communication or serialization
+- Pod-level isolation via gVisor sufficient for trusted workflow code
+
+**Security Boundaries (outer to inner):**
+1. **Pod-level:** gVisor syscall interception prevents container escape
+2. **Container-level:** Kubernetes SecurityContext (non-root, read-only filesystem, dropped capabilities)
+3. **Runtime-level:** Deno permission locking (allow-list for network, filesystem, write)
+4. **Cluster-level:** Network policies, RBAC, and namespace isolation
+
+This design assumes workflow code is authored by trusted developers. For multi-tenant scenarios where untrusted code must execute, additional isolation layers (separate pods, namespaces, or clusters) should be added at the orchestration level.
 
 ## 2. Go CLI Architecture
 
@@ -251,6 +275,8 @@ No file system, subprocess, FFI, or environment variable access beyond these.
 
 Pods run with `runtimeClassName: gvisor`. gVisor intercepts syscalls via its application kernel (Sentry), preventing direct host kernel access. Even if a container escape is achieved, the attacker lands in gVisor's sandbox, not the host.
 
+**Isolation scope:** gVisor provides pod-level isolation, not per-node isolation. All nodes in a workflow execute within the same Deno process and share this gVisor boundary. If one node is compromised, the attacker has access to the entire workflow's memory space, but remains isolated from the host kernel and other pods.
+
 ### Layer 4: Kubernetes SecurityContext
 
 ```yaml
@@ -328,6 +354,31 @@ pipedreamer cluster check        Preflight: API, gVisor, namespace, RBAC, secret
 | Service | `{workflow-name}` | ClusterIP, port 8080 |
 | Secret | `{workflow-name}-secrets` | Opaque, stringData from .secrets/ or .secrets.yaml |
 | CronJob | `{wf}-cron` or `{wf}-cron-{i}` | Per cron trigger. curlimages/curl, concurrencyPolicy: Forbid, historyLimit: 3 |
+
+### Build and Deployment Modes
+
+Pipedreamer supports two deployment workflows:
+
+**Mode 1: Full Build + Deploy**
+```bash
+pipedreamer build --push    # Creates workflow-specific image
+pipedreamer deploy          # Uses freshly built image
+```
+- Generates Dockerfile with engine embedded
+- Builds unique image per workflow
+- Image includes: Deno runtime + engine code
+- Workflow code delivered via ConfigMap
+
+**Mode 2: Deploy-Only (Fast Iteration)**
+```bash
+pipedreamer deploy --image <existing-image>
+```
+- Reuses existing base image
+- Only updates ConfigMap with code changes
+- ~5-10 second deployment time
+- Ideal for development iteration
+
+Both modes use ConfigMap for workflow code delivery, enabling rapid updates without Docker rebuilds in Mode 2.
 
 ## 7. Secrets Management
 
