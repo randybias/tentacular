@@ -32,4 +32,5 @@ config:
   endpoints:
     - https://example.com
     - https://www.google.com
+    - https://www.anthropic.com
     - https://thisdomaindoesnotexist.invalid

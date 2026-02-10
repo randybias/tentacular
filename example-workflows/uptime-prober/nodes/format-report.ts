@@ -55,8 +55,8 @@ export default async function run(ctx: Context, input: unknown): Promise<ReportO
   ).join("\n");
 
   const summary = data.alert
-    ? `${data.unhealthyCount} of ${data.totalEndpoints} endpoint(s) unreachable`
-    : `All ${data.totalEndpoints} endpoint(s) responding normally`;
+    ? `⚠️ ${data.unhealthyCount} of ${data.totalEndpoints} endpoint(s) unreachable`
+    : `✅ All ${data.totalEndpoints} endpoint(s) responding normally`;
 
   ctx.log.info(data.alert ? "Alert report generated" : "All-clear report generated");
 

@@ -494,8 +494,8 @@ nodes:
 	if !strings.Contains(cm.Content, "workflow.yaml:") {
 		t.Error("expected workflow.yaml data key")
 	}
-	if !strings.Contains(cm.Content, "nodes/fetch.ts:") {
-		t.Error("expected nodes/fetch.ts data key")
+	if !strings.Contains(cm.Content, "nodes__fetch.ts:") {
+		t.Error("expected nodes__fetch.ts data key (flattened)")
 	}
 }
 
@@ -574,8 +574,8 @@ triggers:
 		t.Fatalf("GenerateCodeConfigMap failed: %v", err)
 	}
 
-	if !strings.Contains(cm.Content, "nodes/valid.ts:") {
-		t.Error("expected nodes/valid.ts data key")
+	if !strings.Contains(cm.Content, "nodes__valid.ts:") {
+		t.Error("expected nodes__valid.ts data key (flattened)")
 	}
 	if strings.Contains(cm.Content, "README.md") {
 		t.Error("expected README.md to be skipped")
@@ -604,6 +604,15 @@ func TestDeploymentHasCodeVolumeMount(t *testing.T) {
 	}
 	if !strings.Contains(dep, "readOnly: true") {
 		t.Error("expected readOnly: true on code volume mount")
+	}
+	if !strings.Contains(dep, "items:") {
+		t.Error("expected items field in ConfigMap volume")
+	}
+	if !strings.Contains(dep, "key: nodes__fetch.ts") {
+		t.Error("expected flattened key nodes__fetch.ts in items")
+	}
+	if !strings.Contains(dep, "path: nodes/fetch.ts") {
+		t.Error("expected path nodes/fetch.ts in items")
 	}
 }
 

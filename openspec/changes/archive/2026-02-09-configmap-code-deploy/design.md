@@ -28,15 +28,33 @@ Current state:
 
 ## Decisions
 
-### 1. ConfigMap key structure uses relative paths
+### 1. ConfigMap key structure uses flattened keys with items projection
 
-**Decision:** ConfigMap data keys are relative paths from the workflow directory: `workflow.yaml`, `nodes/fetch.ts`, `nodes/summarize.ts`, etc. This mirrors the filesystem layout the engine expects.
+**Decision:** ConfigMap data keys use `__` as a directory separator (e.g., `workflow.yaml`, `nodes__fetch.ts`, `nodes__summarize.ts`). The ConfigMap volume uses the `items` field to map flattened keys back to proper paths at mount time.
 
-**Rationale:** The engine's DAG compiler resolves node paths relative to the workflow.yaml location. By preserving the directory structure in ConfigMap keys and mounting at `/app/workflow/`, the engine sees the same layout as local development: `/app/workflow/workflow.yaml`, `/app/workflow/nodes/fetch.ts`, etc.
+**Rationale:** Kubernetes ConfigMap data keys **cannot contain forward slashes** — the validation regex is `[-._a-zA-Z0-9]+`. The original design incorrectly assumed slashes were supported. Using `__` as a separator allows us to flatten keys while the `items` field recreates the directory structure:
 
-**Alternative considered:** Flat keys (e.g., `fetch.ts` instead of `nodes/fetch.ts`) — rejected because it breaks the engine's relative path resolution and would require engine changes.
+```yaml
+volumes:
+  - name: code
+    configMap:
+      name: workflow-code
+      items:
+        - key: workflow.yaml
+          path: workflow.yaml
+        - key: nodes__fetch.ts
+          path: nodes/fetch.ts
+```
 
-**Note:** Kubernetes ConfigMaps support keys containing `/` slashes. When mounted as a volume, K8s automatically creates the necessary subdirectory structure (e.g., key `nodes/fetch.ts` creates `/app/workflow/nodes/fetch.ts`). This is confirmed K8s behavior — no `subPath` or `items` projection needed.
+When mounted at `/app/workflow/`, this produces the correct layout: `/app/workflow/workflow.yaml`, `/app/workflow/nodes/fetch.ts`.
+
+**Alternative considered:** Use `binaryData` instead of `data` — rejected because `binaryData` has the same key validation rules (no slashes allowed).
+
+**References:**
+- [Kubernetes ConfigMap documentation](https://kubernetes.io/docs/concepts/configuration/configmap/)
+- [GitHub issue #117145](https://github.com/kubernetes/kubernetes/issues/117145) documenting the validation behavior
+
+**Implementation note:** This was discovered during deployment testing (Feb 10, 2026) and fixed via hotfix commit `f094352`.
 
 ### 2. ConfigMap name is `{wf.Name}-code`
 

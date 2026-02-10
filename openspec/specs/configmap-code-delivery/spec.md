@@ -11,9 +11,10 @@ The `pkg/builder/k8s.go` `GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, 
 - **WHEN** `GenerateCodeConfigMap()` is called with a valid workflow directory
 - **THEN** the returned ConfigMap data SHALL include a key `workflow.yaml` with the file's content as the value
 
-#### Scenario: ConfigMap contains node files
+#### Scenario: ConfigMap contains node files with flattened keys
 - **WHEN** `GenerateCodeConfigMap()` is called and the workflow directory contains `nodes/fetch.ts` and `nodes/summarize.ts`
-- **THEN** the returned ConfigMap data SHALL include keys `nodes/fetch.ts` and `nodes/summarize.ts` with their respective file contents
+- **THEN** the returned ConfigMap data SHALL include keys `nodes__fetch.ts` and `nodes__summarize.ts` with their respective file contents
+- **NOTE:** Keys use `__` instead of `/` because Kubernetes ConfigMap keys cannot contain forward slashes (validation regex: `[-._a-zA-Z0-9]+`)
 
 #### Scenario: ConfigMap name follows convention
 - **WHEN** `GenerateCodeConfigMap()` is called for a workflow named `my-workflow`
@@ -60,6 +61,13 @@ The `GenerateK8sManifests()` function SHALL add a code volume to the Deployment 
 #### Scenario: Code volume mounted
 - **WHEN** `GenerateK8sManifests()` generates a Deployment
 - **THEN** the engine container SHALL have a volumeMount with `name: code`, `mountPath: /app/workflow`, `readOnly: true`
+
+#### Scenario: ConfigMap items field maps flattened keys to paths
+- **WHEN** `GenerateK8sManifests()` generates a Deployment for a workflow with nodes
+- **THEN** the code ConfigMap volume SHALL include an `items` field
+- **AND** the items SHALL map `workflow.yaml` to `workflow.yaml`
+- **AND** the items SHALL map each `nodes__<filename>.ts` key to `nodes/<filename>.ts` path
+- **RATIONALE:** ConfigMap data keys cannot contain slashes, so flattened keys (`nodes__foo.ts`) are mapped back to proper paths (`nodes/foo.ts`) at mount time
 
 ### Requirement: Deployment relies on ENTRYPOINT defaults for workflow path
 The generated Deployment SHALL NOT include container `args` for `--workflow` or `--port`. The base image ENTRYPOINT already defaults to `--workflow /app/workflow/workflow.yaml --port 8080`, matching the ConfigMap mount path.

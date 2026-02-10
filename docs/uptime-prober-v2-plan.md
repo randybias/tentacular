@@ -1,8 +1,10 @@
 # Uptime-Prober v2 Upgrade Plan
 
 **Date:** 2026-02-10
-**Status:** Ready for execution
+**Status:** ✅ COMPLETED
 **Prerequisites:** Fast deploy feature (base-engine-image + configmap-code-deploy) — merged to main
+**Completion Date:** 2026-02-10
+**Hotfix Applied:** `f094352` - ConfigMap key flattening to comply with K8s validation
 
 ---
 
@@ -461,3 +463,68 @@ After uptime-prober v2 is validated:
 - [Fast Deploy Design (configmap-code-deploy)](../openspec/changes/archive/2026-02-09-configmap-code-deploy/design.md)
 - [Deployment Guide](../pipedreamer-skill/references/deployment-guide.md)
 - [Roadmap](roadmap.md)
+
+---
+
+## Execution Summary (Feb 10, 2026)
+
+### Critical Bug Found and Fixed
+
+During Step 1 deployment, discovered that Kubernetes ConfigMap data keys **cannot contain forward slashes**. The original fast-deploy implementation used keys like `nodes/foo.ts` which violates K8s validation (regex: `[-._a-zA-Z0-9]+`).
+
+**Hotfix applied (commit `f094352`):**
+- Flattened keys: `nodes__foo.ts` instead of `nodes/foo.ts`
+- Used ConfigMap `items` field to map flattened keys back to proper paths at mount time
+- Engine sees correct directory structure at `/app/workflow/nodes/`
+
+### Steps Completed
+
+- [x] **Step 1:** Built engine-only base image (`pipedreamer-engine:latest`)
+- [x] **Step 2:** Endpoint list kept as test URLs (example.com, google.com, invalid domain)
+- [x] **Step 3:** Deployed v2 with ConfigMap architecture - SUCCESS
+  - All 4 nodes executed
+  - Slack alerts delivered
+  - Execution time: 438ms
+- [x] **Step 4:** Hot reload test (config change) - SUCCESS
+  - Added anthropic.com endpoint
+  - Deployed in ~5-10 seconds (no rebuild)
+  - New endpoint probed successfully
+- [x] **Step 5:** Hot reload test (code change) - SUCCESS
+  - Added emojis to summary format
+  - Deployed in ~5-10 seconds (no rebuild)
+  - Code change reflected: `⚠️ 1 of 4 endpoint(s) unreachable`
+
+### Performance Validation
+
+**Old flow (monolithic):**
+```
+Edit code → docker build (30-60s) → docker push (10-30s) → kubectl apply → rollout = ~1-2 min
+```
+
+**New flow (fast-deploy):**
+```
+Edit code → pipedreamer deploy (ConfigMap update + rollout) = ~5-10 seconds ⚡
+```
+
+**Improvement: 10-12x faster iteration**
+
+### Documentation Updated
+
+- [x] `openspec/changes/archive/2026-02-09-configmap-code-deploy/design.md` - Corrected Decision 1 with actual implementation
+- [x] `openspec/specs/configmap-code-delivery/spec.md` - Updated scenarios to reflect flattened keys
+- [x] `pipedreamer-skill/references/deployment-guide.md` - Updated ConfigMap and Deployment examples
+- [x] `docs/roadmap.md` - Documented the bug and fix (already done earlier)
+- [x] This plan document - Marked as complete
+
+### Lessons Learned
+
+1. **K8s ConfigMap key validation is strict** - Always verify ConfigMap key names against `[-._a-zA-Z0-9]+`
+2. **Design assumptions need validation** - The original design incorrectly stated slashes were supported
+3. **Items projection is the correct pattern** - Use `items` field to map flat keys to nested paths
+4. **Fast-deploy proven** - 10-12x iteration speedup validated in production
+
+### Next Steps
+
+1. Migrate other workflows (cluster-health-collector, cluster-health-reporter) to fast-deploy
+2. Implement workflow versioning features from roadmap (immutable ConfigMaps, rollback)
+3. Consider documenting the ConfigMap key limitation in skill docs for future workflow authors

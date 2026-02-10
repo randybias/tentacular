@@ -89,11 +89,13 @@ data:
     name: my-workflow
     version: "1.0"
     ...
-  nodes/fetch.ts: |
+  nodes__fetch.ts: |
     export default async function run(ctx, input) {
       ...
     }
 ```
+
+**Note on ConfigMap key naming:** Kubernetes ConfigMap data keys cannot contain forward slashes (validation regex: `[-._a-zA-Z0-9]+`). Node files use `__` as a directory separator (e.g., `nodes__fetch.ts`). The Deployment's ConfigMap volume uses the `items` field to map these flattened keys back to proper paths when mounted (e.g., `nodes__fetch.ts` → `nodes/fetch.ts`).
 
 **Deployment** with gVisor RuntimeClass and code volume:
 
@@ -139,6 +141,13 @@ spec:
         - name: code
           configMap:
             name: <workflow-name>-code
+            items:
+              - key: workflow.yaml
+                path: workflow.yaml
+              - key: nodes__fetch.ts
+                path: nodes/fetch.ts
+              - key: nodes__summarize.ts
+                path: nodes/summarize.ts
         - name: secrets
           secret:
             secretName: <workflow-name>-secrets
