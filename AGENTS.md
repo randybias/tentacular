@@ -48,3 +48,40 @@ Project documentation lives in `docs/`. The primary reference is **[docs/archite
 ## Change Tracking
 
 This project uses OpenSpec for change tracking. Archived changes live in `openspec/changes/archive/`. When making significant changes, create an OpenSpec change with proposal, design, and tasks artifacts.
+
+## Documentation Guidelines
+
+Documentation is split between README.md and docs/ by purpose:
+
+### README.md — The Signpost + Quickstart
+- Project identity (description, features, architecture overview)
+- Prerequisites and installation
+- Quick Start walkthrough (scaffold → validate → dev → build → deploy)
+- Brief node contract teaser (just the code example)
+- Examples table
+- Links to docs/ for everything else
+
+**README rules:**
+- Keep under 200 lines
+- No reference tables (CLI flags, API surfaces, config schemas)
+- No operational procedures (secrets setup, gVisor install, testing commands)
+- One code example per concept maximum
+- Every section that needs detail should link to a docs/ file
+
+### docs/ — Reference Material
+| File | Content | When to update |
+|------|---------|----------------|
+| `architecture.md` | System design, data flow, extension points | Architectural changes |
+| `cli.md` | CLI command reference, flags, examples | New/changed CLI commands |
+| `workflow-spec.md` | workflow.yaml format and field reference | Spec format changes |
+| `node-contract.md` | Context API, auth injection, fixture testing | Engine API changes |
+| `secrets.md` | Local and production secrets management | Secrets workflow changes |
+| `testing.md` | Go, Deno, and workflow test commands | Test infrastructure changes |
+| `gvisor-setup.md` | gVisor installation and verification | Deploy infrastructure changes |
+| `roadmap.md` | Project roadmap and future plans | Planning updates |
+
+### Why This Split
+Top open source projects (React, Kubernetes, Rust, Go, Next.js) keep READMEs
+under 100 lines and delegate reference material to docs sites or docs/ directories.
+The README should make someone want to try the project. The docs/ should help
+them succeed once they do.
