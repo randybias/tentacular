@@ -50,7 +50,8 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 			if err != nil {
 				return Manifest{}, fmt.Errorf("reading %s: %w", nodePath, err)
 			}
-			dataKey := "nodes/" + entry.Name()
+			// Use __ instead of / since K8s ConfigMap keys cannot contain slashes
+			dataKey := "nodes__" + entry.Name()
 			data[dataKey] = string(nodeContent)
 			totalSize += len(nodeContent)
 		}
@@ -124,6 +125,27 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		runtimeClassLine = fmt.Sprintf("      runtimeClassName: %s\n", opts.RuntimeClassName)
 	}
 
+	// Build ConfigMap items to map flattened keys back to proper paths
+	// K8s ConfigMap keys cannot contain slashes, so we use __ as separator
+	var configMapItems []string
+	configMapItems = append(configMapItems, "              - key: workflow.yaml\n                path: workflow.yaml")
+
+	// Sort node names for deterministic output
+	nodeNames := make([]string, 0, len(wf.Nodes))
+	for name := range wf.Nodes {
+		nodeNames = append(nodeNames, name)
+	}
+	sort.Strings(nodeNames)
+
+	for _, nodeName := range nodeNames {
+		nodeSpec := wf.Nodes[nodeName]
+		// Extract filename from path (e.g., "./nodes/foo.ts" -> "foo.ts")
+		filename := filepath.Base(nodeSpec.Path)
+		flatKey := "nodes__" + filename
+		targetPath := "nodes/" + filename
+		configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
+	}
+
 	// Deployment with security hardening
 	deployment := fmt.Sprintf(`apiVersion: apps/v1
 kind: Deployment
@@ -191,13 +213,15 @@ spec:
         - name: code
           configMap:
             name: %s-code
+            items:
+%s
         - name: secrets
           secret:
             secretName: %s-secrets
             optional: true
         - name: tmp
           emptyDir: {}
-`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, wf.Name, wf.Name)
+`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, wf.Name, strings.Join(configMapItems, "\n"), wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
