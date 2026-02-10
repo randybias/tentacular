@@ -95,7 +95,19 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	// Auto-preflight checks before applying manifests
-	secretNames := []string{wf.Name + "-secrets"}
+	// Only check for secrets if local secrets exist (.secrets/ dir or .secrets.yaml file)
+	var secretNames []string
+	secretsDir := filepath.Join(absDir, ".secrets")
+	secretsFile := filepath.Join(absDir, ".secrets.yaml")
+	if info, err := os.Stat(secretsDir); err == nil && info.IsDir() {
+		secretNames = []string{wf.Name + "-secrets"}
+		fmt.Printf("  ℹ Found .secrets/ directory — will verify %s-secrets exists in cluster\n", wf.Name)
+	} else if _, err := os.Stat(secretsFile); err == nil {
+		secretNames = []string{wf.Name + "-secrets"}
+		fmt.Printf("  ℹ Found .secrets.yaml — will verify %s-secrets exists in cluster\n", wf.Name)
+	} else {
+		fmt.Println("  ℹ No local secrets found — skipping secret preflight check")
+	}
 	results, err := client.PreflightCheck(namespace, false, secretNames)
 	if err != nil {
 		return fmt.Errorf("preflight check failed: %w", err)

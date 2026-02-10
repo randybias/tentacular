@@ -133,7 +133,11 @@ Add `pipedreamer rollback <name> --version <version>` command:
 
 ## Preflight Secret Provisioning Ordering
 
-The deploy command currently runs preflight checks (which verify secrets exist) before provisioning secrets from `.secrets.yaml`. This creates a chicken-and-egg failure on first deploy. Fix: either skip the secret preflight when local secrets are available for provisioning, or provision secrets before running preflight.
+**Status:** RESOLVED (Feb 2026)
+
+The deploy command previously ran preflight checks that unconditionally required a `<name>-secrets` Secret to exist in the cluster, even for workflows with no secrets. This caused first-deploy failures and blocked secret-free workflows entirely.
+
+**Fix applied** (`pkg/cli/deploy.go`): The secret preflight check now only runs when local secrets are detected (`.secrets/` directory or `.secrets.yaml` file). When no local secrets exist, the check is skipped and an informational message is logged. This also resolves the chicken-and-egg ordering issue — workflows with local secrets still get verified, but provisioning happens in the same deploy command after preflight passes.
 
 ## Nested Secrets YAML Support
 
@@ -142,6 +146,17 @@ The deploy command currently runs preflight checks (which verify secrets exist) 
 ## ImagePullPolicy in Generated Deployments
 
 The generated Deployment manifests don't set `imagePullPolicy`. When using a mutable tag (e.g., `uptime-prober:1-0`), Kubernetes caches the image on the node and won't pull updates on redeploy. Fix: set `imagePullPolicy: Always` in the generated Deployment spec, or use digest-based image references.
+
+**Workaround for local kind clusters:** kind nodes cannot pull from the host Docker daemon. After building the engine image, load it into kind and patch the pull policy:
+
+```bash
+# Load the image into kind
+kind load docker-image pipedreamer-engine:latest --name <cluster-name>
+
+# Patch the deployment to never pull (image is already on the node)
+kubectl patch deployment <name> -n <namespace> \
+  -p '{"spec":{"template":{"spec":{"containers":[{"name":"engine","imagePullPolicy":"Never"}]}}}}'
+```
 
 ---
 

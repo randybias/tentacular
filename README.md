@@ -87,7 +87,6 @@ This walkthrough creates a workflow, tests it locally, then deploys to Kubernete
 
 ```bash
 pipedreamer init my-workflow
-cd my-workflow
 ```
 
 This creates:
@@ -102,8 +101,8 @@ my-workflow/
 ### 2. Validate and test locally
 
 ```bash
-pipedreamer validate
-pipedreamer test
+pipedreamer validate my-workflow
+pipedreamer test my-workflow
 ```
 
 ### 3. Run the dev server
@@ -123,10 +122,10 @@ curl -s http://localhost:8080/run | jq .
 
 ```bash
 # Build locally
-pipedreamer build
+pipedreamer build my-workflow <-t my-workflow>
 
 # Build and push to a registry
-pipedreamer build -r registry.example.com --push
+pipedreamer build my-workflow -r registry.example.com --push
 ```
 
 ### 5. Deploy to Kubernetes
@@ -135,8 +134,11 @@ pipedreamer build -r registry.example.com --push
 # Verify cluster readiness (auto-create namespace with --fix)
 pipedreamer cluster check -n my-namespace --fix
 
+#Create a namespace if it doesn't exist
+kubectl create namespace my-namespace
+
 # Deploy (use --cluster-registry if your cluster pulls from an internal registry)
-pipedreamer deploy -n my-namespace -r registry.example.com
+pipedreamer deploy my-workflow -n my-namespace -r registry.example.com
 ```
 
 ### 6. Operate
