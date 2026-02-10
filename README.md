@@ -18,8 +18,8 @@ A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs i
            │  │ status / cluster   │  │  status  │   │  │ │ Workflow DAG │ │  │   │
            │  │ visualize          │  │ <─────── │   │  │ └──────────────┘ │  │   │
            │  └────────────────────┘  │          │   │  └──────────────────┘  │   │
-           │           │              │          │   │  /app/workflow (CM)     │   │
-           │      ┌────┴────┐         │          │   │  /app/secrets (vol)     │   │
+           │           │              │          │   │  /app/workflow (CM)    │   │
+           │      ┌────┴────┐         │          │   │  /app/secrets (vol)    │   │
            │      │ Docker  │         │  push    │   └────────────────────────┘   │
            │      │ Build   │ ────────│────────> │   ConfigMap (code) ──┘         │
            │      └─────────┘         │  (once)  │   K8s Secret                   │
