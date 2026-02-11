@@ -437,3 +437,53 @@ The uptime-prober v1 is deployed and working with hardcoded endpoint configurati
 2. Mount it at `/app/config/endpoints.yaml` (or similar)
 3. Update `probe-endpoints.ts` to read from the mounted config, falling back to `ctx.config.endpoints`
 4. Rebuild, deploy over v1, validate that endpoints can be changed without rebuilding the container
+
+## Initial Configuration (`tntc configure`)
+
+**Status:** IDENTIFIED (Feb 2026)
+
+First-run setup command for tentacular projects and user-level defaults.
+
+**Proposal:**
+- `tntc configure` prompts for: default namespace, default container registry URL, cluster context
+- Stored in `~/.tentacular/config.yaml` (user-level) or `.tentacular/config.yaml` (project-level)
+- Deploy/build commands read defaults from config, CLI flags override
+- Project-level config takes precedence over user-level config
+
+**Benefits:**
+- Eliminates repetitive `--image`, `-n` flags on every command
+- Standardizes registry and namespace conventions across a team
+- Enables `tntc deploy example-workflows/hn-digest` with zero flags once configured
+
+## Per-Workflow Namespace Selection
+
+**Status:** IDENTIFIED (Feb 2026)
+
+Currently namespace must be specified via the `-n` CLI flag on every deploy. There is no way to declare a workflow's target namespace in the workflow spec itself.
+
+**Proposal:**
+- Support `deployment.namespace` in workflow.yaml as an optional override
+- Resolution order: CLI `-n` flag > workflow.yaml `deployment.namespace` > config default > `default`
+
+**Benefits:**
+- Workflows self-document where they run
+- Reduces deployment errors from wrong namespace flags
+- Enables `tntc deploy` with no flags for fully-configured workflows
+
+## Deployment Registry / State Tracking
+
+**Status:** IDENTIFIED (Feb 2026)
+
+There is no record of what is deployed where. `tntc list` only works within a single namespace via kubectl queries. No cross-namespace or cross-cluster visibility.
+
+**Proposal:**
+- Phase 1: On-disk SQLite or JSON file (`~/.tentacular/deployments.json`) tracking deployments
+- Phase 2: Optional database backend (Postgres, etc.) for team-shared state
+- Tracks: workflow name, version, namespace, cluster context, image tag, deploy timestamp, status
+- Powers `tntc list --all` across namespaces/clusters, `tntc status --all`
+
+**Benefits:**
+- Answer "what's deployed where?" without kubectl access
+- Enables deployment auditing and history
+- Foundation for `tntc rollback` to know which versions exist across clusters
+- Complements (does not replace) the version tracking via K8s labels/ConfigMaps
