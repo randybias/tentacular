@@ -1,0 +1,48 @@
+name: sep-tracker
+version: "1.0"
+description: "Track MCP SEP proposals from GitHub PRs, diff changes, generate HTML reports, store to Postgres, notify Slack"
+
+triggers:
+  - type: manual
+  - type: cron
+    name: weekly-sunday
+    schedule: "0 20 * * 0"
+
+nodes:
+  fetch-seps:
+    path: ./nodes/fetch-seps.ts
+  diff-seps:
+    path: ./nodes/diff-seps.ts
+  render-html:
+    path: ./nodes/render-html.ts
+  store-report:
+    path: ./nodes/store-report.ts
+  notify:
+    path: ./nodes/notify.ts
+
+edges:
+  - from: fetch-seps
+    to: diff-seps
+  - from: diff-seps
+    to: render-html
+  - from: fetch-seps
+    to: render-html
+  - from: fetch-seps
+    to: store-report
+  - from: render-html
+    to: store-report
+  - from: store-report
+    to: notify
+  - from: diff-seps
+    to: notify
+
+config:
+  timeout: 120s
+  retries: 1
+  target_repo: "modelcontextprotocol/specification"
+  sep_label: "sep"
+  pg_host: "postgres-postgresql.postgres.svc.cluster.local"
+  pg_port: 5432
+  pg_database: "appdb"
+  pg_user: "postgres"
+  azure_blob_base_url: "https://mcpreports9276621.blob.core.windows.net/sep-reports"

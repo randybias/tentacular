@@ -1,0 +1,11 @@
+{
+  "input": {
+    "prs": [],
+    "repo": "test/repo"
+  },
+  "expected": {
+    "repo": "test/repo",
+    "summary": "No summary generated",
+    "prCount": 0
+  }
+}

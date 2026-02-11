@@ -1,0 +1,24 @@
+{
+  "input": {
+    "records": [],
+    "periodStart": "2025-01-01T00:00:00Z",
+    "periodEnd": "2025-01-02T00:00:00Z",
+    "snapshotCount": 0
+  },
+  "expected": {
+    "periodStart": "2025-01-01T00:00:00Z",
+    "periodEnd": "2025-01-02T00:00:00Z",
+    "snapshotCount": 0,
+    "aiSummary": "No health data available for the last 24 hours. The collector may not be running.",
+    "stats": {
+      "avgHealthyPodPct": 0,
+      "minHealthyPodPct": 0,
+      "maxProblemPods": 0,
+      "nodeDownEvents": 0,
+      "totalPodRange": {
+        "min": 0,
+        "max": 0
+      }
+    }
+  }
+}

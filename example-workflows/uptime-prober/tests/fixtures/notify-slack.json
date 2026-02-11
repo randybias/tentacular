@@ -1,0 +1,18 @@
+{
+  "input": {
+    "alert": false,
+    "probedAt": "2025-01-15T12:00:00Z",
+    "summary": "All endpoints healthy",
+    "sections": {
+      "down": "",
+      "healthy": "https://example.com => 200 (50ms)"
+    },
+    "totalEndpoints": 1,
+    "unhealthyCount": 0,
+    "healthyCount": 1
+  },
+  "expected": {
+    "delivered": false,
+    "status": 0
+  }
+}

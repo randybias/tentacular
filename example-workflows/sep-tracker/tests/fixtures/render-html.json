@@ -1,0 +1,51 @@
+{
+  "input": {
+    "diff-seps": {
+      "timestamp": "2025-01-15T12:00:00Z",
+      "repo": "modelcontextprotocol/specification",
+      "previousTimestamp": null,
+      "currentTimestamp": "2025-01-15T12:00:00Z",
+      "changes": [
+        {
+          "changeType": "added",
+          "sep": {
+            "number": 42,
+            "sepId": "SEP-001",
+            "title": "SEP-001: Example proposal",
+            "state": "open",
+            "author": "testuser",
+            "createdAt": "2025-01-01T00:00:00Z",
+            "updatedAt": "2025-01-10T00:00:00Z",
+            "url": "https://github.com/modelcontextprotocol/specification/pull/42",
+            "labels": ["sep"],
+            "summary": "An example SEP for testing"
+          }
+        }
+      ],
+      "addedCount": 1,
+      "removedCount": 0,
+      "updatedCount": 0,
+      "totalCount": 1,
+      "isFirstRun": true
+    },
+    "fetch-seps": {
+      "timestamp": "2025-01-15T12:00:00Z",
+      "repo": "modelcontextprotocol/specification",
+      "seps": [
+        {
+          "number": 42,
+          "sepId": "SEP-001",
+          "title": "SEP-001: Example proposal",
+          "state": "open",
+          "author": "testuser",
+          "createdAt": "2025-01-01T00:00:00Z",
+          "updatedAt": "2025-01-10T00:00:00Z",
+          "url": "https://github.com/modelcontextprotocol/specification/pull/42",
+          "labels": ["sep"],
+          "summary": "An example SEP for testing"
+        }
+      ],
+      "count": 1
+    }
+  }
+}

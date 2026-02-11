@@ -1,0 +1,7 @@
+{
+  "input": {},
+  "expected": {
+    "prs": [],
+    "repo": "denoland/deno"
+  }
+}

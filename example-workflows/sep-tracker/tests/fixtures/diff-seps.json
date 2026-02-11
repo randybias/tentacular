@@ -1,0 +1,21 @@
+{
+  "input": {
+    "timestamp": "2025-01-15T12:00:00Z",
+    "repo": "modelcontextprotocol/specification",
+    "seps": [
+      {
+        "number": 42,
+        "sepId": "SEP-001",
+        "title": "SEP-001: Example proposal",
+        "state": "open",
+        "author": "testuser",
+        "createdAt": "2025-01-01T00:00:00Z",
+        "updatedAt": "2025-01-10T00:00:00Z",
+        "url": "https://github.com/modelcontextprotocol/specification/pull/42",
+        "labels": ["sep"],
+        "summary": "An example SEP for testing"
+      }
+    ],
+    "count": 1
+  }
+}

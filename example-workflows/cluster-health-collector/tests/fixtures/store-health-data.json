@@ -1,0 +1,15 @@
+{
+  "input": {
+    "collectedAt": "2025-01-15T12:00:00Z",
+    "nodes": [],
+    "problemPods": [],
+    "namespaces": [],
+    "summary": {
+      "totalNodes": 3,
+      "readyNodes": 3,
+      "totalPods": 42,
+      "healthyPods": 42,
+      "problemPods": 0
+    }
+  }
+}

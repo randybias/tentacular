@@ -1,0 +1,22 @@
+{
+  "input": {
+    "periodStart": "2025-01-01T00:00:00Z",
+    "periodEnd": "2025-01-02T00:00:00Z",
+    "snapshotCount": 288,
+    "aiSummary": "Cluster is healthy.",
+    "stats": {
+      "avgHealthyPodPct": 99.5,
+      "minHealthyPodPct": 98.0,
+      "maxProblemPods": 2,
+      "nodeDownEvents": 0,
+      "totalPodRange": {
+        "min": 42,
+        "max": 45
+      }
+    }
+  },
+  "expected": {
+    "delivered": false,
+    "status": 0
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "input": {
+    "title": "Test Digest",
+    "summary": "Test summary content",
+    "repoCount": 1
+  },
+  "expected": {
+    "delivered": false,
+    "status": 0
+  }
+}
