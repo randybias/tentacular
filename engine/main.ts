@@ -1,8 +1,8 @@
 /**
- * Pipedreamer Engine — Main Entrypoint
+ * Tentacular Engine — Main Entrypoint
  *
  * This is the self-contained engine that runs in both environments:
- *   - Local dev: spawned by `pipedreamer dev` via `deno run engine/main.ts`
+ *   - Local dev: spawned by `tentacular dev` via `deno run engine/main.ts`
  *   - Production: container ENTRYPOINT
  *
  * Usage:
@@ -49,7 +49,7 @@ async function loadWorkflow(): Promise<WorkflowSpec> {
 
 // Main startup
 async function main() {
-  console.log("Pipedreamer Engine starting...");
+  console.log("Tentacular Engine starting...");
 
   const spec = await loadWorkflow();
   console.log(`Workflow: ${spec.name} v${spec.version}`);

@@ -23,10 +23,10 @@ Every workflow node file SHALL export a default async function that accepts a Co
 - **THEN** the `input` argument SHALL be the trigger's payload object
 
 ### Requirement: NodeFunction type definition
-The `NodeFunction` type SHALL be defined as `(ctx: Context, input: unknown) => Promise<unknown>` and exported from the `pipedreamer` module.
+The `NodeFunction` type SHALL be defined as `(ctx: Context, input: unknown) => Promise<unknown>` and exported from the `tentacular` module.
 
 #### Scenario: Type import
-- **WHEN** a node author writes `import type { NodeFunction } from "pipedreamer"`
+- **WHEN** a node author writes `import type { NodeFunction } from "tentacular"`
 - **THEN** the import SHALL resolve successfully via the Deno import map
 
 #### Scenario: Type compatibility

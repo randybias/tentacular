@@ -71,28 +71,28 @@ The generated Dockerfile ENTRYPOINT SHALL preserve the existing Deno permission 
 - **AND** the ENTRYPOINT SHALL NOT include `--allow-all`
 
 ### Requirement: Build command saves image tag to file
-After a successful build (and push if requested), the build command SHALL save the image tag to `.pipedreamer/base-image.txt` in the project root.
+After a successful build (and push if requested), the build command SHALL save the image tag to `.tentacular/base-image.txt` in the project root.
 
 #### Scenario: Tag file written after build
-- **WHEN** `pipedreamer build` completes successfully
-- **THEN** it SHALL write the full image tag to `.pipedreamer/base-image.txt`
-- **AND** it SHALL create the `.pipedreamer/` directory if it does not exist
+- **WHEN** `tntc build` completes successfully
+- **THEN** it SHALL write the full image tag to `.tentacular/base-image.txt`
+- **AND** it SHALL create the `.tentacular/` directory if it does not exist
 
 #### Scenario: Tag file written after push
-- **WHEN** `pipedreamer build --push --registry gcr.io/proj` completes successfully
-- **THEN** `.pipedreamer/base-image.txt` SHALL contain the full pushed tag including registry prefix
+- **WHEN** `tntc build --push --registry gcr.io/proj` completes successfully
+- **THEN** `.tentacular/base-image.txt` SHALL contain the full pushed tag including registry prefix
 
-### Requirement: Default image tag is pipedreamer-engine:latest
-When `--tag` is not specified, the build command SHALL use `pipedreamer-engine:latest` as the default image tag.
+### Requirement: Default image tag is tentacular-engine:latest
+When `--tag` is not specified, the build command SHALL use `tentacular-engine:latest` as the default image tag.
 
 #### Scenario: Default tag without --tag flag
-- **WHEN** `pipedreamer build` is executed without `--tag`
-- **THEN** the image tag SHALL be `pipedreamer-engine:latest`
+- **WHEN** `tntc build` is executed without `--tag`
+- **THEN** the image tag SHALL be `tentacular-engine:latest`
 
 #### Scenario: Registry prefix with default tag
-- **WHEN** `pipedreamer build --registry gcr.io/myproject` is executed without `--tag`
-- **THEN** the image tag SHALL be `gcr.io/myproject/pipedreamer-engine:latest`
+- **WHEN** `tntc build --registry gcr.io/myproject` is executed without `--tag`
+- **THEN** the image tag SHALL be `gcr.io/myproject/tentacular-engine:latest`
 
 #### Scenario: Custom tag overrides default
-- **WHEN** `pipedreamer build --tag my-engine:v2` is executed
+- **WHEN** `tntc build --tag my-engine:v2` is executed
 - **THEN** the image tag SHALL be `my-engine:v2`

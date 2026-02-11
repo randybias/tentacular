@@ -1,6 +1,6 @@
-# Pipedreamer v2
+# Tentacular
 
-Pipedreamer is a workflow execution engine that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. You define workflows as directed acyclic graphs of TypeScript functions, and Pipedreamer handles compilation, local development, container packaging, and Kubernetes deployment with gVisor kernel isolation.
+Tentacular is a workflow execution engine that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. You define workflows as directed acyclic graphs of TypeScript functions, and Tentacular handles compilation, local development, container packaging, and Kubernetes deployment with gVisor kernel isolation.
 
 A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs inside hardened containers.
 
@@ -10,7 +10,7 @@ A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs i
                 Developer Machine                          Kubernetes Cluster
            ┌──────────────────────────┐          ┌────────────────────────────────┐
            │                          │          │                                │
-           │  pipedreamer CLI (Go)    │          │   ┌────────────────────────┐   │
+           │  tntc CLI (Go)           │          │   ┌────────────────────────┐   │
            │  ┌────────────────────┐  │  deploy  │   │  Pod (gVisor sandbox)  │   │
            │  │ init / validate    │  │ ───────> │   │  ┌──────────────────┐  │   │
            │  │ dev / test         │  │ (config  │   │  │ Deno Engine (TS) │  │   │
@@ -31,7 +31,7 @@ A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs i
 
 - **DAG-based workflows** — define multi-step pipelines as TypeScript functions connected by edges
 - **Five-layer security** — distroless containers, Deno permission locking, gVisor kernel isolation, K8s SecurityContext, secrets-as-volumes
-- **Local development** — hot-reload dev server with `pipedreamer dev`
+- **Local development** — hot-reload dev server with `tntc dev`
 - **Fixture-based testing** — test individual nodes or full pipelines against JSON fixtures
 - **One-command deploy** — build, push, and deploy to Kubernetes with automatic secret provisioning
 - **No kubectl required** — full operational lifecycle (deploy, status, run, logs, undeploy) through the CLI
@@ -48,10 +48,10 @@ A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs i
 ## Installation
 
 ```bash
-git clone git@github.com:randybias/pipedreamer2.git
-cd pipedreamer2
-go build -o pipedreamer ./cmd/pipedreamer/
-./pipedreamer --help
+git clone git@github.com:randybias/tentacular.git
+cd tentacular
+go build -o tntc ./cmd/tntc/
+./tntc --help
 ```
 
 ## Quick Start
@@ -59,37 +59,37 @@ go build -o pipedreamer ./cmd/pipedreamer/
 ### 1. Scaffold a new workflow
 
 ```bash
-pipedreamer init my-workflow
+tntc init my-workflow
 ```
 
 ### 2. Validate and test locally
 
 ```bash
-pipedreamer validate my-workflow
-pipedreamer test my-workflow
+tntc validate my-workflow
+tntc test my-workflow
 ```
 
 ### 3. Run the dev server
 
 ```bash
-pipedreamer dev
+tntc dev
 # POST http://localhost:8080/run to trigger, GET /health to check
 ```
 
 ### 4. Build and deploy
 
 ```bash
-pipedreamer build my-workflow -r registry.example.com --push
-pipedreamer deploy my-workflow -n my-namespace -r registry.example.com
+tntc build my-workflow -r registry.example.com --push
+tntc deploy my-workflow -n my-namespace -r registry.example.com
 ```
 
 ### 5. Operate
 
 ```bash
-pipedreamer status my-workflow -n my-namespace
-pipedreamer run my-workflow -n my-namespace
-pipedreamer logs my-workflow -n my-namespace
-pipedreamer undeploy my-workflow -n my-namespace
+tntc status my-workflow -n my-namespace
+tntc run my-workflow -n my-namespace
+tntc logs my-workflow -n my-namespace
+tntc undeploy my-workflow -n my-namespace
 ```
 
 ## Node Contract
@@ -97,7 +97,7 @@ pipedreamer undeploy my-workflow -n my-namespace
 Every node is a TypeScript file with a single default export:
 
 ```typescript
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
   const resp = await ctx.fetch("github", "/user/repos");
@@ -122,9 +122,9 @@ See [docs/node-contract.md](docs/node-contract.md) for the full Context API, aut
 
 ```bash
 # Try the no-secrets example
-pipedreamer validate example-workflows/hn-digest
-pipedreamer test example-workflows/hn-digest
-pipedreamer dev example-workflows/hn-digest
+tntc validate example-workflows/hn-digest
+tntc test example-workflows/hn-digest
+tntc dev example-workflows/hn-digest
 ```
 
 **hn-digest** DAG:
@@ -145,7 +145,7 @@ flowchart LR
 
 | Directory | Purpose |
 |-----------|---------|
-| `cmd/pipedreamer/` | CLI entry point |
+| `cmd/tntc/` | CLI entry point |
 | `pkg/` | Go packages: spec parser, builder, K8s client, CLI commands |
 | `engine/` | Deno TypeScript engine: compiler, executor, context, server |
 | `example-workflows/` | Runnable example workflows |
@@ -166,7 +166,7 @@ Five layers of defense-in-depth, from innermost to outermost:
 
 ### Why Not Monolithic?
 
-| | Monolithic Engines | Pipedreamer |
+| | Monolithic Engines | Tentacular |
 |--|-------------------|-------------|
 | **Isolation** | One breach = all processes | Each workflow pod isolated by gVisor |
 | **Scaling** | All or nothing | Per-workflow autoscaling |

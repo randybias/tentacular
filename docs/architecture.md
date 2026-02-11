@@ -1,14 +1,14 @@
-# Pipedreamer v2 Architecture
+# Tentacular Architecture
 
 ## 1. System Overview
 
-Pipedreamer v2 is a workflow execution platform that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. A Go CLI manages the full lifecycle — scaffolding, validation, local dev, testing, container builds, and K8s deployments — while a Deno engine executes workflow DAGs inside hardened containers with gVisor kernel isolation.
+Tentacular is a workflow execution platform that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. A Go CLI manages the full lifecycle — scaffolding, validation, local dev, testing, container builds, and K8s deployments — while a Deno engine executes workflow DAGs inside hardened containers with gVisor kernel isolation.
 
 ```
                      Developer Machine                          Kubernetes Cluster
                 ┌──────────────────────────┐          ┌────────────────────────────────┐
                 │                          │          │                                │
-                │  pipedreamer CLI (Go)    │          │   ┌────────────────────────┐   │
+                │  tntc CLI (Go)           │          │   ┌────────────────────────┐   │
                 │  ┌────────────────────┐  │  deploy  │   │  Pod (gVisor sandbox)  │   │
                 │  │ init / validate    │  │ ───────> │   │  ┌──────────────────┐  │   │
                 │  │ dev / test         │  │ (config  │   │  │ Deno Engine (TS) │  │   │
@@ -27,7 +27,7 @@ Pipedreamer v2 is a workflow execution platform that runs TypeScript DAGs on Kub
 
 | Directory | Purpose |
 |-----------|---------|
-| `cmd/pipedreamer/` | CLI entry point (Cobra command tree) |
+| `cmd/tntc/` | CLI entry point (Cobra command tree) |
 | `pkg/` | Go packages: spec parser, builder, K8s client, CLI commands |
 | `engine/` | Deno TypeScript engine: compiler, executor, context, server |
 | `example-workflows/` | Runnable example workflows |
@@ -37,7 +37,7 @@ Pipedreamer v2 is a workflow execution platform that runs TypeScript DAGs on Kub
 
 ### Execution Isolation Model
 
-Pipedreamer v2 executes all nodes in a workflow within a **single Deno process**. This architectural decision prioritizes simplicity and performance while maintaining strong pod-level security boundaries.
+Tentacular executes all nodes in a workflow within a **single Deno process**. This architectural decision prioritizes simplicity and performance while maintaining strong pod-level security boundaries.
 
 **Process Model:**
 - All nodes share the same Deno runtime and memory space
@@ -64,7 +64,7 @@ This design assumes workflow code is authored by trusted developers. For multi-t
 ### Command Tree
 
 ```
-pipedreamer
+tntc
 ├── init <name>         Scaffold new workflow project
 ├── validate [dir]      Validate workflow.yaml spec
 ├── dev [dir]           Local dev server with hot-reload
@@ -197,13 +197,13 @@ interface Context {
 ```json
 {
   "imports": {
-    "pipedreamer": "./mod.ts",
+    "tentacular": "./mod.ts",
     "std/": "https://deno.land/std@0.224.0/"
   }
 }
 ```
 
-Nodes import types via: `import type { Context } from "pipedreamer"`
+Nodes import types via: `import type { Context } from "tentacular"`
 
 ## 4. Triggers
 
@@ -232,13 +232,13 @@ triggers:
 
 ### Cron Triggers
 
-Cron triggers generate K8s CronJob manifests during `pipedreamer deploy`. Each CronJob uses `curlimages/curl` to POST to the workflow's ClusterIP service at `http://{name}.{namespace}.svc.cluster.local:8080/run`.
+Cron triggers generate K8s CronJob manifests during `tntc deploy`. Each CronJob uses `curlimages/curl` to POST to the workflow's ClusterIP service at `http://{name}.{namespace}.svc.cluster.local:8080/run`.
 
 - **Naming**: `{wf}-cron` (single trigger) or `{wf}-cron-0`, `{wf}-cron-1` (multiple)
 - **concurrencyPolicy**: `Forbid` (no overlapping runs)
 - **historyLimits**: 3 successful, 3 failed
-- **Labels**: `app.kubernetes.io/name` and `app.kubernetes.io/managed-by: pipedreamer`
-- **Cleanup**: `pipedreamer undeploy` deletes CronJobs by label selector
+- **Labels**: `app.kubernetes.io/name` and `app.kubernetes.io/managed-by: tentacular`
+- **Cleanup**: `tntc undeploy` deletes CronJobs by label selector
 
 ### Queue Triggers (NATS)
 
@@ -302,25 +302,25 @@ Secrets are mounted as read-only files at `/app/secrets` from a K8s Secret resou
 ### Build Phase
 
 ```
-pipedreamer build [dir]
+tntc build [dir]
   1. Parse and validate workflow.yaml
   2. Locate engine directory (relative to binary)
   3. Copy engine → .engine/ in build context
-  4. Generate engine-only Dockerfile.pipedreamer (no workflow code)
-  5. docker build -f Dockerfile.pipedreamer -t <tag> .
-     Default tag: pipedreamer-engine:latest (override with --tag)
-  6. Cleanup: remove .engine/ and Dockerfile.pipedreamer
+  4. Generate engine-only Dockerfile.tentacular (no workflow code)
+  5. docker build -f Dockerfile.tentacular -t <tag> .
+     Default tag: tentacular-engine:latest (override with --tag)
+  6. Cleanup: remove .engine/ and Dockerfile.tentacular
   7. (Optional) docker push with --push flag
-  8. Save image tag to .pipedreamer/base-image.txt for deploy cascade
+  8. Save image tag to .tentacular/base-image.txt for deploy cascade
 ```
 
 ### Deploy Phase
 
 ```
-pipedreamer deploy [dir]
+tntc deploy [dir]
   1. Parse workflow.yaml → validate spec
   2. Resolve base image tag via cascade:
-     --image flag > .pipedreamer/base-image.txt > pipedreamer-engine:latest
+     --image flag > .tentacular/base-image.txt > tentacular-engine:latest
   3. GenerateCodeConfigMap() → ConfigMap with workflow.yaml + nodes/*.ts
   4. GenerateK8sManifests() → Deployment + Service (+ CronJobs if cron triggers)
   5. buildSecretManifest() → K8s Secret from .secrets/ or .secrets.yaml
@@ -331,17 +331,17 @@ pipedreamer deploy [dir]
 ### Operations Phase
 
 ```
-pipedreamer status <name>        Query Deployment readiness/replicas
+tntc status <name>        Query Deployment readiness/replicas
   --detail                       Extended info: image, runtime, pods, events
-pipedreamer run <name>           Trigger workflow via temp curl pod, return JSON result
+tntc run <name>           Trigger workflow via temp curl pod, return JSON result
   --timeout 30s                  Maximum wait time
-pipedreamer logs <name>          View pod logs (last 100 lines by default)
+tntc logs <name>          View pod logs (last 100 lines by default)
   --follow/-f                    Stream logs in real time
   --tail N                       Number of recent lines
-pipedreamer list                 List all pipedreamer-managed deployments
-pipedreamer undeploy <name>      Remove Service, Deployment, and Secret
+tntc list                 List all tentacular-managed deployments
+tntc undeploy <name>      Remove Service, Deployment, and Secret
   --yes                          Skip confirmation prompt
-pipedreamer cluster check        Preflight: API, gVisor, namespace, RBAC, secrets
+tntc cluster check        Preflight: API, gVisor, namespace, RBAC, secrets
   --fix                          Auto-create namespace if missing
 ```
 
@@ -357,12 +357,12 @@ pipedreamer cluster check        Preflight: API, gVisor, namespace, RBAC, secret
 
 ### Build and Deployment Modes
 
-Pipedreamer supports two deployment workflows:
+Tentacular supports two deployment workflows:
 
 **Mode 1: Full Build + Deploy**
 ```bash
-pipedreamer build --push    # Creates workflow-specific image
-pipedreamer deploy          # Uses freshly built image
+tntc build --push    # Creates workflow-specific image
+tntc deploy          # Uses freshly built image
 ```
 - Generates Dockerfile with engine embedded
 - Builds unique image per workflow
@@ -371,7 +371,7 @@ pipedreamer deploy          # Uses freshly built image
 
 **Mode 2: Deploy-Only (Fast Iteration)**
 ```bash
-pipedreamer deploy --image <existing-image>
+tntc deploy --image <existing-image>
 ```
 - Reuses existing base image
 - Only updates ConfigMap with code changes
@@ -414,7 +414,7 @@ stripe:
 
 ### Deploy-Time Provisioning
 
-`pipedreamer deploy` auto-provisions secrets to K8s:
+`tntc deploy` auto-provisions secrets to K8s:
 1. Check for `.secrets/` directory → `buildSecretFromDir()` (files as stringData entries)
 2. Fall back to `.secrets.yaml` → `buildSecretFromYAML()` (YAML keys as stringData entries)
 3. Generated K8s Secret named `{workflow}-secrets`, applied alongside Deployment and Service
@@ -460,9 +460,9 @@ Run: `deno test --allow-read --allow-write=/tmp --allow-net --allow-env` in `eng
 ### CLI Test Command
 
 ```
-pipedreamer test                      Run all pipeline tests
-pipedreamer test myworkflow/fetch     Run single node test
-pipedreamer test --pipeline           Run full workflow end-to-end
+tntc test                      Run all pipeline tests
+tntc test myworkflow/fetch     Run single node test
+tntc test --pipeline           Run full workflow end-to-end
 ```
 
 ## 9. Data Flow
@@ -545,14 +545,14 @@ Located in `deploy/gvisor/`:
 
 Installation: `sudo bash deploy/gvisor/install.sh && kubectl apply -f deploy/gvisor/runtimeclass.yaml`
 
-Preflight check: `pipedreamer cluster check` validates RuntimeClass exists (warning if missing, not a hard failure).
+Preflight check: `tntc cluster check` validates RuntimeClass exists (warning if missing, not a hard failure).
 
 ## 11. Extension Points
 
 ### Adding a CLI Command
 
 1. Create `pkg/cli/mycommand.go` with `NewMyCommandCmd() *cobra.Command`
-2. Register in `cmd/pipedreamer/main.go`: `root.AddCommand(cli.NewMyCommandCmd())`
+2. Register in `cmd/tntc/main.go`: `root.AddCommand(cli.NewMyCommandCmd())`
 
 ### Adding a Workflow Node
 

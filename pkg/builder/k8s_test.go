@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/randyb/pipedreamer2/pkg/spec"
+	"github.com/randybias/tentacular/pkg/spec"
 )
 
 func makeTestWorkflow(name string) *spec.Workflow {
@@ -144,7 +144,7 @@ func TestK8sManifestLabels(t *testing.T) {
 	if !strings.Contains(dep, "app.kubernetes.io/name: label-test") {
 		t.Error("expected app.kubernetes.io/name label")
 	}
-	if !strings.Contains(dep, "app.kubernetes.io/managed-by: pipedreamer") {
+	if !strings.Contains(dep, "app.kubernetes.io/managed-by: tentacular") {
 		t.Error("expected app.kubernetes.io/managed-by label")
 	}
 }
@@ -349,7 +349,7 @@ func TestK8sManifestCronTriggerLabels(t *testing.T) {
 	if !strings.Contains(cronContent, "app.kubernetes.io/name: label-cron") {
 		t.Error("expected app.kubernetes.io/name label in CronJob")
 	}
-	if !strings.Contains(cronContent, "app.kubernetes.io/managed-by: pipedreamer") {
+	if !strings.Contains(cronContent, "app.kubernetes.io/managed-by: tentacular") {
 		t.Error("expected app.kubernetes.io/managed-by label in CronJob")
 	}
 }
@@ -488,7 +488,7 @@ nodes:
 	if !strings.Contains(cm.Content, "app.kubernetes.io/name: test-workflow") {
 		t.Error("expected app.kubernetes.io/name label")
 	}
-	if !strings.Contains(cm.Content, "app.kubernetes.io/managed-by: pipedreamer") {
+	if !strings.Contains(cm.Content, "app.kubernetes.io/managed-by: tentacular") {
 		t.Error("expected app.kubernetes.io/managed-by label")
 	}
 	if !strings.Contains(cm.Content, "workflow.yaml:") {

@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2 workflows consist of TypeScript node functions wired into a DAG defined in `workflow.yaml`. The engine already has a compiler (`engine/compiler/mod.ts`) that produces a `CompiledDAG`, a `SimpleExecutor` (`engine/executor/simple.ts`) that runs stages in order, a loader (`engine/loader.ts`) that dynamically imports node modules, and a context factory (`engine/context/mod.ts`). The CLI (`cmd/pipedreamer/main.go`) already registers a `test` command stub via `pkg/cli/test.go`.
+Tentacular workflows consist of TypeScript node functions wired into a DAG defined in `workflow.yaml`. The engine already has a compiler (`engine/compiler/mod.ts`) that produces a `CompiledDAG`, a `SimpleExecutor` (`engine/executor/simple.ts`) that runs stages in order, a loader (`engine/loader.ts`) that dynamically imports node modules, and a context factory (`engine/context/mod.ts`). The CLI (`cmd/tntc/main.go`) already registers a `test` command stub via `pkg/cli/test.go`.
 
 This change adds a testing subsystem in `engine/testing/` that reuses all of the above to provide node-level and pipeline-level testing, plus a CLI integration that spawns the Deno test runner.
 
@@ -10,7 +10,7 @@ This change adds a testing subsystem in `engine/testing/` that reuses all of the
 - Enable testing individual nodes in isolation using fixture inputs and a mock context
 - Enable testing full pipeline execution through the compiled DAG with mocked external calls
 - Provide a simple JSON fixture format that is easy to author by hand or generate
-- Integrate with the CLI as `pipedreamer test [dir][/<node>]`
+- Integrate with the CLI as `tntc test [dir][/<node>]`
 - Output clear pass/fail results with timing
 
 **Non-Goals:**
@@ -40,7 +40,7 @@ This change adds a testing subsystem in `engine/testing/` that reuses all of the
 ## Architecture
 
 ```
-pipedreamer test myworkflow/fetch-data
+tntc test myworkflow/fetch-data
         |
         v
   pkg/cli/test.go  (Go CLI)
@@ -80,6 +80,6 @@ For pipeline mode (`--pipeline`):
 
 ## Risks / Trade-offs
 
-- **Process spawn overhead**: Each `pipedreamer test` invocation spawns a Deno process. For fast iteration, this adds ~200ms startup. Acceptable for now; future optimization could use a long-running Deno process.
+- **Process spawn overhead**: Each `tntc test` invocation spawns a Deno process. For fast iteration, this adds ~200ms startup. Acceptable for now; future optimization could use a long-running Deno process.
 - **Fixture naming convention**: Fixtures are matched by filename prefix (`<nodename>*.json`). If two nodes share a prefix (e.g., `fetch` and `fetch-data`), fixtures could collide. Mitigated by using the full node name as prefix.
 - **Mock context limitations**: The `getLogs()` helper currently returns an empty array due to closure scoping. The logs are captured in the mock but not easily accessible externally. This is a known limitation to be improved.

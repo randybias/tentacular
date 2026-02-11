@@ -1,4 +1,4 @@
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 interface PullRequest {
   number: number;

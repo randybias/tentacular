@@ -18,7 +18,7 @@
 ## 3. Deploy Command Updates
 
 - [x] 3.1 Add `--image` flag to `NewDeployCmd()` in `deploy.go`
-- [x] 3.2 Implement image resolution cascade: `--image` flag > read `.pipedreamer/base-image.txt` > fallback `pipedreamer-engine:latest`
+- [x] 3.2 Implement image resolution cascade: `--image` flag > read `.tentacular/base-image.txt` > fallback `tentacular-engine:latest`
 - [x] 3.3 Remove `--cluster-registry` flag usage from image tag derivation; add deprecation error if flag is used
 - [x] 3.4 Call `builder.GenerateCodeConfigMap(wf, absDir, namespace)` and prepend ConfigMap to manifest list
 - [x] 3.5 Return early with error if `GenerateCodeConfigMap` fails (e.g., size limit exceeded)
@@ -45,4 +45,4 @@
 - [x] 6.1 Run `go test ./pkg/builder/...` and verify all tests pass
 - [x] 6.2 Run `go test ./pkg/cli/...` and verify deploy command compiles with new flags
 - [x] 6.3 Run `go test ./pkg/k8s/...` if applicable
-- [x] 6.4 Run `go build -o pipedreamer ./cmd/pipedreamer/` and verify binary compiles
+- [x] 6.4 Run `go build -o tntc ./cmd/tntc/` and verify binary compiles

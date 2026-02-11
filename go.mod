@@ -1,4 +1,4 @@
-module github.com/randyb/pipedreamer2
+module github.com/randybias/tentacular
 
 go 1.25.7
 

@@ -1,5 +1,5 @@
 /**
- * Pipedreamer Test Runner
+ * Tentacular Test Runner
  *
  * Runs node-level and pipeline-level tests for a workflow.
  *

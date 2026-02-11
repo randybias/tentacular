@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2 Change 01 (project-foundation) established the two-component architecture: Go CLI and Deno engine. The engine directory has `types.ts` with `WorkflowSpec`, `Edge`, and basic type scaffolding, plus empty `compiler/` and `executor/` directories. No compilation or execution logic exists yet.
+Tentacular Change 01 (project-foundation) established the two-component architecture: Go CLI and Deno engine. The engine directory has `types.ts` with `WorkflowSpec`, `Edge`, and basic type scaffolding, plus empty `compiler/` and `executor/` directories. No compilation or execution logic exists yet.
 
 This change implements the core DAG engine: the compiler that turns a `WorkflowSpec` into an executable `CompiledDAG`, and the executor that runs it. The design must support a future swap to Temporal for production orchestration without changing node code or the compiler.
 

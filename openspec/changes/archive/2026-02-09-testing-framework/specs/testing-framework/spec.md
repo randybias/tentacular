@@ -69,22 +69,22 @@ Test fixtures SHALL be JSON files with the structure `{ "input": <any>, "expecte
 - **THEN** both files SHALL be found and returned
 
 ### Requirement: CLI test command
-The `pipedreamer test [dir][/<node>]` command SHALL spawn `deno run engine/testing/runner.ts` with the appropriate flags.
+The `tntc test [dir][/<node>]` command SHALL spawn `deno run engine/testing/runner.ts` with the appropriate flags.
 
 #### Scenario: Test all nodes
-- **WHEN** `pipedreamer test .` is executed in a workflow directory
+- **WHEN** `tntc test .` is executed in a workflow directory
 - **THEN** the CLI SHALL invoke the Deno test runner with `--workflow workflow.yaml`
 
 #### Scenario: Test specific node
-- **WHEN** `pipedreamer test myworkflow/fetch-data` is executed
+- **WHEN** `tntc test myworkflow/fetch-data` is executed
 - **THEN** the CLI SHALL invoke the Deno test runner with `--workflow myworkflow/workflow.yaml --node fetch-data`
 
 #### Scenario: Pipeline test
-- **WHEN** `pipedreamer test . --pipeline` is executed
+- **WHEN** `tntc test . --pipeline` is executed
 - **THEN** the CLI SHALL invoke the Deno test runner with `--workflow workflow.yaml --pipeline`
 
 #### Scenario: Missing workflow.yaml
-- **WHEN** `pipedreamer test /nonexistent` is executed
+- **WHEN** `tntc test /nonexistent` is executed
 - **THEN** the command SHALL fail with an error indicating no workflow.yaml was found
 
 ### Requirement: Test report output

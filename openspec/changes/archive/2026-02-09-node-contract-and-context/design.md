@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2 nodes are TypeScript files that run in a Deno engine. The engine needs a clear contract for how it invokes nodes and what capabilities it provides them. The project foundation (Change 01) established stub types for `Context`, `Logger`, and `NodeFunction` in `engine/types.ts` and placeholder implementations in `engine/context/`. This change fully specifies the contract and Context API so that both node authors and the executor have a stable interface.
+Tentacular nodes are TypeScript files that run in a Deno engine. The engine needs a clear contract for how it invokes nodes and what capabilities it provides them. The project foundation (Change 01) established stub types for `Context`, `Logger`, and `NodeFunction` in `engine/types.ts` and placeholder implementations in `engine/context/`. This change fully specifies the contract and Context API so that both node authors and the executor have a stable interface.
 
 ## Goals / Non-Goals
 
@@ -10,7 +10,7 @@ Pipedreamer v2 nodes are TypeScript files that run in a Deno engine. The engine 
 - Implement secret loading from `.secrets.yaml` files (local dev) and K8s Secret volume mount directories (production)
 - Ensure `ctx.fetch(service, path)` automatically injects auth headers from loaded secrets
 - Ensure `ctx.log` prefixes all messages with the node ID for traceability
-- Export all node-author-facing types from `engine/mod.ts` via the `"pipedreamer"` import map alias
+- Export all node-author-facing types from `engine/mod.ts` via the `"tentacular"` import map alias
 
 **Non-Goals:**
 - Gateway sidecar proxy for `ctx.fetch` calls (future enhancement — currently goes direct)
@@ -27,7 +27,7 @@ Pipedreamer v2 nodes are TypeScript files that run in a Deno engine. The engine 
 
 ### Decision 2: Secrets via file mount, not environment variables
 **Choice:** Secrets are loaded from `.secrets.yaml` (a YAML file keyed by service name) for local development, and from a directory of files (K8s Secret volume mount at `/secrets/`) for production.
-**Rationale:** Environment variables leak into process listings and child processes. File-based secrets align with K8s Secret volume mount patterns and the "Fortress" deployment model. The `loadSecrets(path)` function auto-detects whether the path is a file or directory and handles both. `.secrets.yaml` is gitignored; `.secrets.yaml.example` is scaffolded by `pipedreamer init`.
+**Rationale:** Environment variables leak into process listings and child processes. File-based secrets align with K8s Secret volume mount patterns and the "Fortress" deployment model. The `loadSecrets(path)` function auto-detects whether the path is a file or directory and handles both. `.secrets.yaml` is gitignored; `.secrets.yaml.example` is scaffolded by `tntc init`.
 
 ### Decision 3: ctx.fetch injects auth headers from secrets automatically
 **Choice:** When `ctx.fetch(service, path)` is called, the fetch function looks up `secrets[service]` and injects headers: `token` becomes `Authorization: Bearer <token>`, `api_key` becomes `X-API-Key: <api_key>`.

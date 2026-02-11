@@ -158,7 +158,7 @@ The design document SHALL define a phased migration path from file-mount secrets
 - **THEN** the connection SHALL be blocked by NetworkPolicy
 
 #### Scenario: Local development unchanged
-- **GIVEN** local development mode (`pipedreamer dev`)
+- **GIVEN** local development mode (`tntc dev`)
 - **WHEN** the Gateway is not available
 - **THEN** `ctx.fetch` SHALL use the current file-mount secrets behavior (direct HTTP with injected credentials)
 

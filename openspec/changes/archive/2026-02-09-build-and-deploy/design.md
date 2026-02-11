@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2 has a two-component architecture: a Go CLI for management/K8s operations and a Deno/TypeScript engine for workflow execution. The project foundation (change 01) established the CLI skeleton with command stubs. The workflow spec (change 02), DAG engine (change 03), context/secrets (change 04), and dev command (change 05) provide the runtime pieces. This change closes the loop by enabling container image builds and Kubernetes deployments.
+Tentacular has a two-component architecture: a Go CLI for management/K8s operations and a Deno/TypeScript engine for workflow execution. The project foundation (change 01) established the CLI skeleton with command stubs. The workflow spec (change 02), DAG engine (change 03), context/secrets (change 04), and dev command (change 05) provide the runtime pieces. This change closes the loop by enabling container image builds and Kubernetes deployments.
 
 The existing codebase already has initial implementations in `pkg/cli/build.go`, `pkg/cli/deploy.go`, `pkg/cli/status.go`, `pkg/builder/dockerfile.go`, `pkg/builder/k8s.go`, and `pkg/k8s/client.go`. This change specifies the expected behavior of these implementations and ensures they meet the project's security and operational requirements.
 
@@ -29,15 +29,15 @@ The existing codebase already has initial implementations in `pkg/cli/build.go`,
 
 ### Decision 1: Distroless Deno base image
 **Choice:** Use `denoland/deno:distroless` as the container base image.
-**Rationale:** Distroless images contain only the runtime and its dependencies -- no shell, no package manager, no debugging tools. This minimizes attack surface. The Deno distroless image includes the Deno binary and nothing else. Combined with gVisor at the K8s level, this creates defense-in-depth: sandboxed runtime inside a minimal container inside a sandboxed kernel. Alternative considered: `denoland/deno:alpine` -- rejected because alpine includes a shell and package manager, which increases attack surface without providing operational benefit (debugging happens locally via `pipedreamer dev`).
+**Rationale:** Distroless images contain only the runtime and its dependencies -- no shell, no package manager, no debugging tools. This minimizes attack surface. The Deno distroless image includes the Deno binary and nothing else. Combined with gVisor at the K8s level, this creates defense-in-depth: sandboxed runtime inside a minimal container inside a sandboxed kernel. Alternative considered: `denoland/deno:alpine` -- rejected because alpine includes a shell and package manager, which increases attack surface without providing operational benefit (debugging happens locally via `tntc dev`).
 
 ### Decision 2: Engine copied into container, CLI excluded
 **Choice:** Copy the `engine/` directory into the container as `.engine/`. The Go CLI binary is never included.
-**Rationale:** The container only needs the Deno engine to execute workflows. The CLI is a developer/operator tool that runs on the host machine and talks to K8s via client-go. Including the CLI in the container would add ~30MB of unnecessary binary and create confusion about the execution model. The build command copies the engine from the pipedreamer installation directory into a temporary `.engine/` directory within the workflow's build context, then the Dockerfile `COPY`s it into `/app/engine/`.
+**Rationale:** The container only needs the Deno engine to execute workflows. The CLI is a developer/operator tool that runs on the host machine and talks to K8s via client-go. Including the CLI in the container would add ~30MB of unnecessary binary and create confusion about the execution model. The build command copies the engine from the tentacular installation directory into a temporary `.engine/` directory within the workflow's build context, then the Dockerfile `COPY`s it into `/app/engine/`.
 
 ### Decision 3: K8s manifests with gVisor RuntimeClass
 **Choice:** Generated Deployment manifests include `runtimeClassName: gvisor`.
-**Rationale:** gVisor provides an application kernel that intercepts syscalls, adding a security boundary between the container and the host kernel. This is the "Fortress" pattern from v1. The `pipedreamer cluster check` command (already implemented in `pkg/k8s/preflight.go`) validates that the gVisor RuntimeClass exists before deployment. Alternative considered: making gVisor optional -- rejected because it is a core security guarantee of the platform. Operators who cannot run gVisor should not use pipedreamer in production.
+**Rationale:** gVisor provides an application kernel that intercepts syscalls, adding a security boundary between the container and the host kernel. This is the "Fortress" pattern from v1. The `tntc cluster check` command (already implemented in `pkg/k8s/preflight.go`) validates that the gVisor RuntimeClass exists before deployment. Alternative considered: making gVisor optional -- rejected because it is a core security guarantee of the platform. Operators who cannot run gVisor should not use tentacular in production.
 
 ### Decision 4: Secrets as K8s Secret volume mounts
 **Choice:** Secrets are mounted from a K8s Secret named `<workflow-name>-secrets` as a read-only volume at `/app/secrets`.
@@ -53,12 +53,12 @@ The existing codebase already has initial implementations in `pkg/cli/build.go`,
 
 ### Decision 7: Build context temporary directory
 **Choice:** The `build` command creates a temporary `.engine/` directory in the workflow's build context, copies the engine into it, builds the image, then cleans up.
-**Rationale:** Docker build context must contain all files referenced by COPY instructions. The engine lives outside the workflow directory (it's part of the pipedreamer installation), so it must be copied into the build context. Using `.engine/` as the directory name and cleaning up with `defer os.RemoveAll()` ensures no artifacts are left behind. The generated `Dockerfile.pipedreamer` is also cleaned up after the build.
+**Rationale:** Docker build context must contain all files referenced by COPY instructions. The engine lives outside the workflow directory (it's part of the tentacular installation), so it must be copied into the build context. Using `.engine/` as the directory name and cleaning up with `defer os.RemoveAll()` ensures no artifacts are left behind. The generated `Dockerfile.tentacular` is also cleaned up after the build.
 
 ## Risks / Trade-offs
 
 - **Docker CLI dependency** -- The `build` command shells out to `docker build`. This requires Docker to be installed and running. Mitigated by providing a clear error message if the docker command fails. Future work could support `podman` or `buildah` as alternatives.
-- **gVisor requirement** -- Mandating gVisor limits the set of K8s clusters that can run pipedreamer. Mitigated by the `pipedreamer cluster check` preflight command that detects missing RuntimeClass and provides remediation steps.
+- **gVisor requirement** -- Mandating gVisor limits the set of K8s clusters that can run tentacular. Mitigated by the `tntc cluster check` preflight command that detects missing RuntimeClass and provides remediation steps.
 - **Single-replica default** -- Deployment defaults to 1 replica. This is appropriate for workflow engines that maintain in-memory DAG state. Scaling out requires stateless execution or external state management, which is out of scope.
 - **No image push** -- The `build` command builds locally but does not push to a registry. Users must `docker push` separately. This is intentional: keeping build and push as separate steps gives operators control over their CI/CD pipeline.
 - **Resource limits are hardcoded** -- Memory (64Mi request, 256Mi limit) and CPU (100m request, 500m limit) are hardcoded in the manifest. Future work could make these configurable via workflow.yaml `config` section.

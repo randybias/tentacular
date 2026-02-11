@@ -5,9 +5,9 @@ Cron triggers are spec'd and validated but the engine has no scheduler. Rather t
 ## Goals / Non-Goals
 
 **Goals:**
-- Generate CronJob manifests for each cron trigger during `pipedreamer deploy`
+- Generate CronJob manifests for each cron trigger during `tntc deploy`
 - Support named triggers with POST body `{"trigger": "<name>"}` to differentiate behavior
-- Clean up CronJobs on `pipedreamer undeploy` via label selectors
+- Clean up CronJobs on `tntc undeploy` via label selectors
 - Pass POST body through to workflow executor as initial input for root nodes
 - Add RBAC preflight checks for CronJob permissions
 
@@ -27,7 +27,7 @@ CronJobs use `curlimages/curl` to POST to the workflow's ClusterIP service. This
 Each trigger can have a `name` field. CronJobs POST `{"trigger": "<name>"}` to `/run`. Root nodes receive this as input to branch behavior. Unnamed triggers POST `{}`.
 
 ### Label-based CronJob cleanup
-CronJobs carry `app.kubernetes.io/name` and `app.kubernetes.io/managed-by: pipedreamer` labels. Undeploy lists by label selector and deletes all matches — no name guessing needed.
+CronJobs carry `app.kubernetes.io/name` and `app.kubernetes.io/managed-by: tentacular` labels. Undeploy lists by label selector and deletes all matches — no name guessing needed.
 
 ### Naming convention
 Single cron trigger: `{wf}-cron`. Multiple: `{wf}-cron-0`, `{wf}-cron-1`, etc.

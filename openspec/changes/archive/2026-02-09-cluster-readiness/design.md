@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2 deploys workflow containers to Kubernetes using gVisor sandboxing (the "Fortress" deployment pattern). The existing codebase already has a `pkg/k8s/client.go` with a client-go wrapper, a stub `PreflightCheck` method in `pkg/k8s/preflight.go`, and a `cluster check` cobra subcommand in `pkg/cli/cluster.go`. This change completes the preflight check implementation to cover all required validations with clear remediation output.
+Tentacular deploys workflow containers to Kubernetes using gVisor sandboxing (the "Fortress" deployment pattern). The existing codebase already has a `pkg/k8s/client.go` with a client-go wrapper, a stub `PreflightCheck` method in `pkg/k8s/preflight.go`, and a `cluster check` cobra subcommand in `pkg/cli/cluster.go`. This change completes the preflight check implementation to cover all required validations with clear remediation output.
 
 ## Goals / Non-Goals
 

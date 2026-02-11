@@ -1,6 +1,6 @@
 ## 1. Go CLI Dev Command
 
-- [x] 1.1 Implement `pkg/cli/dev.go` — `pipedreamer dev [dir]` command that resolves workflow directory, validates `workflow.yaml` exists, locates the engine directory, and spawns `deno run engine/main.ts --workflow <path> --port <port> --watch`
+- [x] 1.1 Implement `pkg/cli/dev.go` — `tntc dev [dir]` command that resolves workflow directory, validates `workflow.yaml` exists, locates the engine directory, and spawns `deno run engine/main.ts --workflow <path> --port <port> --watch`
 - [x] 1.2 Add `--port` flag (default 8080) to the dev command
 - [x] 1.3 Implement signal forwarding: capture SIGINT/SIGTERM in Go, forward SIGTERM to Deno child process, wait for clean exit
 - [x] 1.4 Implement `findEngineDir()` resolution: check relative to binary, relative to working directory, and common install paths

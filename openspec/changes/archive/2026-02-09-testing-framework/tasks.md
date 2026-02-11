@@ -23,12 +23,12 @@
 
 - [x] 4.1 Implement `pkg/cli/test.go` `NewTestCmd()` with cobra command and `--pipeline` flag
 - [x] 4.2 Implement `runTest()` — parse `[dir][/<node>]` argument, resolve workflow path, spawn Deno runner
-- [x] 4.3 Support `pipedreamer test .` (all nodes), `pipedreamer test dir/node` (specific node), `pipedreamer test . --pipeline`
+- [x] 4.3 Support `tntc test .` (all nodes), `tntc test dir/node` (specific node), `tntc test . --pipeline`
 
 ## 5. Verification
 
 - [x] 5.1 Create a temporary test workflow with a simple node and fixture
-- [x] 5.2 Run `pipedreamer test` and verify pass/fail output format
-- [x] 5.3 Run `pipedreamer test <workflow>/<node>` for single-node testing
-- [x] 5.4 Run `pipedreamer test --pipeline` for full DAG testing
+- [x] 5.2 Run `tntc test` and verify pass/fail output format
+- [x] 5.3 Run `tntc test <workflow>/<node>` for single-node testing
+- [x] 5.4 Run `tntc test --pipeline` for full DAG testing
 - [x] 5.5 Verify exit code 0 on all-pass, exit code 1 on failure

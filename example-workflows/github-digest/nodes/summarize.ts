@@ -1,4 +1,4 @@
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 /** Repository data from upstream fetch-repos node */
 interface RepoData {

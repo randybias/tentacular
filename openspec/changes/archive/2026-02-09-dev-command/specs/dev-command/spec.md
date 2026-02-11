@@ -1,19 +1,19 @@
 ## ADDED Requirements
 
 ### Requirement: Dev server starts and listens on configured port
-The `pipedreamer dev [dir]` command SHALL start a local development server that listens for HTTP requests on the configured port.
+The `tntc dev [dir]` command SHALL start a local development server that listens for HTTP requests on the configured port.
 
 #### Scenario: Default port startup
-- **WHEN** `pipedreamer dev ./my-workflow` is executed without `--port`
+- **WHEN** `tntc dev ./my-workflow` is executed without `--port`
 - **THEN** the engine SHALL start an HTTP server listening on port 8080
 - **THEN** the console SHALL print the listening address and available endpoints
 
 #### Scenario: Custom port startup
-- **WHEN** `pipedreamer dev ./my-workflow --port 9090` is executed
+- **WHEN** `tntc dev ./my-workflow --port 9090` is executed
 - **THEN** the engine SHALL start an HTTP server listening on port 9090
 
 #### Scenario: Missing workflow.yaml
-- **WHEN** `pipedreamer dev ./empty-dir` is executed and `./empty-dir/workflow.yaml` does not exist
+- **WHEN** `tntc dev ./empty-dir` is executed and `./empty-dir/workflow.yaml` does not exist
 - **THEN** the command SHALL fail with an error message indicating no workflow.yaml was found
 
 #### Scenario: DAG compilation output on startup

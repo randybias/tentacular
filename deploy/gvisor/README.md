@@ -46,11 +46,11 @@ The logs should show gVisor kernel messages (e.g., `Starting gVisor...`) rather 
 kubectl delete pod gvisor-test
 ```
 
-## How pipedreamer uses gVisor
+## How Tentacular uses gVisor
 
-When deploying workflows, pipedreamer sets `runtimeClassName: gvisor` on the pod spec. This runs workflow containers inside gVisor's sandboxed kernel, providing an additional layer of isolation for untrusted code execution.
+When deploying workflows, Tentacular sets `runtimeClassName: gvisor` on the pod spec. This runs workflow containers inside gVisor's sandboxed kernel, providing an additional layer of isolation for untrusted code execution.
 
-Use `--runtime-class=""` with `pipedreamer deploy` to disable gVisor for a deployment.
+Use `--runtime-class=""` with `tntc deploy` to disable gVisor for a deployment.
 
 ## Troubleshooting
 

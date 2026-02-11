@@ -1,14 +1,14 @@
 ## ADDED Requirements
 
 ### Requirement: CLI binary compiles and runs
-The `pipedreamer` CLI SHALL compile from `cmd/pipedreamer/main.go` into a single Go binary and display help when invoked with `--help`.
+The `tentacular` CLI SHALL compile from `cmd/tntc/main.go` into a single Go binary and display help when invoked with `--help`.
 
 #### Scenario: Successful build
-- **WHEN** `go build ./cmd/pipedreamer/` is executed
-- **THEN** a `pipedreamer` binary is produced with exit code 0
+- **WHEN** `go build ./cmd/tntc/` is executed
+- **THEN** a `tentacular` binary is produced with exit code 0
 
 #### Scenario: Help output shows all commands
-- **WHEN** `pipedreamer --help` is executed
+- **WHEN** `tntc --help` is executed
 - **THEN** output SHALL list: init, validate, dev, test, build, deploy, status, cluster, visualize
 
 ### Requirement: Global flags
@@ -23,10 +23,10 @@ The CLI SHALL support global flags: `--namespace` (default "default"), `--regist
 - **THEN** the namespace value SHALL default to "default"
 
 ### Requirement: Init command scaffolds workflow
-The `pipedreamer init <name>` command SHALL create a new workflow directory with the required scaffold files.
+The `tntc init <name>` command SHALL create a new workflow directory with the required scaffold files.
 
 #### Scenario: Successful init
-- **WHEN** `pipedreamer init my-workflow` is executed
+- **WHEN** `tntc init my-workflow` is executed
 - **THEN** a directory `my-workflow/` SHALL be created containing:
   - `workflow.yaml` with the workflow name set to "my-workflow"
   - `nodes/hello.ts` with a default node implementation
@@ -34,7 +34,7 @@ The `pipedreamer init <name>` command SHALL create a new workflow directory with
   - `tests/fixtures/hello.json` with test fixture
 
 #### Scenario: Invalid name rejected
-- **WHEN** `pipedreamer init NotKebab` is executed
+- **WHEN** `tntc init NotKebab` is executed
 - **THEN** the command SHALL fail with an error indicating kebab-case is required
 
 #### Scenario: Name validation

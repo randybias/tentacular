@@ -1,4 +1,4 @@
-# Pipedreamer v2 — Agent Instructions
+# Tentacular — Agent Instructions
 
 ## Architecture
 
@@ -6,7 +6,7 @@ Before making changes, read **[docs/architecture.md](docs/architecture.md)** to 
 
 ## Project Structure
 
-- **Go CLI** (`cmd/pipedreamer/`, `pkg/`) — lifecycle management, K8s operations
+- **Go CLI** (`cmd/tntc/`, `pkg/`) — lifecycle management, K8s operations
 - **Deno Engine** (`engine/`) — DAG compilation and execution
 - **Example Workflows** (`example-workflows/`) — runnable workflow examples
 - **Infrastructure** (`deploy/`) — gVisor setup scripts and K8s resources
@@ -15,7 +15,7 @@ Before making changes, read **[docs/architecture.md](docs/architecture.md)** to 
 
 ```bash
 # Build
-go build -o pipedreamer ./cmd/pipedreamer/
+go build -o tntc ./cmd/tntc/
 
 # Go tests (run from project root)
 go test ./pkg/...
@@ -41,7 +41,7 @@ Project documentation lives in `docs/`. The primary reference is **[docs/archite
 - Go test files for unexported functions use same-package tests (e.g., `package cli` not `package cli_test`)
 - Deno tests use `Deno.makeTempDir()` for filesystem tests with manual cleanup
 - Node contract: `export default async function run(ctx: Context, input: T): Promise<U>`
-- Nodes import types via `import type { Context } from "pipedreamer"` (mapped in `engine/deno.json`)
+- Nodes import types via `import type { Context } from "tentacular"` (mapped in `engine/deno.json`)
 - Workflow names must be kebab-case; versions must be semver (e.g., `1.0`)
 - Secrets are never environment variables — always volume mounts or files
 

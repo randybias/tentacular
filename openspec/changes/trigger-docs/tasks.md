@@ -12,9 +12,9 @@
 
 ## 3. Skill File
 
-- [x] 3.1 Add trigger types and config block to `pipedreamer-skill/SKILL.md`
+- [x] 3.1 Add trigger types and config block to `tentacular-skill/SKILL.md`
 
 ## 4. Deployment Guide
 
-- [x] 4.1 Add Triggers section to `pipedreamer-skill/references/deployment-guide.md`
+- [x] 4.1 Add Triggers section to `tentacular-skill/references/deployment-guide.md`
 - [x] 4.2 Update Dockerfile section with --allow-env

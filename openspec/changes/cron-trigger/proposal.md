@@ -1,12 +1,12 @@
 ## Why
 
-Cron triggers are defined in the spec and validated by the parser, but never executed. The engine only handles HTTP (`POST /run`). We need `pipedreamer deploy` to generate K8s CronJob manifests for cron triggers, and `pipedreamer undeploy` to clean them up. This also supports named triggers with different schedules and behavior in one workflow.
+Cron triggers are defined in the spec and validated by the parser, but never executed. The engine only handles HTTP (`POST /run`). We need `tntc deploy` to generate K8s CronJob manifests for cron triggers, and `tntc undeploy` to clean them up. This also supports named triggers with different schedules and behavior in one workflow.
 
 ## What Changes
 
 - Add `Name` field to `Trigger` struct for named triggers
 - Validate trigger names are unique and match `identRe`
-- Generate CronJob manifests during `pipedreamer deploy` for each cron trigger
+- Generate CronJob manifests during `tntc deploy` for each cron trigger
 - Add CronJob resource support to K8s client (findResource, label-based deletion)
 - Add RBAC preflight checks for `batch/cronjobs` and `batch/jobs`
 - Accept POST body on `/run` endpoint and pass as input to executor (for trigger payloads)

@@ -1,6 +1,6 @@
 ## Why
 
-Phase 1 (`base-engine-image`) decoupled the Deno engine from workflow code in the Docker image. But without a delivery mechanism for workflow code, the deployed container can't run anything. This change completes the Fast Deploy feature by: (a) generating a K8s ConfigMap containing workflow code, (b) mounting it into the Deployment, and (c) updating the deploy command to handle the new flow including rollout restarts. This eliminates Docker rebuilds entirely for code-only changes — `pipedreamer deploy` just updates the ConfigMap and restarts pods.
+Phase 1 (`base-engine-image`) decoupled the Deno engine from workflow code in the Docker image. But without a delivery mechanism for workflow code, the deployed container can't run anything. This change completes the Fast Deploy feature by: (a) generating a K8s ConfigMap containing workflow code, (b) mounting it into the Deployment, and (c) updating the deploy command to handle the new flow including rollout restarts. This eliminates Docker rebuilds entirely for code-only changes — `tntc deploy` just updates the ConfigMap and restarts pods.
 
 ## What Changes
 
@@ -19,7 +19,7 @@ Phase 1 (`base-engine-image`) decoupled the Deno engine from workflow code in th
 
 ### Deploy Command Updates (modification)
 - `deploy.go` generates ConfigMap via `builder.GenerateCodeConfigMap()` and includes it in the manifest list
-- Image resolution cascade: `--image` flag > `.pipedreamer/base-image.txt` > `pipedreamer-engine:latest`
+- Image resolution cascade: `--image` flag > `.tentacular/base-image.txt` > `tentacular-engine:latest`
 - Replaces `--cluster-registry` flag with `--image` flag (simpler, more explicit)
 - After successful apply, triggers a rollout restart to pick up ConfigMap changes
 
@@ -50,4 +50,4 @@ Phase 1 (`base-engine-image`) decoupled the Deno engine from workflow code in th
 - **`pkg/cli/deploy.go`**: Updated to generate ConfigMap, resolve base image via cascade, replace `--cluster-registry` with `--image`, trigger rollout restart after apply.
 - **`pkg/k8s/client.go`**: New `RolloutRestart()` method that patches deployment restart annotation.
 - **`pkg/builder/k8s_test.go`**: New tests for ConfigMap generation, size validation, volume mount, no container args. Existing CronJob tests verified.
-- **Downstream impact**: This completes the Fast Deploy feature. After this change, `pipedreamer build` builds the engine image once, and subsequent `pipedreamer deploy` calls only update the ConfigMap + restart pods.
+- **Downstream impact**: This completes the Fast Deploy feature. After this change, `tntc build` builds the engine image once, and subsequent `tntc deploy` calls only update the ConfigMap + restart pods.

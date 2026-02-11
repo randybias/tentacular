@@ -10,17 +10,17 @@
 
 - [x] 2.1 Implement `pkg/cli/build.go` `NewBuildCmd()` — cobra command for `build [dir]` with `--tag` flag
 - [x] 2.2 Implement `runBuild()` — reads `workflow.yaml`, parses and validates spec, derives image tag from workflow name + version
-- [x] 2.3 Implement engine directory discovery via `findEngineDir()` — locates `engine/` relative to the pipedreamer binary
+- [x] 2.3 Implement engine directory discovery via `findEngineDir()` — locates `engine/` relative to the tentacular binary
 - [x] 2.4 Implement build context setup — copy engine into `.engine/` temp dir within workflow directory
-- [x] 2.5 Implement Dockerfile generation and `docker build` invocation with `-f Dockerfile.pipedreamer -t <tag>`
-- [x] 2.6 Implement deferred cleanup — remove `Dockerfile.pipedreamer` and `.engine/` after build (success or failure)
+- [x] 2.5 Implement Dockerfile generation and `docker build` invocation with `-f Dockerfile.tentacular -t <tag>`
+- [x] 2.6 Implement deferred cleanup — remove `Dockerfile.tentacular` and `.engine/` after build (success or failure)
 - [x] 2.7 Implement `--registry` flag support — prefix image tag with registry URL when provided
-- [x] 2.8 Verify `pipedreamer build` fails with clear error when `workflow.yaml` is missing or invalid
+- [x] 2.8 Verify `tntc build` fails with clear error when `workflow.yaml` is missing or invalid
 
 ## 3. K8s Manifest Generation
 
 - [x] 3.1 Implement `pkg/builder/k8s.go` `GenerateK8sManifests(wf, imageTag, namespace)` — returns slice of `Manifest` structs
-- [x] 3.2 Generate Deployment manifest with gVisor RuntimeClass (`runtimeClassName: gvisor`), pipedreamer labels, and resource limits (64Mi/256Mi memory, 100m/500m CPU)
+- [x] 3.2 Generate Deployment manifest with gVisor RuntimeClass (`runtimeClassName: gvisor`), tentacular labels, and resource limits (64Mi/256Mi memory, 100m/500m CPU)
 - [x] 3.3 Generate Deployment with secret volume mount at `/app/secrets` (read-only) from K8s Secret `<name>-secrets` (optional: true)
 - [x] 3.4 Generate Deployment with `emptyDir` tmp volume mounted at `/tmp`
 - [x] 3.5 Generate Service manifest with ClusterIP type, port 8080 mapping, and matching selector labels
@@ -51,9 +51,9 @@
 
 ## 7. Verification
 
-- [x] 7.1 Verify `go build ./cmd/pipedreamer/` compiles with all build/deploy/status changes
-- [x] 7.2 Verify `pipedreamer build --help` shows usage with `--tag` flag
-- [x] 7.3 Verify `pipedreamer deploy --help` shows usage with namespace flag
-- [x] 7.4 Verify `pipedreamer status --help` shows usage requiring name argument
+- [x] 7.1 Verify `go build ./cmd/tntc/` compiles with all build/deploy/status changes
+- [x] 7.2 Verify `tntc build --help` shows usage with `--tag` flag
+- [x] 7.3 Verify `tntc deploy --help` shows usage with namespace flag
+- [x] 7.4 Verify `tntc status --help` shows usage requiring name argument
 - [x] 7.5 Verify generated Dockerfile produces a valid container image (manual test with a sample workflow)
 - [x] 7.6 Verify generated K8s manifests are valid YAML that `kubectl apply --dry-run=client` accepts

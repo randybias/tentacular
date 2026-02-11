@@ -1,4 +1,4 @@
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 interface HealthAnalysis {
   periodStart: string;
@@ -76,7 +76,7 @@ export default async function run(ctx: Context, input: unknown): Promise<{ deliv
     {
       type: "context",
       elements: [
-        { type: "mrkdwn", text: `pipedreamer/cluster-health-reporter v1.0` },
+        { type: "mrkdwn", text: `tentacular/cluster-health-reporter v1.0` },
       ],
     },
   ];

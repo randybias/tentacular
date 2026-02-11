@@ -39,7 +39,7 @@ The `Trigger` struct SHALL have an optional `Name` field. Trigger names MUST mat
 - **THEN** it has `concurrencyPolicy: Forbid`, `successfulJobsHistoryLimit: 3`, `failedJobsHistoryLimit: 3`, and correct labels
 
 ### Requirement: CronJob cleanup on undeploy
-`DeleteResources()` SHALL delete all CronJobs matching the workflow's label selector (`app.kubernetes.io/name={name},app.kubernetes.io/managed-by=pipedreamer`).
+`DeleteResources()` SHALL delete all CronJobs matching the workflow's label selector (`app.kubernetes.io/name={name},app.kubernetes.io/managed-by=tentacular`).
 
 #### Scenario: Undeploy removes CronJobs
 - **WHEN** `DeleteResources` is called for a workflow with CronJobs
@@ -64,7 +64,7 @@ The `/run` endpoint SHALL parse the POST body as JSON and pass it as initial inp
 - **THEN** root nodes receive `{}` as their input
 
 ### Requirement: Auto-preflight before deploy
-`pipedreamer deploy` SHALL run preflight checks before applying manifests. On failure, it SHALL print remediation instructions and abort.
+`tntc deploy` SHALL run preflight checks before applying manifests. On failure, it SHALL print remediation instructions and abort.
 
 #### Scenario: Preflight failure aborts deploy
 - **WHEN** preflight detects missing RBAC permissions

@@ -1,4 +1,4 @@
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 export default async function run(ctx: Context, _input: unknown): Promise<{ text: string }> {
   ctx.log.info("Producing source text");

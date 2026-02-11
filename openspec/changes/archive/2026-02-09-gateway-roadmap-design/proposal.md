@@ -1,6 +1,6 @@
 ## Why
 
-Pipedreamer v2 currently handles secrets via file-mount (`.secrets.yaml` for local dev, K8s Secret volume mount for production). The `ctx.fetch(service, path)` call in `engine/context/mod.ts` directly injects auth headers from these file-mounted secrets and makes outbound HTTP calls from the workflow container itself. This approach has fundamental limitations:
+Tentacular currently handles secrets via file-mount (`.secrets.yaml` for local dev, K8s Secret volume mount for production). The `ctx.fetch(service, path)` call in `engine/context/mod.ts` directly injects auth headers from these file-mounted secrets and makes outbound HTTP calls from the workflow container itself. This approach has fundamental limitations:
 
 1. **Secrets in container memory** -- Node code has direct access to raw secret values via `ctx.secrets`. A compromised or poorly-written node can exfiltrate credentials.
 2. **No centralized audit trail** -- Outbound API calls happen directly from the workflow container. There is no single point to log which workflow accessed which external service, when, and with what result.

@@ -13,20 +13,20 @@
 The **fast deploy** feature just landed on main. It decouples the engine from workflow code:
 
 ### Phase 1: Base Engine Image
-- `pipedreamer build` now produces an **engine-only** Docker image (`pipedreamer-engine:latest`)
+- `tntc build` now produces an **engine-only** Docker image (`tentacular-engine:latest`)
 - No workflow code baked in — nodes are cached at runtime via `DENO_DIR=/tmp/deno-cache`
-- Image tag saved to `.pipedreamer/base-image.txt`
+- Image tag saved to `.tentacular/base-image.txt`
 - ENTRYPOINT expects workflow code mounted at `/app/workflow/workflow.yaml`
 
 ### Phase 2: ConfigMap Code Delivery
-- `pipedreamer deploy` generates a **ConfigMap** (`{workflow-name}-code`) with workflow.yaml + nodes/*.ts
+- `tntc deploy` generates a **ConfigMap** (`{workflow-name}-code`) with workflow.yaml + nodes/*.ts
 - Mounts at `/app/workflow/` in the Deployment
 - Runs **rollout restart** after applying to pick up ConfigMap changes
-- **No Docker rebuild needed for code changes** — just `pipedreamer deploy`
+- **No Docker rebuild needed for code changes** — just `tntc deploy`
 
 ### Time Savings
 - **Old flow:** Edit → docker build (30-60s) → push (10-30s) → apply → rollout = ~1-2 min
-- **New flow:** Edit → pipedreamer deploy (ConfigMap update + rollout) = **~5-10s**
+- **New flow:** Edit → tntc deploy (ConfigMap update + rollout) = **~5-10s**
 
 ---
 
@@ -35,7 +35,7 @@ The **fast deploy** feature just landed on main. It decouples the engine from wo
 1. **Migrate uptime-prober v1** from monolithic image to fast-deploy architecture
 2. **Test the hot reload workflow** — change endpoint list, redeploy, verify no rebuild
 3. **Update real endpoint URLs** — replace test URLs with actual production targets
-4. **Document the upgrade process** for the pipedreamer skill
+4. **Document the upgrade process** for the tentacular skill
 5. **Evaluate workflow versioning** — assess current state and identify gaps
 
 ---
@@ -67,24 +67,24 @@ The **fast deploy** feature just landed on main. It decouples the engine from wo
 **Goal:** Produce the reusable engine-only image and push to the cluster registry.
 
 ```bash
-cd /Users/rbias/pipedreamer2-test
+cd /Users/rbias/tentacular-test
 
 # Build the base engine image and push to k0s registry
-pipedreamer build --push -r nats.ospo-dev.miralabs.dev:30500
+tntc build --push -r nats.ospo-dev.miralabs.dev:30500
 ```
 
 **Expected outcomes:**
-- Image built: `nats.ospo-dev.miralabs.dev:30500/pipedreamer-engine:latest`
-- Tag saved to `.pipedreamer/base-image.txt`
+- Image built: `nats.ospo-dev.miralabs.dev:30500/tentacular-engine:latest`
+- Tag saved to `.tentacular/base-image.txt`
 - No errors during build
 - Push succeeds (image visible in cluster registry)
 
 **Validation:**
 ```bash
-cat .pipedreamer/base-image.txt
-# Should show: nats.ospo-dev.miralabs.dev:30500/pipedreamer-engine:latest
+cat .tentacular/base-image.txt
+# Should show: nats.ospo-dev.miralabs.dev:30500/tentacular-engine:latest
 
-docker images | grep pipedreamer-engine
+docker images | grep tentacular-engine
 # Should show the built image
 ```
 
@@ -125,11 +125,11 @@ config:
 cd example-workflows/uptime-prober
 
 # Deploy using the base image
-pipedreamer deploy -n pd-uptime-prober
+tntc deploy -n pd-uptime-prober
 ```
 
 **What happens:**
-1. Reads `.pipedreamer/base-image.txt` → uses `nats.ospo-dev.miralabs.dev:30500/pipedreamer-engine:latest`
+1. Reads `.tentacular/base-image.txt` → uses `nats.ospo-dev.miralabs.dev:30500/tentacular-engine:latest`
 2. Generates `uptime-prober-code` ConfigMap with workflow.yaml + nodes/*.ts
 3. Generates Deployment manifest referencing the base image, mounting ConfigMap at `/app/workflow/`
 4. Applies ConfigMap, Deployment, Service, CronJob to cluster
@@ -154,10 +154,10 @@ kubectl get deployment uptime-prober -n pd-uptime-prober -o yaml | grep image:
 kubectl get deployment uptime-prober -n pd-uptime-prober -o yaml | grep -A5 volumeMounts
 
 # Check pod status
-pipedreamer status uptime-prober -n pd-uptime-prober --detail
+tntc status uptime-prober -n pd-uptime-prober --detail
 
 # Check logs for successful probes
-pipedreamer logs uptime-prober -n pd-uptime-prober --tail 50
+tntc logs uptime-prober -n pd-uptime-prober --tail 50
 ```
 
 **Success criteria:**
@@ -175,18 +175,18 @@ pipedreamer logs uptime-prober -n pd-uptime-prober --tail 50
 **Action:**
 1. Edit `example-workflows/uptime-prober/workflow.yaml`
 2. Add a new endpoint (e.g., `https://www.example.org`)
-3. Redeploy **without running `pipedreamer build`**
+3. Redeploy **without running `tntc build`**
 
 ```bash
 # Edit workflow.yaml — add a new endpoint
 vim example-workflows/uptime-prober/workflow.yaml
 
 # Deploy again (no build!)
-pipedreamer deploy -n pd-uptime-prober
+tntc deploy -n pd-uptime-prober
 ```
 
 **Expected outcomes:**
-- `pipedreamer deploy` completes in **~5-10 seconds** (not 1-2 minutes)
+- `tntc deploy` completes in **~5-10 seconds** (not 1-2 minutes)
 - No Docker build triggered
 - ConfigMap updated with new endpoint
 - Pods restart via rollout
@@ -201,7 +201,7 @@ kubectl get configmap uptime-prober-code -n pd-uptime-prober -o yaml | grep exam
 kubectl get pods -n pd-uptime-prober -o wide
 
 # Check logs mention new endpoint
-pipedreamer logs uptime-prober -n pd-uptime-prober --tail 20 | grep example.org
+tntc logs uptime-prober -n pd-uptime-prober --tail 20 | grep example.org
 ```
 
 **Success criteria:**
@@ -225,10 +225,10 @@ pipedreamer logs uptime-prober -n pd-uptime-prober --tail 20 | grep example.org
 vim example-workflows/uptime-prober/nodes/format-report.ts
 
 # Deploy (no build!)
-pipedreamer deploy -n pd-uptime-prober
+tntc deploy -n pd-uptime-prober
 
 # Trigger manually to see immediate results
-pipedreamer run uptime-prober -n pd-uptime-prober
+tntc run uptime-prober -n pd-uptime-prober
 ```
 
 **Expected outcomes:**
@@ -244,17 +244,17 @@ pipedreamer run uptime-prober -n pd-uptime-prober
 
 ### Step 6: Document Upgrade Process
 
-**Goal:** Capture the migration steps so the pipedreamer skill can guide users through upgrades.
+**Goal:** Capture the migration steps so the tentacular skill can guide users through upgrades.
 
 **Required documentation:**
 
-1. **In `pipedreamer-skill/references/deployment-guide.md`:**
+1. **In `tentacular-skill/references/deployment-guide.md`:**
    - Add "Migrating from Monolithic to Fast Deploy" section
    - Step-by-step: build base image → deploy with fast-deploy → verify
 
-2. **In `pipedreamer-skill/SKILL.md`:**
+2. **In `tentacular-skill/SKILL.md`:**
    - Update "Common Workflow" section to emphasize one-time build + rapid deploys
-   - Add callout about `.pipedreamer/base-image.txt` role
+   - Add callout about `.tentacular/base-image.txt` role
 
 3. **In `docs/roadmap.md`:**
    - Mark "Pre-Built Base Image with Dynamic Workflow Loading" as **RESOLVED**
@@ -278,31 +278,31 @@ version: "1.0"
 **What it does:**
 - Required (validation error if missing)
 - Must be semver format (enforced by regex)
-- Displayed in `pipedreamer validate` output
+- Displayed in `tntc validate` output
 
 **What it doesn't do:**
 - **Not used for image tagging** (engine image is workflow-agnostic now)
 - **Not used for ConfigMap naming** (ConfigMap is always `{name}-code`)
 - **Not used for deployment versioning** (Deployment name is just `{name}`)
 - **Not tracked in K8s metadata** (no labels or annotations capture version)
-- **No rollback mechanism** (can't `pipedreamer deploy --version 1.0` to go back)
+- **No rollback mechanism** (can't `tntc deploy --version 1.0` to go back)
 - **No audit trail** (can't see what version is currently deployed)
 
 ### Gaps Identified
 
 1. **No deployed version tracking**
-   - When you run `pipedreamer status uptime-prober`, it doesn't show which version is deployed
+   - When you run `tntc status uptime-prober`, it doesn't show which version is deployed
    - K8s manifests don't include version labels
    - No way to query "what version of this workflow is running?"
 
 2. **No rollback support**
    - ConfigMap updates are destructive (old content is lost)
-   - Can't say `pipedreamer deploy --version 1.0` to revert
+   - Can't say `tntc deploy --version 1.0` to revert
    - Would need to manually restore old workflow files and redeploy
 
 3. **No version history**
    - No record of what changed between versions
-   - No `pipedreamer versions <workflow>` command to list deployed versions
+   - No `tntc versions <workflow>` command to list deployed versions
    - No integration with git tags or releases
 
 4. **No A/B testing or canary deploys**
@@ -325,8 +325,8 @@ version: "1.0"
 
 **Proposal:**
 1. Add `app.kubernetes.io/version` label to all generated K8s resources (Deployment, Service, ConfigMap, CronJobs)
-2. `pipedreamer status <name>` should display the deployed version
-3. `pipedreamer list` should show version column
+2. `tntc status <name>` should display the deployed version
+3. `tntc list` should show version column
 
 **Benefits:**
 - Visibility into what's deployed
@@ -358,7 +358,7 @@ version: "1.0"
 **Problem:** No way to see what versions have been deployed or what changed between them.
 
 **Proposal:**
-Add `pipedreamer versions <name>` command:
+Add `tntc versions <name>` command:
 - Lists all ConfigMaps matching `{name}-code-*` pattern
 - Shows version, creation timestamp, size
 - Optional `--diff v1 v2` flag to show code differences
@@ -373,7 +373,7 @@ Add `pipedreamer versions <name>` command:
 **Problem:** No way to revert to a previous version after a bad deploy.
 
 **Proposal:**
-Add `pipedreamer rollback <name> --version <version>` command:
+Add `tntc rollback <name> --version <version>` command:
 1. Finds ConfigMap `{name}-code-{version}`
 2. Patches Deployment to reference it
 3. Runs rollout restart
@@ -393,7 +393,7 @@ Add `pipedreamer rollback <name> --version <version>` command:
 ### Risk: Base Image Pull Failures
 - **Symptom:** Deployment pods fail with ImagePullBackOff
 - **Mitigation:** `imagePullPolicy: Always` is already set in manifests (from our previous fixes)
-- **Validation:** Check pod events with `pipedreamer status --detail`
+- **Validation:** Check pod events with `tntc status --detail`
 
 ### Risk: ConfigMap Size Limit
 - **Symptom:** Deploy fails with "ConfigMap exceeds 900KB" error
@@ -415,7 +415,7 @@ Add `pipedreamer rollback <name> --version <version>` command:
 ## Success Criteria
 
 - [ ] Base engine image built and pushed to cluster registry
-- [ ] `.pipedreamer/base-image.txt` contains correct image reference
+- [ ] `.tentacular/base-image.txt` contains correct image reference
 - [ ] uptime-prober v2 deployed with ConfigMap architecture
 - [ ] Deployment uses base engine image (not monolithic)
 - [ ] ConfigMap `uptime-prober-code` exists and contains workflow.yaml + nodes
@@ -441,7 +441,7 @@ docker images | grep uptime-prober
 docker rmi <old-image-id>
 ```
 
-The old image tag pattern was `uptime-prober:1-0`. With fast deploy, we only need `pipedreamer-engine:latest`.
+The old image tag pattern was `uptime-prober:1-0`. With fast deploy, we only need `tentacular-engine:latest`.
 
 ---
 
@@ -453,7 +453,7 @@ After uptime-prober v2 is validated:
 2. **Update all example workflows** to use fast deploy architecture
 3. **Implement versioned ConfigMaps** (roadmap item)
 4. **Add version tracking to deployment metadata** (roadmap item)
-5. **Build `pipedreamer rollback` command** (roadmap item)
+5. **Build `tntc rollback` command** (roadmap item)
 
 ---
 
@@ -461,7 +461,7 @@ After uptime-prober v2 is validated:
 
 - [Fast Deploy Design (base-engine-image)](../openspec/changes/archive/2026-02-09-base-engine-image/design.md)
 - [Fast Deploy Design (configmap-code-deploy)](../openspec/changes/archive/2026-02-09-configmap-code-deploy/design.md)
-- [Deployment Guide](../pipedreamer-skill/references/deployment-guide.md)
+- [Deployment Guide](../tentacular-skill/references/deployment-guide.md)
 - [Roadmap](roadmap.md)
 
 ---
@@ -479,7 +479,7 @@ During Step 1 deployment, discovered that Kubernetes ConfigMap data keys **canno
 
 ### Steps Completed
 
-- [x] **Step 1:** Built engine-only base image (`pipedreamer-engine:latest`)
+- [x] **Step 1:** Built engine-only base image (`tentacular-engine:latest`)
 - [x] **Step 2:** Endpoint list kept as test URLs (example.com, google.com, invalid domain)
 - [x] **Step 3:** Deployed v2 with ConfigMap architecture - SUCCESS
   - All 4 nodes executed
@@ -503,7 +503,7 @@ Edit code → docker build (30-60s) → docker push (10-30s) → kubectl apply �
 
 **New flow (fast-deploy):**
 ```
-Edit code → pipedreamer deploy (ConfigMap update + rollout) = ~5-10 seconds ⚡
+Edit code → tntc deploy (ConfigMap update + rollout) = ~5-10 seconds ⚡
 ```
 
 **Improvement: 10-12x faster iteration**
@@ -512,7 +512,7 @@ Edit code → pipedreamer deploy (ConfigMap update + rollout) = ~5-10 seconds �
 
 - [x] `openspec/changes/archive/2026-02-09-configmap-code-deploy/design.md` - Corrected Decision 1 with actual implementation
 - [x] `openspec/specs/configmap-code-delivery/spec.md` - Updated scenarios to reflect flattened keys
-- [x] `pipedreamer-skill/references/deployment-guide.md` - Updated ConfigMap and Deployment examples
+- [x] `tentacular-skill/references/deployment-guide.md` - Updated ConfigMap and Deployment examples
 - [x] `docs/roadmap.md` - Documented the bug and fix (already done earlier)
 - [x] This plan document - Marked as complete
 

@@ -1,4 +1,4 @@
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 interface ReportInput {
   alert: boolean;
@@ -76,7 +76,7 @@ export default async function run(ctx: Context, input: unknown): Promise<{ deliv
   blocks.push({
     type: "context",
     elements: [
-      { type: "mrkdwn", text: `pipedreamer/uptime-prober v1.0 | ${ts} PT` },
+      { type: "mrkdwn", text: `tentacular/uptime-prober v1.0 | ${ts} PT` },
     ],
   });
 

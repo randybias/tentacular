@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/randyb/pipedreamer2/pkg/builder"
-	"github.com/randyb/pipedreamer2/pkg/k8s"
-	"github.com/randyb/pipedreamer2/pkg/spec"
+	"github.com/randybias/tentacular/pkg/builder"
+	"github.com/randybias/tentacular/pkg/k8s"
+	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -20,7 +20,7 @@ func NewDeployCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runDeploy,
 	}
-	cmd.Flags().String("image", "", "Base engine image (default: read from .pipedreamer/base-image.txt or use pipedreamer-engine:latest)")
+	cmd.Flags().String("image", "", "Base engine image (default: read from .tentacular/base-image.txt or use tentacular-engine:latest)")
 	cmd.Flags().String("cluster-registry", "", "DEPRECATED: Use --image instead")
 	cmd.Flags().String("runtime-class", "gvisor", "RuntimeClass name (empty to disable)")
 	return cmd
@@ -58,18 +58,18 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--cluster-registry is deprecated; use --image instead")
 	}
 
-	// Image resolution cascade: --image flag > .pipedreamer/base-image.txt > pipedreamer-engine:latest
+	// Image resolution cascade: --image flag > .tentacular/base-image.txt > tentacular-engine:latest
 	imageTag := imageFlagValue
 	if imageTag == "" {
-		// Try reading from .pipedreamer/base-image.txt
-		tagFilePath := ".pipedreamer/base-image.txt"
+		// Try reading from .tentacular/base-image.txt
+		tagFilePath := ".tentacular/base-image.txt"
 		if tagData, err := os.ReadFile(tagFilePath); err == nil {
 			imageTag = strings.TrimSpace(string(tagData))
 		}
 	}
 	if imageTag == "" {
 		// Fallback to default
-		imageTag = "pipedreamer-engine:latest"
+		imageTag = "tentacular-engine:latest"
 	}
 
 	// Generate ConfigMap for workflow code

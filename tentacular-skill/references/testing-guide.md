@@ -1,6 +1,6 @@
 # Testing Guide
 
-How to write and run tests for Pipedreamer workflows.
+How to write and run tests for Tentacular workflows.
 
 ## Fixture Format
 
@@ -34,21 +34,21 @@ tests/fixtures/
 Run tests for all nodes:
 
 ```bash
-pipedreamer test [dir]
+tntc test [dir]
 ```
 
 Run tests for a specific node:
 
 ```bash
-pipedreamer test [dir]/<node>
+tntc test [dir]/<node>
 ```
 
 Examples:
 
 ```bash
-pipedreamer test                    # test all nodes in current directory
-pipedreamer test ./my-workflow      # test all nodes in my-workflow/
-pipedreamer test ./my-workflow/fetch-data  # test only the fetch-data node
+tntc test                    # test all nodes in current directory
+tntc test ./my-workflow      # test all nodes in my-workflow/
+tntc test ./my-workflow/fetch-data  # test only the fetch-data node
 ```
 
 The test runner for each node:
@@ -79,8 +79,8 @@ The CLI exits with code 1 if any test fails.
 Run the full DAG end-to-end:
 
 ```bash
-pipedreamer test --pipeline
-pipedreamer test ./my-workflow --pipeline
+tntc test --pipeline
+tntc test ./my-workflow --pipeline
 ```
 
 Pipeline testing:
@@ -98,7 +98,7 @@ The testing framework provides `createMockContext()` for isolated node testing.
 ### createMockContext()
 
 ```typescript
-import { createMockContext } from "pipedreamer/testing/mocks";
+import { createMockContext } from "tentacular/testing/mocks";
 
 const ctx = createMockContext();
 ```
@@ -163,7 +163,7 @@ ctx._setFetchResponse(
 Convenience function for creating mock Response objects:
 
 ```typescript
-import { mockFetchResponse } from "pipedreamer/testing/mocks";
+import { mockFetchResponse } from "tentacular/testing/mocks";
 
 const response = mockFetchResponse({ items: [1, 2, 3] });       // 200 OK
 const errorResponse = mockFetchResponse({ error: "not found" }, 404);  // 404
@@ -226,7 +226,7 @@ my-workflow/
 Run all tests:
 
 ```bash
-$ pipedreamer test
+$ tntc test
 --- Test Results ---
   ✓ fetch-data: fetch-data.json (8ms)
   ✓ fetch-data: fetch-data-empty.json (2ms)

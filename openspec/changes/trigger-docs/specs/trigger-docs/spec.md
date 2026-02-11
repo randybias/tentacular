@@ -15,14 +15,14 @@ A `docs/roadmap.md` SHALL document future enhancements including webhook bridge,
 - **THEN** they find planned enhancements for webhook, JetStream, and DLQ
 
 ### Requirement: Skill file documents triggers
-The `pipedreamer-skill/SKILL.md` SHALL include trigger types, NATS configuration, config block documentation, and the full trigger lifecycle.
+The `tentacular-skill/SKILL.md` SHALL include trigger types, NATS configuration, config block documentation, and the full trigger lifecycle.
 
 #### Scenario: Skill file has trigger info
 - **WHEN** an AI assistant reads SKILL.md
 - **THEN** it can explain all trigger types and how to configure them
 
 ### Requirement: Deployment guide covers triggers
-The `pipedreamer-skill/references/deployment-guide.md` SHALL include sections on cron trigger deployment, NATS connection setup, and undeploy cleanup.
+The `tentacular-skill/references/deployment-guide.md` SHALL include sections on cron trigger deployment, NATS connection setup, and undeploy cleanup.
 
 #### Scenario: Deployment guide has trigger sections
 - **WHEN** a developer reads the deployment guide

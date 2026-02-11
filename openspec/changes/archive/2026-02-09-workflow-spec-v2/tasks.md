@@ -15,7 +15,7 @@
 
 ## 3. CLI Command
 
-- [x] 3.1 Implement `pipedreamer validate [dir]` in `pkg/cli/validate.go` that reads workflow.yaml and calls `spec.Parse()`
+- [x] 3.1 Implement `tntc validate [dir]` in `pkg/cli/validate.go` that reads workflow.yaml and calls `spec.Parse()`
 - [x] 3.2 Print validation errors to stderr and success message to stdout
 - [x] 3.3 Support optional directory argument (default to current directory)
 
@@ -30,6 +30,6 @@
 
 ## 5. Integration Verification
 
-- [x] 5.1 Verify `go build ./cmd/pipedreamer/` compiles successfully
+- [x] 5.1 Verify `go build ./cmd/tntc/` compiles successfully
 - [x] 5.2 Verify `go test ./pkg/spec/ -v` passes all tests
-- [x] 5.3 Verify `pipedreamer validate` works end-to-end with a scaffolded workflow
+- [x] 5.3 Verify `tntc validate` works end-to-end with a scaffolded workflow

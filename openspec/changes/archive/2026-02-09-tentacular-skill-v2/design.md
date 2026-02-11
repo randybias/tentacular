@@ -1,13 +1,13 @@
 ## Context
 
-Pipedreamer v2 is a two-component workflow system: a Go CLI (`cmd/pipedreamer/`, `pkg/`) for management and a Deno/TypeScript engine (`engine/`) for execution. The codebase is fully implemented across 8 prior changes covering project foundation, workflow spec parsing, DAG compiler/executor, node contract and Context API, dev command with hot-reload, cluster readiness, testing framework, and build/deploy pipeline.
+Tentacular is a two-component workflow system: a Go CLI (`cmd/tntc/`, `pkg/`) for management and a Deno/TypeScript engine (`engine/`) for execution. The codebase is fully implemented across 8 prior changes covering project foundation, workflow spec parsing, DAG compiler/executor, node contract and Context API, dev command with hot-reload, cluster readiness, testing framework, and build/deploy pipeline.
 
-AI agents currently must read raw source files (Go and TypeScript) to understand how to author workflows. There is no centralized, structured documentation optimized for agent consumption. This change creates a `pipedreamer-skill/` directory containing a SKILL.md entry point and a `references/` subdirectory with detailed guides, all derived from the existing source code.
+AI agents currently must read raw source files (Go and TypeScript) to understand how to author workflows. There is no centralized, structured documentation optimized for agent consumption. This change creates a `tentacular-skill/` directory containing a SKILL.md entry point and a `references/` subdirectory with detailed guides, all derived from the existing source code.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Create a single SKILL.md entry point that an AI agent reads first to understand the full Pipedreamer v2 system
+- Create a single SKILL.md entry point that an AI agent reads first to understand the full Tentacular system
 - Provide a quick-reference table of all CLI commands with flags, usage, and examples
 - Document the complete workflow.yaml specification with field types, validation rules, and annotated examples
 - Document the node development contract (function signature, Context API, data passing, error handling)
@@ -24,7 +24,7 @@ AI agents currently must read raw source files (Go and TypeScript) to understand
 ## Decisions
 
 ### Decision 1: SKILL.md + references/ directory structure
-**Choice:** A top-level `pipedreamer-skill/SKILL.md` that provides an overview and quick reference, with `pipedreamer-skill/references/` containing four detailed guides.
+**Choice:** A top-level `tentacular-skill/SKILL.md` that provides an overview and quick reference, with `tentacular-skill/references/` containing four detailed guides.
 **Rationale:** Agents work best with a clear entry point that gives them the 80% view, then lets them drill into specifics. The SKILL.md covers what an agent needs for most tasks (command syntax, node contract boilerplate, workflow.yaml skeleton). The references/ subdirectory is for when the agent needs deeper understanding of a specific area. This matches the pattern used by other agent-skill repositories.
 **Alternative considered:** A single monolithic SKILL.md -- rejected because it would be too large for efficient agent context window usage. Agents should only load the reference they need.
 
@@ -38,12 +38,12 @@ AI agents currently must read raw source files (Go and TypeScript) to understand
 
 ### Decision 4: Deployment guide includes security model
 **Choice:** The deployment guide documents the Fortress security model (Deno permissions, distroless container, gVisor sandbox) as part of the deployment documentation rather than as a separate reference.
-**Rationale:** Security is inseparable from deployment in Pipedreamer. The Deno permission flags, distroless base image, and gVisor RuntimeClass are all configured during the build/deploy process. Agents need this context when generating Dockerfiles or K8s manifests.
+**Rationale:** Security is inseparable from deployment in Tentacular. The Deno permission flags, distroless base image, and gVisor RuntimeClass are all configured during the build/deploy process. Agents need this context when generating Dockerfiles or K8s manifests.
 
 ## Architecture
 
 ```
-pipedreamer-skill/
+tentacular-skill/
   SKILL.md                           # Entry point: overview, CLI quick-ref, node contract, workflow skeleton
   references/
     workflow-spec.md                  # Complete workflow.yaml specification

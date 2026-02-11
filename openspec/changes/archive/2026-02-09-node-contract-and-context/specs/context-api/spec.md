@@ -103,10 +103,10 @@ The `loadSecrets(path)` function SHALL load secrets from a directory of files (K
 - **THEN** it SHALL auto-detect whether `path` is a file or directory and use the appropriate loading strategy
 
 ### Requirement: Public module exports
-The `engine/mod.ts` SHALL export `Context`, `Logger`, and `NodeFunction` types so that node authors can import them from `"pipedreamer"`.
+The `engine/mod.ts` SHALL export `Context`, `Logger`, and `NodeFunction` types so that node authors can import them from `"tentacular"`.
 
 #### Scenario: Context type import
-- **WHEN** a node file contains `import type { Context } from "pipedreamer"`
+- **WHEN** a node file contains `import type { Context } from "tentacular"`
 - **THEN** the import SHALL resolve to the Context interface defined in `engine/types.ts`
 
 #### Scenario: All node-author types available

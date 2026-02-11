@@ -26,7 +26,7 @@ The `pkg/builder/k8s.go` `GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, 
 
 #### Scenario: ConfigMap labels
 - **WHEN** `GenerateCodeConfigMap()` is called for workflow `my-workflow`
-- **THEN** the ConfigMap SHALL have labels `app.kubernetes.io/name: my-workflow` and `app.kubernetes.io/managed-by: pipedreamer`
+- **THEN** the ConfigMap SHALL have labels `app.kubernetes.io/name: my-workflow` and `app.kubernetes.io/managed-by: tentacular`
 
 ### Requirement: ConfigMap size validation
 The `GenerateCodeConfigMap()` function SHALL return an error if total data size exceeds 900KB.

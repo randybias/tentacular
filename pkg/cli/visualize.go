@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/randyb/pipedreamer2/pkg/spec"
+	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
 )
 

@@ -1,4 +1,4 @@
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 /** Digest summary from upstream summarize node */
 interface DigestSummary {

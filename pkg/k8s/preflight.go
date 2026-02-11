@@ -29,7 +29,7 @@ func CheckResultsJSON(results []CheckResult) string {
 	return string(data)
 }
 
-// PreflightCheck validates cluster readiness for pipedreamer deployments.
+// PreflightCheck validates cluster readiness for tentacular deployments.
 // secretNames is an optional list of K8s Secret names to verify in the target namespace.
 func (c *Client) PreflightCheck(namespace string, autoFix bool, secretNames []string) ([]CheckResult, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

@@ -1,17 +1,17 @@
 ## Context
 
-Pipedreamer v2 has a working engine (DAG compiler, SimpleExecutor, context system, dynamic node loader), a Go CLI with validate/dev/test commands, and a testing framework with fixture loading and mock context. However, the `examples/` directory is empty. There is no reference workflow that ties these components together, and no integration-level proof that the full stack works end-to-end.
+Tentacular has a working engine (DAG compiler, SimpleExecutor, context system, dynamic node loader), a Go CLI with validate/dev/test commands, and a testing framework with fixture loading and mock context. However, the `examples/` directory is empty. There is no reference workflow that ties these components together, and no integration-level proof that the full stack works end-to-end.
 
-The `pipedreamer init` command scaffolds a minimal single-node workflow, but a real-world example with multiple nodes, edges, typed data passing, external API calls, and test fixtures is needed to demonstrate the platform's value and validate the toolchain.
+The `tntc init` command scaffolds a minimal single-node workflow, but a real-world example with multiple nodes, edges, typed data passing, external API calls, and test fixtures is needed to demonstrate the platform's value and validate the toolchain.
 
 ## Goals / Non-Goals
 
 **Goals:**
 - Create a github-digest example that demonstrates all three node archetypes: source (external API), transform (pure data), and sink (outbound delivery)
-- Provide complete test fixtures that work with `pipedreamer test`
-- Ensure `pipedreamer validate`, `pipedreamer test`, and `pipedreamer dev` all succeed against this example
+- Provide complete test fixtures that work with `tntc test`
+- Ensure `tntc validate`, `tntc test`, and `tntc dev` all succeed against this example
 - Include documentation comments in every TypeScript file that teach node authoring patterns
-- Establish a reference structure that `pipedreamer init` could eventually generate as a "full example" template
+- Establish a reference structure that `tntc init` could eventually generate as a "full example" template
 
 **Non-Goals:**
 - Actually calling the GitHub API or Slack webhooks during tests (fixtures and mocks handle this)
@@ -39,10 +39,10 @@ The `pipedreamer init` command scaffolds a minimal single-node workflow, but a r
 
 ### Decision 5: Manual and cron triggers
 **Choice:** The workflow.yaml declares two triggers: `{ type: manual }` and `{ type: cron, schedule: "0 9 * * 1" }` (every Monday at 9am).
-**Rationale:** Demonstrates that workflows can have multiple triggers. Manual is useful for development (`pipedreamer dev`), cron is the realistic production trigger for a weekly digest. Webhook trigger is omitted because it requires additional path configuration that is not relevant to this example's focus.
+**Rationale:** Demonstrates that workflows can have multiple triggers. Manual is useful for development (`tntc dev`), cron is the realistic production trigger for a weekly digest. Webhook trigger is omitted because it requires additional path configuration that is not relevant to this example's focus.
 
 ## Risks / Trade-offs
 
 - **GitHub API structure may change** -> The fixture data uses a simplified subset of the real GitHub API response shape. This is fine because the nodes never actually call the real API; fixtures and mocks provide the data. If someone tries to run the example against real GitHub, the node code documents the expected response shape.
-- **Example may drift from engine changes** -> If engine types or context APIs change in future changes, the example may break. Mitigated by the verification tasks: `pipedreamer validate` and `pipedreamer test` will catch drift immediately.
+- **Example may drift from engine changes** -> If engine types or context APIs change in future changes, the example may break. Mitigated by the verification tasks: `tntc validate` and `tntc test` will catch drift immediately.
 - **Single example may be insufficient** -> One example cannot demonstrate every feature (parallel stages, webhook triggers, secrets, error recovery). This is acceptable; the github-digest covers the most common patterns. Additional examples can be added in future changes.

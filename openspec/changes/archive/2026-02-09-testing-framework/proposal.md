@@ -1,6 +1,6 @@
 ## Why
 
-Pipedreamer v2 workflows are composed of TypeScript nodes wired into a DAG. Developers need a way to test nodes in isolation with fixture data, run full pipeline tests with mocked external calls, and get clear pass/fail/timing reports -- all from the CLI. Without a built-in testing framework, workflow authors must roll their own test harnesses, leading to inconsistent quality practices and slower iteration.
+Tentacular workflows are composed of TypeScript nodes wired into a DAG. Developers need a way to test nodes in isolation with fixture data, run full pipeline tests with mocked external calls, and get clear pass/fail/timing reports -- all from the CLI. Without a built-in testing framework, workflow authors must roll their own test harnesses, leading to inconsistent quality practices and slower iteration.
 
 ## What Changes
 
@@ -8,7 +8,7 @@ Pipedreamer v2 workflows are composed of TypeScript nodes wired into a DAG. Deve
 - **Pipeline test runner** (same file, `--pipeline` flag): Compiles the full DAG, loads all node modules, creates a mock context, and executes end-to-end through the SimpleExecutor with mocked fetch calls.
 - **Test fixture format** (`engine/testing/fixtures.ts`): JSON files with `{ "input": ..., "expected": ... }` loaded from `tests/fixtures/`.
 - **Mock Context** (`engine/testing/mocks.ts`): Provides a `createMockContext()` that captures log calls and returns mock fetch responses, enabling isolated node testing without real HTTP calls.
-- **CLI test command** (`pkg/cli/test.go`): `pipedreamer test [dir][/<node>]` spawns `deno run engine/testing/runner.ts` with appropriate flags. Supports `--pipeline` flag for full DAG testing.
+- **CLI test command** (`pkg/cli/test.go`): `tntc test [dir][/<node>]` spawns `deno run engine/testing/runner.ts` with appropriate flags. Supports `--pipeline` flag for full DAG testing.
 - **Test report output**: Clear pass/fail per test with timing in milliseconds, summary count, and non-zero exit code on any failure.
 
 ## Capabilities

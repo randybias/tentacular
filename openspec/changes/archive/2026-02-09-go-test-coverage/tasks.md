@@ -24,4 +24,4 @@
 ## 4. Verification
 
 - [x] 4.1 Run `go test ./pkg/...` — 39 tests passing (6 spec + 18 builder + 12 secrets + 3 preflight)
-- [x] 4.2 Verify `go build ./cmd/pipedreamer/` still compiles
+- [x] 4.2 Verify `go build ./cmd/tntc/` still compiles

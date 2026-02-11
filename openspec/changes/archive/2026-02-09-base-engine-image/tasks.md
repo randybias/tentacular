@@ -10,8 +10,8 @@
 ## 2. Build Command Updates
 
 - [x] 2.1 Update `build.go` to call `builder.GenerateDockerfile()` with no arguments (line 73)
-- [x] 2.2 Change default tag from `wf.Name + ":" + version` to `pipedreamer-engine:latest` when `--tag` is not specified
-- [x] 2.3 After successful build (and push if requested), write the image tag to `.pipedreamer/base-image.txt` — create `.pipedreamer/` directory with `os.MkdirAll` if it doesn't exist
+- [x] 2.2 Change default tag from `wf.Name + ":" + version` to `tentacular-engine:latest` when `--tag` is not specified
+- [x] 2.3 After successful build (and push if requested), write the image tag to `.tentacular/base-image.txt` — create `.tentacular/` directory with `os.MkdirAll` if it doesn't exist
 - [x] 2.4 Remove the unused `fmt`, `os`, `path/filepath`, `strings` imports if they become unreferenced after the tag derivation change (keep only what's needed)
 
 ## 3. Update Existing Tests
@@ -33,5 +33,5 @@
 
 - [x] 5.1 Run `go test ./pkg/builder/...` and verify all tests pass
 - [x] 5.2 Run `go test ./pkg/cli/...` and verify build tests still compile (call signature change)
-- [x] 5.3 Run `go build -o pipedreamer ./cmd/pipedreamer/` and verify the binary compiles
-- [x] 5.4 Verify `.pipedreamer/` is in `.gitignore` — add if not present
+- [x] 5.3 Run `go build -o tntc ./cmd/tntc/` and verify the binary compiles
+- [x] 5.4 Verify `.tentacular/` is in `.gitignore` — add if not present

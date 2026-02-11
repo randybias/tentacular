@@ -1,8 +1,8 @@
 /**
- * Pipedreamer Engine — Public API
+ * Tentacular Engine — Public API
  *
  * This is the module that workflow nodes import from:
- *   import type { Context } from "pipedreamer";
+ *   import type { Context } from "tentacular";
  */
 
 // Core types for node authors

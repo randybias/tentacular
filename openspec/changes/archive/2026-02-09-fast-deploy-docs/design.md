@@ -1,12 +1,12 @@
 ## Context
 
 The Fast Deploy feature splits the monolithic Docker build into two layers:
-1. **Base engine image** (Phase 1): Engine-only Dockerfile, `pipedreamer-engine:latest`, no workflow code
+1. **Base engine image** (Phase 1): Engine-only Dockerfile, `tentacular-engine:latest`, no workflow code
 2. **ConfigMap code delivery** (Phase 2+3): Workflow code in ConfigMap, mounted at `/app/workflow/`, rollout restart
 
 Two documentation files need updating:
 - `docs/architecture.md` — Technical architecture reference (528 lines, covers system overview through extension points)
-- `pipedreamer-skill/references/deployment-guide.md` — Practical deployment guide (428 lines, covers build through security model)
+- `tentacular-skill/references/deployment-guide.md` — Practical deployment guide (428 lines, covers build through security model)
 
 Both docs currently describe the old monolithic flow: build bakes everything into one image, deploy uses `--cluster-registry` for image tags.
 
@@ -50,4 +50,4 @@ Both docs currently describe the old monolithic flow: build bakes everything int
 
 **[Risk] Documentation goes stale if code changes again** → Acceptable. Documentation is updated per-change via OpenSpec.
 
-**[Risk] Deployment guide references may be used by AI skill** → The `pipedreamer-skill/references/` path suggests this doc feeds an AI skill. Updates must be accurate and complete since they may be used for automated guidance.
+**[Risk] Deployment guide references may be used by AI skill** → The `tentacular-skill/references/` path suggests this doc feeds an AI skill. Updates must be accurate and complete since they may be used for automated guidance.

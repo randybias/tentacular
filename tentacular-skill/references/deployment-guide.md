@@ -1,11 +1,11 @@
 # Deployment Guide
 
-Build, deploy, and manage Pipedreamer workflows on Kubernetes.
+Build, deploy, and manage Tentacular workflows on Kubernetes.
 
 ## Build
 
 ```bash
-pipedreamer build [dir]
+tntc build [dir]
 ```
 
 Builds a container image for the workflow.
@@ -13,10 +13,10 @@ Builds a container image for the workflow.
 ### What It Does
 
 1. Parses and validates `workflow.yaml` (for project context validation).
-2. Generates an engine-only `Dockerfile.pipedreamer` (temporary, deleted after build).
+2. Generates an engine-only `Dockerfile.tentacular` (temporary, deleted after build).
 3. Copies the engine into the build context as `.engine/`.
 4. Runs `docker build` to produce the base engine image.
-5. Saves the image tag to `.pipedreamer/base-image.txt` for deploy to use.
+5. Saves the image tag to `.tentacular/base-image.txt` for deploy to use.
 
 ### Generated Dockerfile
 
@@ -48,23 +48,23 @@ The engine-only image contains no workflow code. Workflow code (workflow.yaml + 
 
 ### Image Tag
 
-Default tag: `pipedreamer-engine:latest` (engine-only, no workflow-specific versioning).
+Default tag: `tentacular-engine:latest` (engine-only, no workflow-specific versioning).
 
 Override with `--tag`:
 
 ```bash
-pipedreamer build --tag my-engine:v2.1
-pipedreamer build -r registry.example.com --tag my-engine:v2.1
+tntc build --tag my-engine:v2.1
+tntc build -r registry.example.com --tag my-engine:v2.1
 ```
 
 When `--registry` is set, the tag becomes `<registry>/<tag>`.
 
-The tag is saved to `.pipedreamer/base-image.txt` for `pipedreamer deploy` to use. Workflow-specific versioning is handled separately at deploy time via ConfigMap updates.
+The tag is saved to `.tentacular/base-image.txt` for `tntc deploy` to use. Workflow-specific versioning is handled separately at deploy time via ConfigMap updates.
 
 ## Deploy
 
 ```bash
-pipedreamer deploy [dir]
+tntc deploy [dir]
 ```
 
 Generates and applies Kubernetes manifests. Runs preflight checks automatically before applying.
@@ -83,7 +83,7 @@ metadata:
   namespace: <namespace>
   labels:
     app.kubernetes.io/name: <workflow-name>
-    app.kubernetes.io/managed-by: pipedreamer
+    app.kubernetes.io/managed-by: tentacular
 data:
   workflow.yaml: |
     name: my-workflow
@@ -107,7 +107,7 @@ metadata:
   namespace: <namespace>
   labels:
     app.kubernetes.io/name: <workflow-name>
-    app.kubernetes.io/managed-by: pipedreamer
+    app.kubernetes.io/managed-by: tentacular
 spec:
   replicas: 1
   selector:
@@ -178,13 +178,13 @@ spec:
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
 | `--namespace` | `-n` | `default` | Kubernetes namespace for deployment |
-| `--image` | | (cascade) | Base engine image tag. Resolves via: --image flag > .pipedreamer/base-image.txt > pipedreamer-engine:latest |
+| `--image` | | (cascade) | Base engine image tag. Resolves via: --image flag > .tentacular/base-image.txt > tentacular-engine:latest |
 | `--runtime-class` | | `gvisor` | RuntimeClass name for pod sandboxing (empty to disable) |
 
 ```bash
-pipedreamer deploy -n production
-pipedreamer deploy -n production --image my-registry.com/engine:v2
-pipedreamer deploy --runtime-class "" # disable gVisor
+tntc deploy -n production
+tntc deploy -n production --image my-registry.com/engine:v2
+tntc deploy --runtime-class "" # disable gVisor
 ```
 
 The `--cluster-registry` flag has been deprecated. Use `--image` to specify the full image reference.
@@ -197,15 +197,15 @@ The engine-only image architecture enables rapid code iteration without Docker r
 
 1. **Build the engine image once:**
    ```bash
-   pipedreamer build --push -r my-registry.com
+   tntc build --push -r my-registry.com
    ```
-   This produces `my-registry.com/pipedreamer-engine:latest` and saves the tag to `.pipedreamer/base-image.txt`.
+   This produces `my-registry.com/tentacular-engine:latest` and saves the tag to `.tentacular/base-image.txt`.
 
 2. **Edit workflow code** (workflow.yaml or nodes/*.ts files)
 
 3. **Deploy the changes:**
    ```bash
-   pipedreamer deploy
+   tntc deploy
    ```
    This updates the ConfigMap with new code and triggers a rollout restart. No Docker build needed!
 
@@ -226,7 +226,7 @@ Edit code → docker build (30-60s) → docker push (10-30s) → kubectl apply �
 
 **New flow (ConfigMap):**
 ```
-Edit code → pipedreamer deploy (ConfigMap update + rollout) = ~5-10s
+Edit code → tntc deploy (ConfigMap update + rollout) = ~5-10s
 ```
 
 The ConfigMap update is instant (YAML over HTTP), and the rollout restart triggers a pod restart without re-pulling the image.
@@ -234,7 +234,7 @@ The ConfigMap update is instant (YAML over HTTP), and the rollout restart trigge
 ## Cluster Check
 
 ```bash
-pipedreamer cluster check
+tntc cluster check
 ```
 
 Runs preflight validation to ensure the cluster is ready for deployment.
@@ -247,7 +247,7 @@ Runs preflight validation to ensure the cluster is ready for deployment.
 - Required Secrets exist (convention: `<workflow-name>-secrets`)
 - RBAC permissions (including `batch/cronjobs` and `batch/jobs` for cron triggers)
 
-Preflight checks run automatically during `pipedreamer deploy`. Failures abort the deploy with remediation instructions.
+Preflight checks run automatically during `tntc deploy`. Failures abort the deploy with remediation instructions.
 
 ### Flags
 
@@ -258,7 +258,7 @@ Preflight checks run automatically during `pipedreamer deploy`. Failures abort t
 | `-o` / `--output` | Output format: `text` or `json` |
 
 ```bash
-pipedreamer cluster check --fix -n production
+tntc cluster check --fix -n production
 ```
 
 Output format:
@@ -280,17 +280,17 @@ Post-deploy commands for managing workflows without kubectl.
 ### List Deployed Workflows
 
 ```bash
-pipedreamer list -n production
-pipedreamer list -n production -o json
+tntc list -n production
+tntc list -n production -o json
 ```
 
-Shows all pipedreamer-managed deployments with status, replicas, and age.
+Shows all tentacular-managed deployments with status, replicas, and age.
 
 ### Check Status
 
 ```bash
-pipedreamer status my-workflow -n production
-pipedreamer status my-workflow -n production --detail
+tntc status my-workflow -n production
+tntc status my-workflow -n production --detail
 ```
 
 Basic status shows readiness and replica count. `--detail` adds image, runtime class, resource limits, service endpoint, pod statuses, and recent K8s events.
@@ -298,8 +298,8 @@ Basic status shows readiness and replica count. `--detail` adds image, runtime c
 ### Trigger a Workflow
 
 ```bash
-pipedreamer run my-workflow -n production
-pipedreamer run my-workflow -n production --timeout 60s
+tntc run my-workflow -n production
+tntc run my-workflow -n production --timeout 60s
 ```
 
 Creates a temporary curl pod that POSTs to the workflow's ClusterIP service. Status messages go to stderr; the JSON result goes to stdout (pipe-friendly).
@@ -307,9 +307,9 @@ Creates a temporary curl pod that POSTs to the workflow's ClusterIP service. Sta
 ### View Logs
 
 ```bash
-pipedreamer logs my-workflow -n production
-pipedreamer logs my-workflow -n production --tail 50
-pipedreamer logs my-workflow -n production -f
+tntc logs my-workflow -n production
+tntc logs my-workflow -n production --tail 50
+tntc logs my-workflow -n production -f
 ```
 
 Shows logs from the first Running pod. `--tail` controls how many recent lines (default 100). `-f` streams logs in real time until interrupted.
@@ -317,8 +317,8 @@ Shows logs from the first Running pod. `--tail` controls how many recent lines (
 ### Remove a Workflow
 
 ```bash
-pipedreamer undeploy my-workflow -n production
-pipedreamer undeploy my-workflow -n production --yes
+tntc undeploy my-workflow -n production
+tntc undeploy my-workflow -n production --yes
 ```
 
 Deletes the Service, Deployment, Secret (`<name>-secrets`), and all CronJobs matching the workflow's labels. Prompts for confirmation unless `--yes` is passed. Resources that don't exist are silently skipped.
@@ -327,24 +327,24 @@ Deletes the Service, Deployment, Secret (`<name>-secrets`), and all CronJobs mat
 
 ```bash
 # Initial setup: validate and build engine image (one time)
-pipedreamer validate my-workflow
-pipedreamer build my-workflow -r my-registry.com --push
+tntc validate my-workflow
+tntc build my-workflow -r my-registry.com --push
 
 # Deploy workflow code (repeatable, fast)
-pipedreamer deploy my-workflow -n production --image my-registry.com/pipedreamer-engine:latest
+tntc deploy my-workflow -n production --image my-registry.com/tentacular-engine:latest
 
 # Operations
-pipedreamer list -n production
-pipedreamer status my-workflow -n production --detail
-pipedreamer run my-workflow -n production
-pipedreamer logs my-workflow -n production --tail 20
+tntc list -n production
+tntc status my-workflow -n production --detail
+tntc run my-workflow -n production
+tntc logs my-workflow -n production --tail 20
 
 # Edit workflow code, then redeploy (no build needed!)
 # ... edit nodes/fetch.ts ...
-pipedreamer deploy my-workflow -n production
+tntc deploy my-workflow -n production
 
 # Cleanup
-pipedreamer undeploy my-workflow -n production --yes
+tntc undeploy my-workflow -n production --yes
 ```
 
 After the initial `build`, subsequent code changes only require `deploy` (no Docker build/push).
@@ -353,7 +353,7 @@ After the initial `build`, subsequent code changes only require `deploy` (no Doc
 
 ### Cron Triggers
 
-Cron triggers generate K8s CronJob manifests automatically during `pipedreamer deploy`.
+Cron triggers generate K8s CronJob manifests automatically during `tntc deploy`.
 
 #### Setup
 
@@ -382,12 +382,12 @@ CronJob properties:
 - Target: `http://{wf}.{ns}.svc.cluster.local:8080/run`
 - `concurrencyPolicy: Forbid` (no overlapping runs)
 - `successfulJobsHistoryLimit: 3`, `failedJobsHistoryLimit: 3`
-- Labels: `app.kubernetes.io/name`, `app.kubernetes.io/managed-by: pipedreamer`
+- Labels: `app.kubernetes.io/name`, `app.kubernetes.io/managed-by: tentacular`
 
 #### Viewing CronJobs
 
 ```bash
-kubectl get cronjobs -n <namespace> -l app.kubernetes.io/managed-by=pipedreamer
+kubectl get cronjobs -n <namespace> -l app.kubernetes.io/managed-by=tentacular
 ```
 
 #### Parameterized Execution
@@ -449,18 +449,18 @@ On SIGTERM/SIGINT, the engine:
 
 ### Undeploy Cleanup
 
-`pipedreamer undeploy` removes all resources for a workflow:
+`tntc undeploy` removes all resources for a workflow:
 
 - Service
 - Deployment
 - Secret (`{name}-secrets`)
-- **All CronJobs** matching labels `app.kubernetes.io/name={name},app.kubernetes.io/managed-by=pipedreamer`
+- **All CronJobs** matching labels `app.kubernetes.io/name={name},app.kubernetes.io/managed-by=tentacular`
 
 CronJob cleanup uses label selectors, so it catches all CronJobs regardless of how many triggers existed.
 
 ## Security Model (Fortress)
 
-Pipedreamer uses a three-layer security model:
+Tentacular uses a three-layer security model:
 
 ### Layer 1: Deno Permission Flags
 
@@ -507,7 +507,7 @@ slack:
 
 The engine loads this file at startup. It is used by `ctx.secrets` and for `ctx.fetch` auth injection.
 
-Use `.secrets.yaml.example` (generated by `pipedreamer init`) as a template. Add `.secrets.yaml` to `.gitignore`.
+Use `.secrets.yaml.example` (generated by `tntc init`) as a template. Add `.secrets.yaml` to `.gitignore`.
 
 ### Production (Kubernetes)
 

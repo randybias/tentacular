@@ -1,10 +1,10 @@
 ## ADDED Requirements
 
 ### Requirement: Workflow YAML is valid v2 spec
-The `examples/github-digest/workflow.yaml` SHALL be a valid Pipedreamer v2 workflow specification that passes `pipedreamer validate`.
+The `examples/github-digest/workflow.yaml` SHALL be a valid Tentacular workflow specification that passes `tntc validate`.
 
 #### Scenario: Validate passes
-- **WHEN** `pipedreamer validate examples/github-digest` is executed
+- **WHEN** `tntc validate examples/github-digest` is executed
 - **THEN** the command SHALL exit with code 0 and report no validation errors
 
 #### Scenario: Workflow name and version
@@ -89,7 +89,7 @@ The `notify` node SHALL be a sink node that uses `ctx.fetch` to send the digest 
 - **THEN** it SHALL contain JSDoc comments explaining the node's purpose, inputs, and outputs
 
 ### Requirement: Test fixtures enable node-level testing
-The `examples/github-digest/tests/fixtures/` directory SHALL contain JSON fixture files for testing individual nodes with `pipedreamer test`.
+The `examples/github-digest/tests/fixtures/` directory SHALL contain JSON fixture files for testing individual nodes with `tntc test`.
 
 #### Scenario: fetch-repos fixture exists with correct structure
 - **WHEN** `tests/fixtures/fetch-repos.json` is loaded
@@ -103,20 +103,20 @@ The `examples/github-digest/tests/fixtures/` directory SHALL contain JSON fixtur
 - **WHEN** the fetch-repos fixture's `expected` output is compared to the summarize fixture's `input`
 - **THEN** the data shapes SHALL be compatible, demonstrating that data flows correctly through the DAG
 
-### Requirement: pipedreamer test passes with fixtures
-The `pipedreamer test` command SHALL successfully execute node-level tests against the github-digest example using the provided fixtures and mock context.
+### Requirement: tntc test passes with fixtures
+The `tntc test` command SHALL successfully execute node-level tests against the github-digest example using the provided fixtures and mock context.
 
 #### Scenario: Node tests pass
-- **WHEN** `pipedreamer test examples/github-digest` is executed
+- **WHEN** `tntc test examples/github-digest` is executed
 - **THEN** the command SHALL exit with code 0 and report passing tests for nodes that have fixtures
 
 #### Scenario: Test output shows timing
-- **WHEN** `pipedreamer test examples/github-digest` is executed
+- **WHEN** `tntc test examples/github-digest` is executed
 - **THEN** the output SHALL include per-node test timing in milliseconds and a pass/fail summary
 
-### Requirement: pipedreamer dev starts dev server
-The `pipedreamer dev` command SHALL successfully start the development server for the github-digest example workflow.
+### Requirement: tntc dev starts dev server
+The `tntc dev` command SHALL successfully start the development server for the github-digest example workflow.
 
 #### Scenario: Dev server starts
-- **WHEN** `pipedreamer dev examples/github-digest` is executed
+- **WHEN** `tntc dev examples/github-digest` is executed
 - **THEN** the command SHALL start the Deno engine with `--watch` flag and the workflow loaded, listening on the default port

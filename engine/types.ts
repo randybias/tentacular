@@ -1,4 +1,4 @@
-/** Core engine type definitions for Pipedreamer v2 */
+/** Core engine type definitions for Tentacular */
 
 /** Workflow specification parsed from workflow.yaml */
 export interface WorkflowSpec {

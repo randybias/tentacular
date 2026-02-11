@@ -11,7 +11,7 @@ Workflow nodes need a defined contract (function signature, default export) and 
   - `ctx.config` — node-specific configuration from `workflow.yaml`
   - `ctx.secrets` — workflow-level secrets loaded from file or K8s volume mount
 - **Secrets loading** — `.secrets.yaml` file for local development, K8s Secret volume mount directory for production. Single `loadSecrets(path)` function handles both formats.
-- **Public module exports** — `import { Context } from "pipedreamer"` resolves via the Deno import map to `engine/mod.ts`, which re-exports all node-author-facing types
+- **Public module exports** — `import { Context } from "tentacular"` resolves via the Deno import map to `engine/mod.ts`, which re-exports all node-author-facing types
 - **In-memory data passing** — node outputs are passed to downstream nodes in-memory via the executor; no persistence layer needed
 
 ## Capabilities

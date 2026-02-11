@@ -57,7 +57,7 @@ config:
 	}
 
 	// Write example node
-	helloNode := `import type { Context } from "pipedreamer";
+	helloNode := `import type { Context } from "tentacular";
 
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
   ctx.log.info("hello node executed");
@@ -101,7 +101,7 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 	fmt.Printf("  tests/fixtures/   — test fixtures\n")
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  cd %s\n", dir)
-	fmt.Printf("  pipedreamer validate\n")
-	fmt.Printf("  pipedreamer dev\n")
+	fmt.Printf("  tntc validate\n")
+	fmt.Printf("  tntc dev\n")
 	return nil
 }

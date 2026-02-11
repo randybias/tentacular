@@ -1,7 +1,7 @@
 ## 1. Workflow Spec
 
 - [x] 1.1 Create `examples/github-digest/workflow.yaml` with name "github-digest", semver version, manual + cron triggers, 3 nodes (fetch-repos, summarize, notify) with paths and capability declarations, 2 edges forming a linear DAG, and workflow config (timeout, retries)
-- [x] 1.2 Verify the workflow.yaml is valid by running `pipedreamer validate examples/github-digest`
+- [x] 1.2 Verify the workflow.yaml is valid by running `tntc validate examples/github-digest`
 
 ## 2. Node Implementations
 
@@ -17,7 +17,7 @@
 
 ## 4. Verification
 
-- [x] 4.1 Run `pipedreamer validate examples/github-digest` and confirm exit code 0
-- [x] 4.2 Run `pipedreamer test examples/github-digest` and confirm all fixture-based node tests pass with timing output
-- [x] 4.3 Run `pipedreamer dev examples/github-digest` and confirm the dev server starts successfully with the workflow loaded
+- [x] 4.1 Run `tntc validate examples/github-digest` and confirm exit code 0
+- [x] 4.2 Run `tntc test examples/github-digest` and confirm all fixture-based node tests pass with timing output
+- [x] 4.3 Run `tntc dev examples/github-digest` and confirm the dev server starts successfully with the workflow loaded
 - [x] 4.4 Review all three node files to confirm JSDoc documentation comments are present covering purpose, inputs, and outputs

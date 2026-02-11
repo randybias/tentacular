@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"path/filepath"
 
-	"github.com/randyb/pipedreamer2/pkg/builder"
-	"github.com/randyb/pipedreamer2/pkg/spec"
+	"github.com/randybias/tentacular/pkg/builder"
+	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
 )
 
@@ -18,7 +18,7 @@ func NewBuildCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runBuild,
 	}
-	cmd.Flags().StringP("tag", "t", "", "Image tag (default: pipedreamer-engine:latest)")
+	cmd.Flags().StringP("tag", "t", "", "Image tag (default: tentacular-engine:latest)")
 	cmd.Flags().Bool("push", false, "Push image to registry after build")
 	cmd.Flags().String("platform", "", "Target platform (e.g., linux/arm64)")
 	return cmd
@@ -52,7 +52,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	platform, _ := cmd.Flags().GetString("platform")
 
 	if tag == "" {
-		tag = "pipedreamer-engine:latest"
+		tag = "tentacular-engine:latest"
 	}
 	if registry != "" {
 		tag = registry + "/" + tag
@@ -70,7 +70,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	// Generate Dockerfile
 	dockerfile := builder.GenerateDockerfile()
-	dockerfilePath := filepath.Join(absDir, "Dockerfile.pipedreamer")
+	dockerfilePath := filepath.Join(absDir, "Dockerfile.tentacular")
 	if err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644); err != nil {
 		return fmt.Errorf("writing Dockerfile: %w", err)
 	}
@@ -116,12 +116,12 @@ func runBuild(cmd *cobra.Command, args []string) error {
 		fmt.Printf("✓ Pushed image: %s\n", tag)
 	}
 
-	// Save image tag to .pipedreamer/base-image.txt (relative to workflow directory)
-	pipedreamerDir := filepath.Join(absDir, ".pipedreamer")
-	if err := os.MkdirAll(pipedreamerDir, 0o755); err != nil {
-		return fmt.Errorf("creating .pipedreamer directory: %w", err)
+	// Save image tag to .tentacular/base-image.txt (relative to workflow directory)
+	tentacularDir := filepath.Join(absDir, ".tentacular")
+	if err := os.MkdirAll(tentacularDir, 0o755); err != nil {
+		return fmt.Errorf("creating .tentacular directory: %w", err)
 	}
-	tagFilePath := filepath.Join(pipedreamerDir, "base-image.txt")
+	tagFilePath := filepath.Join(tentacularDir, "base-image.txt")
 	if err := os.WriteFile(tagFilePath, []byte(tag), 0o644); err != nil {
 		return fmt.Errorf("writing base-image.txt: %w", err)
 	}

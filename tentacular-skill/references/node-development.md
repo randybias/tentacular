@@ -1,13 +1,13 @@
 # Node Development Reference
 
-Guide to writing Pipedreamer workflow nodes in TypeScript.
+Guide to writing Tentacular workflow nodes in TypeScript.
 
 ## Node Function Signature
 
 Every node must default-export an async function:
 
 ```typescript
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
   // Process input, use context, return output
@@ -213,7 +213,7 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 A node that fetches GitHub issues, filters them, and returns a summary:
 
 ```typescript
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 interface Issue {
   number: number;

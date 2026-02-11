@@ -88,20 +88,20 @@ The parser SHALL detect cycles in the workflow graph and report them as validati
 - **THEN** no cycle-related errors SHALL be present in the error slice
 
 ### Requirement: Validate CLI command
-The `pipedreamer validate [dir]` command SHALL read workflow.yaml from the specified directory (or current directory) and run the parser/validator.
+The `tntc validate [dir]` command SHALL read workflow.yaml from the specified directory (or current directory) and run the parser/validator.
 
 #### Scenario: Valid workflow
-- **WHEN** `pipedreamer validate` is run in a directory containing a valid workflow.yaml
+- **WHEN** `tntc validate` is run in a directory containing a valid workflow.yaml
 - **THEN** the command SHALL print a success message and exit with code 0
 
 #### Scenario: Invalid workflow
-- **WHEN** `pipedreamer validate` is run in a directory containing an invalid workflow.yaml
+- **WHEN** `tntc validate` is run in a directory containing an invalid workflow.yaml
 - **THEN** the command SHALL print validation errors to stderr and exit with a non-zero exit code
 
 #### Scenario: Missing workflow file
-- **WHEN** `pipedreamer validate` is run in a directory without workflow.yaml
+- **WHEN** `tntc validate` is run in a directory without workflow.yaml
 - **THEN** the command SHALL exit with an error indicating the file could not be read
 
 #### Scenario: Custom directory
-- **WHEN** `pipedreamer validate ./my-workflow` is run
+- **WHEN** `tntc validate ./my-workflow` is run
 - **THEN** the command SHALL look for `my-workflow/workflow.yaml`

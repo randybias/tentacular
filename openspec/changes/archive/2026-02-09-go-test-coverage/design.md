@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2's Go CLI has production code for K8s manifest generation (security contexts, probes, gVisor RuntimeClass), Dockerfile generation, deploy-time secret provisioning, and preflight check serialization. All of this code was written in changes 6-13 but shipped without test coverage. The existing 6 tests only cover `pkg/spec/parse.go`.
+Tentacular's Go CLI has production code for K8s manifest generation (security contexts, probes, gVisor RuntimeClass), Dockerfile generation, deploy-time secret provisioning, and preflight check serialization. All of this code was written in changes 6-13 but shipped without test coverage. The existing 6 tests only cover `pkg/spec/parse.go`.
 
 ## Goals / Non-Goals
 

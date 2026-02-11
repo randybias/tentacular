@@ -1,10 +1,10 @@
 ## Why
 
-Before deploying workflows to Kubernetes, operators need confidence that the target cluster meets all prerequisites. Today, failures surface only at deploy time with opaque K8s API errors. A dedicated preflight check command (`pipedreamer cluster check`) provides clear, actionable pass/fail output before any deployment attempt, reducing debugging time and preventing partial deployments into misconfigured clusters.
+Before deploying workflows to Kubernetes, operators need confidence that the target cluster meets all prerequisites. Today, failures surface only at deploy time with opaque K8s API errors. A dedicated preflight check command (`tntc cluster check`) provides clear, actionable pass/fail output before any deployment attempt, reducing debugging time and preventing partial deployments into misconfigured clusters.
 
 ## What Changes
 
-- **New `pipedreamer cluster check` CLI command** — runs a suite of preflight validations against the target Kubernetes cluster and reports pass/fail with remediation guidance
+- **New `tntc cluster check` CLI command** — runs a suite of preflight validations against the target Kubernetes cluster and reports pass/fail with remediation guidance
 - **K8s API reachability check** — verifies the cluster API server is reachable via kubeconfig or in-cluster config
 - **gVisor RuntimeClass check** — confirms the `gvisor` RuntimeClass exists (required for Fortress deployment pattern sandbox isolation)
 - **Namespace existence check** — verifies the target namespace exists in the cluster

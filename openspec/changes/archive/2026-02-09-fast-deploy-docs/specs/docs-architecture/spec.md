@@ -5,7 +5,7 @@ The "Build Phase" section in `docs/architecture.md` SHALL describe the engine-on
 
 #### Scenario: Build phase steps
 - **WHEN** the "Build Phase" section is read
-- **THEN** it SHALL describe: generate engine-only Dockerfile, copy engine to build context, `docker build` produces base image, default tag `pipedreamer-engine:latest`, image tag saved to `.pipedreamer/base-image.txt`
+- **THEN** it SHALL describe: generate engine-only Dockerfile, copy engine to build context, `docker build` produces base image, default tag `tentacular-engine:latest`, image tag saved to `.tentacular/base-image.txt`
 - **AND** it SHALL NOT mention copying workflow.yaml or nodes/ into the build context
 
 ### Requirement: Architecture doc describes ConfigMap deploy phase
@@ -13,7 +13,7 @@ The "Deploy Phase" section SHALL describe ConfigMap generation, image resolution
 
 #### Scenario: Deploy phase steps
 - **WHEN** the "Deploy Phase" section is read
-- **THEN** it SHALL describe: parse workflow.yaml, resolve base image via cascade (`--image` > `.pipedreamer/base-image.txt` > `pipedreamer-engine:latest`), generate ConfigMap from workflow code, generate K8s manifests, apply all, rollout restart
+- **THEN** it SHALL describe: parse workflow.yaml, resolve base image via cascade (`--image` > `.tentacular/base-image.txt` > `tentacular-engine:latest`), generate ConfigMap from workflow code, generate K8s manifests, apply all, rollout restart
 - **AND** it SHALL NOT reference `--cluster-registry`
 
 ### Requirement: Generated K8s Resources table includes ConfigMap

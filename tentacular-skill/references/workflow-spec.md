@@ -1,6 +1,6 @@
 # Workflow Specification Reference
 
-Complete reference for the Pipedreamer v2 `workflow.yaml` format.
+Complete reference for the Tentacular `workflow.yaml` format.
 
 ## Top-Level Fields
 

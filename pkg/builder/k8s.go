@@ -7,7 +7,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/randyb/pipedreamer2/pkg/spec"
+	"github.com/randybias/tentacular/pkg/spec"
 )
 
 // Manifest is a raw K8s manifest as YAML string.
@@ -80,7 +80,7 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 	}
 
 	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
-    app.kubernetes.io/managed-by: pipedreamer`, wf.Name)
+    app.kubernetes.io/managed-by: tentacular`, wf.Name)
 
 	content := fmt.Sprintf(`apiVersion: v1
 kind: ConfigMap
@@ -117,7 +117,7 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	var manifests []Manifest
 
 	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
-    app.kubernetes.io/managed-by: pipedreamer`, wf.Name)
+    app.kubernetes.io/managed-by: tentacular`, wf.Name)
 
 	// RuntimeClass line (conditional)
 	runtimeClassLine := ""

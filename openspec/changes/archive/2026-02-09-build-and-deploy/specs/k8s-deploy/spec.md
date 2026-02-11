@@ -23,11 +23,11 @@ The `pkg/builder/k8s.go` `GenerateK8sManifests()` function SHALL generate a Depl
   - Use the provided `imageTag` as the image
   - Expose `containerPort: 8080` with `protocol: TCP`
 
-#### Scenario: Pipedreamer labels
+#### Scenario: Tentacular labels
 - **WHEN** a Deployment manifest is generated
 - **THEN** both the Deployment and Pod template SHALL have labels:
   - `app.kubernetes.io/name: <workflow-name>`
-  - `app.kubernetes.io/managed-by: pipedreamer`
+  - `app.kubernetes.io/managed-by: tentacular`
 
 #### Scenario: Resource limits
 - **WHEN** a Deployment manifest is generated
@@ -81,34 +81,34 @@ Secrets SHALL be mounted from a K8s Secret as a read-only volume, never as envir
 - **THEN** the pod spec SHALL include an `emptyDir` volume mounted at `/tmp` for temporary file writes
 
 ### Requirement: Deploy command applies manifests via client-go
-The `pipedreamer deploy` command SHALL generate K8s manifests and apply them to the cluster using client-go.
+The `tntc deploy` command SHALL generate K8s manifests and apply them to the cluster using client-go.
 
 #### Scenario: Successful deployment
-- **WHEN** `pipedreamer deploy` is executed in a directory with a valid `workflow.yaml`
+- **WHEN** `tntc deploy` is executed in a directory with a valid `workflow.yaml`
 - **THEN** it SHALL generate K8s manifests (Deployment + Service)
 - **AND** it SHALL apply them to the target namespace via client-go
 - **AND** it SHALL print confirmation with the workflow name and namespace
 
 #### Scenario: Create-or-update semantics
-- **WHEN** `pipedreamer deploy` is executed and a resource does not exist
+- **WHEN** `tntc deploy` is executed and a resource does not exist
 - **THEN** it SHALL create the resource
-- **WHEN** `pipedreamer deploy` is executed and a resource already exists
+- **WHEN** `tntc deploy` is executed and a resource already exists
 - **THEN** it SHALL update the resource (preserving resourceVersion for optimistic concurrency)
 
 #### Scenario: Namespace targeting
-- **WHEN** `pipedreamer deploy --namespace prod` is executed
+- **WHEN** `tntc deploy --namespace prod` is executed
 - **THEN** all manifests SHALL target the `prod` namespace
 - **AND** client-go operations SHALL target the `prod` namespace
 
 #### Scenario: Default namespace
-- **WHEN** `pipedreamer deploy` is executed without `--namespace`
+- **WHEN** `tntc deploy` is executed without `--namespace`
 - **THEN** the default namespace SHALL be `default`
 
 ### Requirement: Deploy validates workflow spec
 The deploy command SHALL validate the workflow spec before deploying.
 
 #### Scenario: Invalid spec rejected
-- **WHEN** `pipedreamer deploy` is executed with an invalid `workflow.yaml`
+- **WHEN** `tntc deploy` is executed with an invalid `workflow.yaml`
 - **THEN** it SHALL return a validation error
 - **AND** it SHALL NOT apply any manifests to the cluster
 
@@ -116,11 +116,11 @@ The deploy command SHALL validate the workflow spec before deploying.
 The deploy command SHALL construct the image tag using the workflow spec and optional registry flag.
 
 #### Scenario: Image tag with registry
-- **WHEN** `pipedreamer deploy --registry gcr.io/myproject` is executed for workflow `data-pipeline` version `1.0`
+- **WHEN** `tntc deploy --registry gcr.io/myproject` is executed for workflow `data-pipeline` version `1.0`
 - **THEN** the Deployment manifest SHALL reference image `gcr.io/myproject/data-pipeline:1-0`
 
 #### Scenario: Image tag without registry
-- **WHEN** `pipedreamer deploy` is executed without `--registry` for workflow `data-pipeline` version `1.0`
+- **WHEN** `tntc deploy` is executed without `--registry` for workflow `data-pipeline` version `1.0`
 - **THEN** the Deployment manifest SHALL reference image `data-pipeline:1-0`
 
 ### Requirement: K8s client initialization
@@ -140,39 +140,39 @@ The `pkg/k8s/client.go` `NewClient()` function SHALL create a K8s client from av
 - **THEN** `NewClient()` SHALL return an error with context about the failure
 
 ### Requirement: Status command reports deployment health
-The `pipedreamer status <name>` command SHALL query the K8s API and report deployment status.
+The `tntc status <name>` command SHALL query the K8s API and report deployment status.
 
 #### Scenario: Healthy deployment
-- **WHEN** `pipedreamer status my-workflow` is executed and the deployment is healthy
+- **WHEN** `tntc status my-workflow` is executed and the deployment is healthy
 - **THEN** it SHALL report: workflow name, namespace, status "ready", replica counts (available/total)
 
 #### Scenario: Unhealthy deployment
-- **WHEN** `pipedreamer status my-workflow` is executed and the deployment is not ready
+- **WHEN** `tntc status my-workflow` is executed and the deployment is not ready
 - **THEN** it SHALL report status "not ready" with available vs desired replica counts
 
 #### Scenario: Deployment not found
-- **WHEN** `pipedreamer status my-workflow` is executed and no deployment exists
+- **WHEN** `tntc status my-workflow` is executed and no deployment exists
 - **THEN** it SHALL return an error indicating the deployment was not found
 
 #### Scenario: Text output
-- **WHEN** `pipedreamer status my-workflow` is executed with default `--output text`
+- **WHEN** `tntc status my-workflow` is executed with default `--output text`
 - **THEN** it SHALL print human-readable status lines (Workflow, Namespace, Status, Replicas)
 
 #### Scenario: JSON output
-- **WHEN** `pipedreamer status my-workflow --output json` is executed
+- **WHEN** `tntc status my-workflow --output json` is executed
 - **THEN** it SHALL print a JSON object with fields: `name`, `namespace`, `ready`, `replicas`, `available`
 
 #### Scenario: Namespace flag
-- **WHEN** `pipedreamer status my-workflow --namespace prod` is executed
+- **WHEN** `tntc status my-workflow --namespace prod` is executed
 - **THEN** it SHALL query the `prod` namespace for the deployment
 
 ### Requirement: Status requires workflow name argument
 The status command SHALL require exactly one argument: the workflow name.
 
 #### Scenario: Missing argument
-- **WHEN** `pipedreamer status` is executed without arguments
+- **WHEN** `tntc status` is executed without arguments
 - **THEN** it SHALL return an error indicating the name argument is required
 
 #### Scenario: Too many arguments
-- **WHEN** `pipedreamer status foo bar` is executed
+- **WHEN** `tntc status foo bar` is executed
 - **THEN** it SHALL return an error indicating too many arguments

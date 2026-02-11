@@ -1,22 +1,22 @@
 ## ADDED Requirements
 
 ### Requirement: SKILL.md entry point exists
-The `pipedreamer-skill/SKILL.md` file SHALL exist as the primary entry point for AI agents learning the Pipedreamer v2 system.
+The `tentacular-skill/SKILL.md` file SHALL exist as the primary entry point for AI agents learning the Tentacular system.
 
 #### Scenario: SKILL.md provides project overview
-- **WHEN** an agent reads `pipedreamer-skill/SKILL.md`
+- **WHEN** an agent reads `tentacular-skill/SKILL.md`
 - **THEN** the document SHALL contain a project overview describing the two-component architecture (Go CLI for management, Deno/TypeScript engine for execution)
 
 #### Scenario: SKILL.md provides CLI quick-reference
-- **WHEN** an agent reads `pipedreamer-skill/SKILL.md`
+- **WHEN** an agent reads `tentacular-skill/SKILL.md`
 - **THEN** the document SHALL contain a quick-reference covering all CLI commands: `init`, `validate`, `dev`, `test`, `build`, `deploy`, `status`, `cluster check`, and `visualize`, each with usage syntax and key flags
 
 #### Scenario: SKILL.md provides node contract summary
-- **WHEN** an agent reads `pipedreamer-skill/SKILL.md`
+- **WHEN** an agent reads `tentacular-skill/SKILL.md`
 - **THEN** the document SHALL include the node function contract showing `export default async function run(ctx: Context, input: T): Promise<U>` with a brief description of each Context member (`fetch`, `log`, `config`, `secrets`)
 
 #### Scenario: SKILL.md provides workflow.yaml skeleton
-- **WHEN** an agent reads `pipedreamer-skill/SKILL.md`
+- **WHEN** an agent reads `tentacular-skill/SKILL.md`
 - **THEN** the document SHALL include a minimal valid `workflow.yaml` example with `name`, `version`, `triggers`, `nodes`, and `edges` fields
 
 #### Scenario: SKILL.md links to references
@@ -24,7 +24,7 @@ The `pipedreamer-skill/SKILL.md` file SHALL exist as the primary entry point for
 - **THEN** the SKILL.md SHALL link to the corresponding reference document in `references/` for each of: workflow specification, node development, testing, and deployment
 
 ### Requirement: Workflow specification reference exists
-The `pipedreamer-skill/references/workflow-spec.md` file SHALL document the complete v2 workflow.yaml format.
+The `tentacular-skill/references/workflow-spec.md` file SHALL document the complete v2 workflow.yaml format.
 
 #### Scenario: All top-level fields documented
 - **WHEN** an agent reads `references/workflow-spec.md`
@@ -47,7 +47,7 @@ The `pipedreamer-skill/references/workflow-spec.md` file SHALL document the comp
 - **THEN** the document SHALL include at least one complete, valid workflow.yaml example with multiple nodes, edges forming a DAG, and inline comments explaining each section
 
 ### Requirement: Node development reference exists
-The `pipedreamer-skill/references/node-development.md` file SHALL document TypeScript patterns for writing Pipedreamer nodes.
+The `tentacular-skill/references/node-development.md` file SHALL document TypeScript patterns for writing Tentacular nodes.
 
 #### Scenario: Node function signature documented
 - **WHEN** an agent reads `references/node-development.md`
@@ -74,7 +74,7 @@ The `pipedreamer-skill/references/node-development.md` file SHALL document TypeS
 - **THEN** the document SHALL include at least one complete node file example demonstrating Context API usage (fetch, log, config access)
 
 ### Requirement: Testing guide reference exists
-The `pipedreamer-skill/references/testing-guide.md` file SHALL document how to write and run tests for Pipedreamer workflows.
+The `tentacular-skill/references/testing-guide.md` file SHALL document how to write and run tests for Tentacular workflows.
 
 #### Scenario: Fixture format documented
 - **WHEN** an agent reads `references/testing-guide.md`
@@ -82,11 +82,11 @@ The `pipedreamer-skill/references/testing-guide.md` file SHALL document how to w
 
 #### Scenario: Node-level testing documented
 - **WHEN** an agent reads `references/testing-guide.md`
-- **THEN** the document SHALL describe how to run node tests using `pipedreamer test [dir][/<node>]` and how the test runner loads fixtures, imports the node, creates a mock context, and compares output to expected
+- **THEN** the document SHALL describe how to run node tests using `tntc test [dir][/<node>]` and how the test runner loads fixtures, imports the node, creates a mock context, and compares output to expected
 
 #### Scenario: Pipeline testing documented
 - **WHEN** an agent reads `references/testing-guide.md`
-- **THEN** the document SHALL describe pipeline testing with `pipedreamer test --pipeline`, explaining that it compiles the full DAG and executes all nodes in topological order
+- **THEN** the document SHALL describe pipeline testing with `tntc test --pipeline`, explaining that it compiles the full DAG and executes all nodes in topological order
 
 #### Scenario: Mock context documented
 - **WHEN** an agent reads `references/testing-guide.md`
@@ -97,19 +97,19 @@ The `pipedreamer-skill/references/testing-guide.md` file SHALL document how to w
 - **THEN** the document SHALL include at least one complete test fixture JSON file example
 
 ### Requirement: Deployment guide reference exists
-The `pipedreamer-skill/references/deployment-guide.md` file SHALL document the build, deploy, and cluster management workflow.
+The `tentacular-skill/references/deployment-guide.md` file SHALL document the build, deploy, and cluster management workflow.
 
 #### Scenario: Build command documented
 - **WHEN** an agent reads `references/deployment-guide.md`
-- **THEN** the document SHALL describe `pipedreamer build [dir]` including image tag format (`<name>:<version>`), Dockerfile generation (distroless Deno base, engine copy, dependency caching), and `--tag` flag
+- **THEN** the document SHALL describe `tntc build [dir]` including image tag format (`<name>:<version>`), Dockerfile generation (distroless Deno base, engine copy, dependency caching), and `--tag` flag
 
 #### Scenario: Deploy command documented
 - **WHEN** an agent reads `references/deployment-guide.md`
-- **THEN** the document SHALL describe `pipedreamer deploy [dir]` including K8s manifest generation (Deployment with gVisor RuntimeClass, Service), `--namespace` flag, and `--registry` flag
+- **THEN** the document SHALL describe `tntc deploy [dir]` including K8s manifest generation (Deployment with gVisor RuntimeClass, Service), `--namespace` flag, and `--registry` flag
 
 #### Scenario: Cluster check documented
 - **WHEN** an agent reads `references/deployment-guide.md`
-- **THEN** the document SHALL describe `pipedreamer cluster check` including preflight checks, `--fix` flag for auto-remediation, and `--namespace` flag
+- **THEN** the document SHALL describe `tntc cluster check` including preflight checks, `--fix` flag for auto-remediation, and `--namespace` flag
 
 #### Scenario: Security model documented
 - **WHEN** an agent reads `references/deployment-guide.md`

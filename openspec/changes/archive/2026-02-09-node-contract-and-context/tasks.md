@@ -28,4 +28,4 @@
 
 - [x] 6.1 Verify `deno check engine/main.ts` passes with no type errors
 - [x] 6.2 Verify `deno test` passes in engine directory for context and secrets tests
-- [x] 6.3 Verify `import type { Context, Logger, NodeFunction } from "pipedreamer"` resolves via import map
+- [x] 6.3 Verify `import type { Context, Logger, NodeFunction } from "tentacular"` resolves via import map

@@ -1,4 +1,4 @@
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 import { Client } from "jsr:@db/postgres@0.19.5";
 
 export interface HealthRecord {

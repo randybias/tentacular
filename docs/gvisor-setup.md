@@ -23,11 +23,11 @@ kubectl logs gvisor-test
 gVisor is enabled by default during deployment. To deploy without gVisor:
 
 ```bash
-pipedreamer deploy my-workflow --runtime-class ""
+tntc deploy my-workflow --runtime-class ""
 ```
 
 ## Preflight Check
 
-`pipedreamer cluster check` validates that the gVisor RuntimeClass exists. Missing gVisor is a warning, not a hard failure — workflows will still deploy but without kernel-level sandboxing.
+`tntc cluster check` validates that the gVisor RuntimeClass exists. Missing gVisor is a warning, not a hard failure — workflows will still deploy but without kernel-level sandboxing.
 
 See [architecture.md](architecture.md) for details on all five security layers.

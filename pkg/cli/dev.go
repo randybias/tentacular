@@ -41,7 +41,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 
 	engineDir := findEngineDir()
 	if engineDir == "" {
-		return fmt.Errorf("cannot find engine directory; ensure pipedreamer is installed correctly")
+		return fmt.Errorf("cannot find engine directory; ensure tentacular is installed correctly")
 	}
 
 	denoBin := findDeno()
@@ -61,7 +61,7 @@ func runDev(cmd *cobra.Command, args []string) error {
 	denoCmd.Dir = absDir
 	denoCmd.Stdout = os.Stdout
 	denoCmd.Stderr = os.Stderr
-	denoCmd.Env = append(os.Environ(), fmt.Sprintf("PIPEDREAMER_PORT=%d", port))
+	denoCmd.Env = append(os.Environ(), fmt.Sprintf("TENTACULAR_PORT=%d", port))
 
 	if err := denoCmd.Start(); err != nil {
 		return fmt.Errorf("starting deno engine: %w", err)
@@ -127,8 +127,8 @@ func findEngineDir() string {
 	// Check common install paths
 	home, _ := os.UserHomeDir()
 	candidates := []string{
-		filepath.Join(home, ".pipedreamer", "engine"),
-		"/usr/local/share/pipedreamer/engine",
+		filepath.Join(home, ".tentacular", "engine"),
+		"/usr/local/share/tentacular/engine",
 	}
 	for _, c := range candidates {
 		if _, err := os.Stat(filepath.Join(c, "main.ts")); err == nil {

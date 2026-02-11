@@ -21,5 +21,5 @@ Phases 1-3 added open config block, cron triggers (K8s CronJob), and queue trigg
 
 - `docs/architecture.md`: Updated with triggers, config block, CronJob resources
 - `docs/roadmap.md`: NEW — future enhancements
-- `pipedreamer-skill/SKILL.md`: Trigger types, NATS config, lifecycle
-- `pipedreamer-skill/references/deployment-guide.md`: Full trigger deployment guide
+- `tentacular-skill/SKILL.md`: Trigger types, NATS config, lifecycle
+- `tentacular-skill/references/deployment-guide.md`: Full trigger deployment guide

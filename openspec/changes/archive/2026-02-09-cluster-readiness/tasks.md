@@ -15,8 +15,8 @@
 
 ## 3. Verification
 
-- [x] 3.1 Verify `go build ./cmd/pipedreamer/` compiles with the updated preflight and cluster check code
-- [x] 3.2 Verify `pipedreamer cluster check --help` shows the `--fix` flag with its description
-- [ ] 3.3 Verify that running `pipedreamer cluster check` against a reachable cluster produces pass/fail output for all five checks
-- [ ] 3.4 Verify that running `pipedreamer cluster check --output json` produces valid JSON output
+- [x] 3.1 Verify `go build ./cmd/tntc/` compiles with the updated preflight and cluster check code
+- [x] 3.2 Verify `tntc cluster check --help` shows the `--fix` flag with its description
+- [ ] 3.3 Verify that running `tntc cluster check` against a reachable cluster produces pass/fail output for all five checks
+- [ ] 3.4 Verify that running `tntc cluster check --output json` produces valid JSON output
 - [ ] 3.5 Verify that `--fix` creates a missing namespace when used

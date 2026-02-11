@@ -65,67 +65,67 @@ The generated Dockerfile SHALL NOT copy the Go CLI binary into the container.
 
 #### Scenario: No CLI in container
 - **WHEN** `GenerateDockerfile()` is called
-- **THEN** the Dockerfile SHALL NOT contain any `COPY` instruction referencing `pipedreamer` binary, `cmd/`, or `pkg/`
+- **THEN** the Dockerfile SHALL NOT contain any `COPY` instruction referencing `tentacular` binary, `cmd/`, or `pkg/`
 
 ### Requirement: Build command generates Dockerfile and invokes docker build
-The `pipedreamer build` command SHALL generate a temporary Dockerfile, copy the engine into the build context, build the image, and clean up.
+The `tntc build` command SHALL generate a temporary Dockerfile, copy the engine into the build context, build the image, and clean up.
 
 #### Scenario: Successful build
-- **WHEN** `pipedreamer build` is executed in a directory containing a valid `workflow.yaml`
-- **THEN** it SHALL generate `Dockerfile.pipedreamer` in the workflow directory
+- **WHEN** `tntc build` is executed in a directory containing a valid `workflow.yaml`
+- **THEN** it SHALL generate `Dockerfile.tentacular` in the workflow directory
 - **AND** it SHALL copy the engine into `.engine/` in the workflow directory
-- **AND** it SHALL invoke `docker build -f Dockerfile.pipedreamer -t <tag> .`
-- **AND** upon success, it SHALL remove `Dockerfile.pipedreamer` and `.engine/`
+- **AND** it SHALL invoke `docker build -f Dockerfile.tentacular -t <tag> .`
+- **AND** upon success, it SHALL remove `Dockerfile.tentacular` and `.engine/`
 
 #### Scenario: Build cleanup on failure
-- **WHEN** `pipedreamer build` is executed and `docker build` fails
-- **THEN** it SHALL still remove `Dockerfile.pipedreamer` and `.engine/` (deferred cleanup)
+- **WHEN** `tntc build` is executed and `docker build` fails
+- **THEN** it SHALL still remove `Dockerfile.tentacular` and `.engine/` (deferred cleanup)
 - **AND** it SHALL return an error indicating the docker build failed
 
 ### Requirement: Image tag derivation
-The build command SHALL use `pipedreamer-engine:latest` as the default image tag when `--tag` is not specified.
+The build command SHALL use `tentacular-engine:latest` as the default image tag when `--tag` is not specified.
 
 #### Scenario: Default tag
-- **WHEN** `pipedreamer build` is executed without `--tag`
-- **THEN** the image tag SHALL be `pipedreamer-engine:latest`
+- **WHEN** `tntc build` is executed without `--tag`
+- **THEN** the image tag SHALL be `tentacular-engine:latest`
 
 #### Scenario: Custom tag
-- **WHEN** `pipedreamer build --tag my-image:latest` is executed
+- **WHEN** `tntc build --tag my-image:latest` is executed
 - **THEN** the image tag SHALL be `my-image:latest`
 
 #### Scenario: Registry prefix
-- **WHEN** `pipedreamer build --registry gcr.io/myproject` is executed without `--tag`
-- **THEN** the image tag SHALL be `gcr.io/myproject/pipedreamer-engine:latest`
+- **WHEN** `tntc build --registry gcr.io/myproject` is executed without `--tag`
+- **THEN** the image tag SHALL be `gcr.io/myproject/tentacular-engine:latest`
 
 ### Requirement: Build validates workflow spec
 The build command SHALL validate the workflow spec before building.
 
 #### Scenario: Invalid spec rejected
-- **WHEN** `pipedreamer build` is executed in a directory with an invalid `workflow.yaml`
+- **WHEN** `tntc build` is executed in a directory with an invalid `workflow.yaml`
 - **THEN** it SHALL return an error indicating validation failures
 - **AND** it SHALL NOT invoke `docker build`
 
 #### Scenario: Missing spec rejected
-- **WHEN** `pipedreamer build` is executed in a directory without `workflow.yaml`
+- **WHEN** `tntc build` is executed in a directory without `workflow.yaml`
 - **THEN** it SHALL return an error indicating the spec file was not found
 
 ### Requirement: Build accepts directory argument
 The build command SHALL accept an optional directory argument.
 
 #### Scenario: Explicit directory
-- **WHEN** `pipedreamer build ./my-workflow` is executed
+- **WHEN** `tntc build ./my-workflow` is executed
 - **THEN** it SHALL look for `workflow.yaml` in the `./my-workflow/` directory
 
 #### Scenario: Default directory
-- **WHEN** `pipedreamer build` is executed without arguments
+- **WHEN** `tntc build` is executed without arguments
 - **THEN** it SHALL look for `workflow.yaml` in the current directory
 
 ### Requirement: Engine directory discovery
-The build command SHALL locate the engine directory from the pipedreamer installation.
+The build command SHALL locate the engine directory from the tentacular installation.
 
 #### Scenario: Engine found
 - **WHEN** the build command runs
-- **THEN** it SHALL locate the `engine/` directory relative to the pipedreamer binary or a known installation path
+- **THEN** it SHALL locate the `engine/` directory relative to the tentacular binary or a known installation path
 
 #### Scenario: Engine not found
 - **WHEN** the engine directory cannot be located

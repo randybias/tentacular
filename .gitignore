@@ -1,5 +1,5 @@
 # Binaries
-pipedreamer
+/tntc
 *.exe
 
 # Go
@@ -16,7 +16,7 @@ vendor/
 .credentials/
 
 # Build artifacts
-.pipedreamer/
+.tentacular/
 
 # Scratch (agent/dev temp files)
 scratch/

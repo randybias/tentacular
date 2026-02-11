@@ -1,6 +1,6 @@
 ## Why
 
-Pipedreamer v2 has an engine scaffold (types, directory structure) from Change 01, but no execution capability. Workflows defined in `workflow.yaml` cannot be compiled into an execution plan or run. The DAG engine is the core runtime that turns a workflow spec into executable stages and runs them. Without this, the `dev` command (Change 05), testing framework (Change 07), and all higher-level features are blocked.
+Tentacular has an engine scaffold (types, directory structure) from Change 01, but no execution capability. Workflows defined in `workflow.yaml` cannot be compiled into an execution plan or run. The DAG engine is the core runtime that turns a workflow spec into executable stages and runs them. Without this, the `dev` command (Change 05), testing framework (Change 07), and all higher-level features are blocked.
 
 The executor interface must be pluggable from day one because the roadmap includes swapping in Temporal for production deployments. Building the abstraction now avoids a costly refactor later.
 

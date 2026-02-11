@@ -1,6 +1,6 @@
 package builder
 
-// GenerateDockerfile produces the Dockerfile for a pipedreamer engine-only container.
+// GenerateDockerfile produces the Dockerfile for a tentacular engine-only container.
 // The workflow code will be mounted separately via ConfigMap.
 func GenerateDockerfile() string {
 	return `FROM denoland/deno:distroless

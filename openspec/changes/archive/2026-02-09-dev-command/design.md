@@ -1,13 +1,13 @@
 ## Context
 
-Pipedreamer v2 uses a two-component architecture: a Go CLI binary for management operations and a Deno/TypeScript engine for workflow execution. The project foundation (Change 01) established the CLI stubs and engine directory structure. The DAG engine (Changes 02-04) implemented the compiler, executor, context, and loader. The `pipedreamer dev` command is Change 05 — it wires everything together into a local development server that AI agents use for rapid iteration.
+Tentacular uses a two-component architecture: a Go CLI binary for management operations and a Deno/TypeScript engine for workflow execution. The project foundation (Change 01) established the CLI stubs and engine directory structure. The DAG engine (Changes 02-04) implemented the compiler, executor, context, and loader. The `tntc dev` command is Change 05 — it wires everything together into a local development server that AI agents use for rapid iteration.
 
 The existing codebase already has stub implementations of `pkg/cli/dev.go`, `engine/server.ts`, `engine/watcher.ts`, and `engine/loader.ts`. This change specifies the requirements and design decisions that govern how these components work together.
 
 ## Goals / Non-Goals
 
 **Goals:**
-- Provide a single `pipedreamer dev` command that starts a complete local development environment
+- Provide a single `tntc dev` command that starts a complete local development environment
 - Hot-reload node modules on file change without restarting the server
 - Expose an HTTP endpoint for triggering workflow runs programmatically (agent-friendly)
 - Print execution trace output (DAG structure, node timing, data flow) to console
@@ -19,12 +19,12 @@ The existing codebase already has stub implementations of `pkg/cli/dev.go`, `eng
 - Hot-reloading `workflow.yaml` changes (requires restart; only node source files are hot-reloaded)
 - TLS or authentication on the dev server (local-only, plaintext)
 - Multi-workflow serving (one dev server per workflow)
-- Production deployment (handled by `pipedreamer build` and `pipedreamer deploy` in Change 06)
+- Production deployment (handled by `tntc build` and `tntc deploy` in Change 06)
 
 ## Decisions
 
 ### Decision 1: Go CLI spawns Deno child process
-**Choice:** The `pipedreamer dev` command in Go spawns `deno run engine/main.ts --watch` as a child process with explicit Deno permission flags (`--allow-net`, `--allow-read`, `--allow-write=/tmp`, `--allow-env`).
+**Choice:** The `tntc dev` command in Go spawns `deno run engine/main.ts --watch` as a child process with explicit Deno permission flags (`--allow-net`, `--allow-read`, `--allow-write=/tmp`, `--allow-env`).
 **Rationale:** This maintains the clean separation between Go CLI (management) and Deno engine (execution). The Go process handles signal forwarding and lifecycle management, while the Deno process handles the actual workflow execution. The explicit permission flags enforce Deno's security sandbox even in development.
 
 ### Decision 2: Deno.watchFs for file watching with debounce
@@ -45,7 +45,7 @@ The existing codebase already has stub implementations of `pkg/cli/dev.go`, `eng
 
 ### Decision 6: Secrets loaded from .secrets.yaml
 **Choice:** The engine loads secrets from `.secrets.yaml` in the workflow directory during startup. In production, it also checks `/app/secrets` for Kubernetes volume mounts and merges them.
-**Rationale:** Developers need access to API keys and credentials during local development. The `.secrets.yaml` file mirrors the production secrets interface (`ctx.secrets`) so node code does not need conditional logic. The file is listed in `.gitignore` to prevent accidental commits. The `.secrets.yaml.example` file (scaffolded by `pipedreamer init`) documents the expected structure.
+**Rationale:** Developers need access to API keys and credentials during local development. The `.secrets.yaml` file mirrors the production secrets interface (`ctx.secrets`) so node code does not need conditional logic. The file is listed in `.gitignore` to prevent accidental commits. The `.secrets.yaml.example` file (scaffolded by `tntc init`) documents the expected structure.
 
 ## Risks / Trade-offs
 

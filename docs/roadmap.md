@@ -1,4 +1,4 @@
-# Pipedreamer v2 Roadmap
+# Tentacular Roadmap
 
 ## Webhook Triggers via NATS Bridge
 
@@ -58,8 +58,8 @@ The `version` field in workflow.yaml is validated but never used for tracking or
 
 **Proposal:**
 1. Add `app.kubernetes.io/version` label to all generated K8s resources (Deployment, Service, ConfigMap, CronJobs)
-2. `pipedreamer status <name>` should display the deployed version
-3. `pipedreamer list` should show version column
+2. `tntc status <name>` should display the deployed version
+3. `tntc list` should show version column
 
 **Benefits:**
 - Visibility into what's deployed
@@ -95,7 +95,7 @@ ConfigMap is always named `{name}-code`. Updates overwrite content, destroying t
 No way to see what versions have been deployed or what changed between them.
 
 **Proposal:**
-Add `pipedreamer versions <name>` command:
+Add `tntc versions <name>` command:
 - Lists all ConfigMaps matching `{name}-code-*` pattern
 - Shows version, creation timestamp, size
 - Optional `--diff v1 v2` flag to show code differences
@@ -112,7 +112,7 @@ Add `pipedreamer versions <name>` command:
 No way to revert to a previous version after a bad deploy.
 
 **Proposal:**
-Add `pipedreamer rollback <name> --version <version>` command:
+Add `tntc rollback <name> --version <version>` command:
 1. Finds ConfigMap `{name}-code-{version}`
 2. Patches Deployment to reference it
 3. Runs rollout restart
@@ -129,7 +129,7 @@ Add `pipedreamer rollback <name> --version <version>` command:
 
 **Status:** RESOLVED (Feb 2026 — base-engine-image + configmap-code-deploy features)
 
-`pipedreamer build` now generates an engine-only Docker image (`pipedreamer-engine:latest`) with no workflow code baked in. `pipedreamer deploy` creates a ConfigMap with workflow.yaml and nodes/*.ts, mounts it at `/app/workflow/`, and triggers a rollout restart. Code changes deploy in ~5-10 seconds without Docker rebuilds.
+`tntc build` now generates an engine-only Docker image (`tentacular-engine:latest`) with no workflow code baked in. `tntc deploy` creates a ConfigMap with workflow.yaml and nodes/*.ts, mounts it at `/app/workflow/`, and triggers a rollout restart. Code changes deploy in ~5-10 seconds without Docker rebuilds.
 
 ## Preflight Secret Provisioning Ordering
 
@@ -151,7 +151,7 @@ The generated Deployment manifests don't set `imagePullPolicy`. When using a mut
 
 ```bash
 # Load the image into kind
-kind load docker-image pipedreamer-engine:latest --name <cluster-name>
+kind load docker-image tentacular-engine:latest --name <cluster-name>
 
 # Patch the deployment to never pull (image is already on the node)
 kubectl patch deployment <name> -n <namespace> \
@@ -250,7 +250,7 @@ This ensures all third-party imports are resolved and cached in the container im
 
 **File**: `engine/deno.json`
 
-**Problem**: Some third-party Deno libraries on `deno.land/x` internally use JSR-style bare specifiers (e.g., `import { bold } from "@std/fmt/colors"`). These work when Deno resolves them from the JSR registry, but fail in the pipedreamer build context because the engine's `deno.json` import map doesn't include mappings for `@std/*` packages.
+**Problem**: Some third-party Deno libraries on `deno.land/x` internally use JSR-style bare specifiers (e.g., `import { bold } from "@std/fmt/colors"`). These work when Deno resolves them from the JSR registry, but fail in the tntc build context because the engine's `deno.json` import map doesn't include mappings for `@std/*` packages.
 
 Specifically, `deno.land/x/postgres@v0.19.5` failed because it imports `@std/fmt/colors`, `@std/io`, and `@std/bytes` — none of which were in the import map.
 
@@ -325,14 +325,14 @@ deployment:
           verbs: ["get", "list"]
 ```
 
-`pipedreamer deploy` would then:
+`tntc deploy` would then:
 1. Create the ServiceAccount if it doesn't exist
 2. Create the ClusterRole/ClusterRoleBinding if specified
 3. Set `spec.template.spec.serviceAccountName` in the Deployment
 
 ### ServiceAccount Not Wired to Deployment
 
-**Problem**: Even if a ServiceAccount exists in the namespace, `pipedreamer deploy` generates the Deployment without `serviceAccountName`, so it uses the `default` SA which has no RBAC privileges. We had to manually patch the Deployment:
+**Problem**: Even if a ServiceAccount exists in the namespace, `tntc deploy` generates the Deployment without `serviceAccountName`, so it uses the `default` SA which has no RBAC privileges. We had to manually patch the Deployment:
 
 ```bash
 kubectl patch deployment cluster-health-collector -n pd-cluster-health \
@@ -343,9 +343,9 @@ kubectl patch deployment cluster-health-collector -n pd-cluster-health \
 
 ### No Multi-Workflow Namespace Coordination
 
-**Problem**: The `cluster-health-collector` and `cluster-health-reporter` both deploy to `pd-cluster-health` and share Postgres secrets. But `pipedreamer deploy` treats each workflow independently — each call wants to create the namespace, each has its own secret (`<name>-secrets`). We had to manually create shared secrets and coordinate deployment order.
+**Problem**: The `cluster-health-collector` and `cluster-health-reporter` both deploy to `pd-cluster-health` and share Postgres secrets. But `tntc deploy` treats each workflow independently — each call wants to create the namespace, each has its own secret (`<name>-secrets`). We had to manually create shared secrets and coordinate deployment order.
 
-**Consideration**: This may be out of scope for the CLI, which is workflow-centric. But documenting the pattern of shared namespaces and secrets would help. Alternatively, a `pipedreamer deploy-group` command or a project-level manifest could coordinate multiple related workflows.
+**Consideration**: This may be out of scope for the CLI, which is workflow-centric. But documenting the pattern of shared namespaces and secrets would help. Alternatively, a `tntc deploy-group` command or a project-level manifest could coordinate multiple related workflows.
 
 ## Testing Gaps
 
@@ -386,15 +386,15 @@ The test runner would pass `config` and `secrets` to `createMockContext()` when 
 
 ### Pipeline Tests Use Mock Fetch
 
-**Problem**: `pipedreamer test --pipeline` runs the full DAG but still uses `createMockContext()`, which returns mock responses for all `ctx.fetch()` calls. This means pipeline tests never validate real HTTP behavior, Slack delivery, database writes, etc. For workflows that depend on external services (which is most of them), the pipeline test only validates that nodes can pass data through edges without errors — not that the workflow actually works.
+**Problem**: `tntc test --pipeline` runs the full DAG but still uses `createMockContext()`, which returns mock responses for all `ctx.fetch()` calls. This means pipeline tests never validate real HTTP behavior, Slack delivery, database writes, etc. For workflows that depend on external services (which is most of them), the pipeline test only validates that nodes can pass data through edges without errors — not that the workflow actually works.
 
-**Consideration**: This is arguably by design (tests should be hermetic), but there should be an integration test mode that uses real services. A `--live` flag or separate `pipedreamer integration-test` command could run the full pipeline with real context.
+**Consideration**: This is arguably by design (tests should be hermetic), but there should be an integration test mode that uses real services. A `--live` flag or separate `tntc integration-test` command could run the full pipeline with real context.
 
 ## Documentation / Skill Gaps
 
 ### Deployment Guide Shows Stale Dockerfile
 
-**File**: `pipedreamer-skill/references/deployment-guide.md`
+**File**: `tentacular-skill/references/deployment-guide.md`
 
 The "Generated Dockerfile" section shows the original Dockerfile without:
 - Per-node `deno cache` commands
@@ -416,7 +416,7 @@ These are common real-world patterns. The `cluster-health-collector` and `cluste
 
 ### Skill SKILL.md Missing In-Cluster and Database Patterns
 
-**File**: `pipedreamer-skill/SKILL.md`
+**File**: `tentacular-skill/SKILL.md`
 
 The skill document covers HTTP-based workflows well (ctx.fetch with GitHub, Slack, etc.) but does not cover:
 - Workflows that call the Kubernetes API using in-cluster credentials

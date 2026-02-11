@@ -3,7 +3,7 @@ package cli
 import (
 	"fmt"
 
-	"github.com/randyb/pipedreamer2/pkg/k8s"
+	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/spf13/cobra"
 )
 

@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2 has a working execution engine: workflows defined in `workflow.yaml` are compiled into a DAG, executed by the `SimpleExecutor`, and nodes interact with external services via `ctx.fetch(service, path)`. The current `ctx.fetch` implementation in `engine/context/mod.ts` loads secrets from `.secrets.yaml` (local dev) or a K8s Secret volume mount (production), injects auth headers directly, and makes outbound HTTP calls from the workflow container.
+Tentacular has a working execution engine: workflows defined in `workflow.yaml` are compiled into a DAG, executed by the `SimpleExecutor`, and nodes interact with external services via `ctx.fetch(service, path)`. The current `ctx.fetch` implementation in `engine/context/mod.ts` loads secrets from `.secrets.yaml` (local dev) or a K8s Secret volume mount (production), injects auth headers directly, and makes outbound HTTP calls from the workflow container.
 
 This works for local development but has security and operational gaps for production deployments: secrets are exposed to node code in-memory, there is no centralized audit trail of outbound calls, no rate limiting, no NetworkPolicy enforcement, and no support for MCP tool calls. The Gateway sidecar architecture addresses all of these by interposing a reverse proxy between workflow containers and external services.
 
@@ -302,7 +302,7 @@ apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
   name: pd-workflow-egress
-  namespace: pipedreamer
+  namespace: tentacular
 spec:
   podSelector:
     matchLabels:
@@ -528,11 +528,11 @@ The migration from file-mount secrets to Gateway sidecar is designed to be backw
 **Phase 4: Rate limiting activation**
 - Enable rate limiting in Gateway configuration
 - Add `gateway.rate_limits` section to `workflow.yaml` schema
-- Validate rate limit config in `pipedreamer validate`
+- Validate rate limit config in `tntc validate`
 
 ### Local Development Mode
 
-For local development (`pipedreamer dev`), the Gateway sidecar is not required. The `ctx.fetch` implementation detects whether the Gateway is available:
+For local development (`tntc dev`), the Gateway sidecar is not required. The `ctx.fetch` implementation detects whether the Gateway is available:
 
 ```typescript
 const GATEWAY_PORT = Deno.env.get("PD_GATEWAY_PORT") || "9090";
@@ -547,8 +547,8 @@ function createFetch(opts: FetchOptions) {
 ```
 
 This means:
-- `pipedreamer dev` (local) -- uses file-mount secrets, direct HTTP calls (current behavior)
-- `pipedreamer deploy` (K8s) -- Gateway sidecar is injected, `PD_GATEWAY_ENABLED=true` is set
+- `tntc dev` (local) -- uses file-mount secrets, direct HTTP calls (current behavior)
+- `tntc deploy` (K8s) -- Gateway sidecar is injected, `PD_GATEWAY_ENABLED=true` is set
 
 ## File Layout
 

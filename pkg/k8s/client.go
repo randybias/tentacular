@@ -10,7 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/randyb/pipedreamer2/pkg/builder"
+	"github.com/randybias/tentacular/pkg/builder"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -27,7 +27,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 )
 
-// Client wraps K8s client-go for pipedreamer operations.
+// Client wraps K8s client-go for tentacular operations.
 type Client struct {
 	clientset *kubernetes.Clientset
 	dynamic   dynamic.Interface
@@ -316,7 +316,7 @@ func (c *Client) DeleteResources(namespace, name string) ([]string, error) {
 	}
 
 	// Delete CronJobs by label selector
-	labelSelector := fmt.Sprintf("app.kubernetes.io/name=%s,app.kubernetes.io/managed-by=pipedreamer", name)
+	labelSelector := fmt.Sprintf("app.kubernetes.io/name=%s,app.kubernetes.io/managed-by=tentacular", name)
 	cronJobs, err := c.clientset.BatchV1().CronJobs(namespace).List(ctx, metav1.ListOptions{
 		LabelSelector: labelSelector,
 	})
@@ -339,13 +339,13 @@ func (c *Client) DeleteResources(namespace, name string) ([]string, error) {
 	return deleted, nil
 }
 
-// ListWorkflows returns all deployments managed by pipedreamer in the given namespace.
+// ListWorkflows returns all deployments managed by tentacular in the given namespace.
 func (c *Client) ListWorkflows(namespace string) ([]WorkflowInfo, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
 	defer cancel()
 
 	deps, err := c.clientset.AppsV1().Deployments(namespace).List(ctx, metav1.ListOptions{
-		LabelSelector: "app.kubernetes.io/managed-by=pipedreamer",
+		LabelSelector: "app.kubernetes.io/managed-by=tentacular",
 	})
 	if err != nil {
 		return nil, fmt.Errorf("listing deployments: %w", err)
@@ -416,15 +416,15 @@ func (c *Client) GetPodLogs(ctx context.Context, namespace, name string, follow 
 // Returns the JSON result from stdout. The temp pod is cleaned up on completion.
 func (c *Client) RunWorkflow(ctx context.Context, namespace, name string) (string, error) {
 	svcURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080/run", name, namespace)
-	podName := fmt.Sprintf("pipedreamer-run-%s-%d", name, time.Now().UnixMilli())
+	podName := fmt.Sprintf("tntc-run-%s-%d", name, time.Now().UnixMilli())
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      podName,
 			Namespace: namespace,
 			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "pipedreamer",
-				"pipedreamer/run-target":       name,
+				"app.kubernetes.io/managed-by": "tentacular",
+				"tentacular/run-target":        name,
 			},
 		},
 		Spec: corev1.PodSpec{

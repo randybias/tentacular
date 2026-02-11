@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/randyb/pipedreamer2/pkg/cli"
+	"github.com/randybias/tentacular/pkg/cli"
 	"github.com/spf13/cobra"
 )
 
 func main() {
 	root := &cobra.Command{
-		Use:   "pipedreamer",
+		Use:   "tntc",
 		Short: "Durable workflow execution engine",
-		Long:  "Pipedreamer v2 — build, test, and deploy TypeScript workflow DAGs on Kubernetes with Deno + gVisor.",
+		Long:  "Tentacular -- build, test, and deploy TypeScript workflow DAGs on Kubernetes with Deno + gVisor.",
 	}
 
 	// Global flags

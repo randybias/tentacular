@@ -82,16 +82,16 @@ When mounted at `/app/workflow/`, this produces the correct layout: `/app/workfl
 
 **Decision:** Deploy resolves the base image tag in this order:
 1. `--image` flag (explicit override)
-2. `.pipedreamer/base-image.txt` (written by `pipedreamer build`)
-3. `pipedreamer-engine:latest` (hardcoded fallback)
+2. `.tentacular/base-image.txt` (written by `tntc build`)
+3. `tentacular-engine:latest` (hardcoded fallback)
 
-**Rationale:** This provides flexibility while keeping the common case simple. After `pipedreamer build`, the tag is automatically available via the file. CI/CD pipelines can use `--image` for explicit control. The fallback ensures deploy works even without a prior build (e.g., using a pre-built image from a registry).
+**Rationale:** This provides flexibility while keeping the common case simple. After `tntc build`, the tag is automatically available via the file. CI/CD pipelines can use `--image` for explicit control. The fallback ensures deploy works even without a prior build (e.g., using a pre-built image from a registry).
 
 ### 6. Replace `--cluster-registry` with `--image`
 
 **Decision:** Remove the `--cluster-registry` flag and replace with `--image`. The old flag prepended a registry prefix to a workflow-derived tag. The new flag sets the full image reference directly.
 
-**Rationale:** The old pattern (`--cluster-registry gcr.io/proj` → `gcr.io/proj/workflow:1-0`) doesn't work with engine-only images. `--image` is simpler and more explicit: `--image gcr.io/proj/pipedreamer-engine:latest`. The cascade (Decision 5) handles the common case where `--image` isn't needed.
+**Rationale:** The old pattern (`--cluster-registry gcr.io/proj` → `gcr.io/proj/workflow:1-0`) doesn't work with engine-only images. `--image` is simpler and more explicit: `--image gcr.io/proj/tentacular-engine:latest`. The cascade (Decision 5) handles the common case where `--image` isn't needed.
 
 ### 7. Rollout restart via annotation patch
 

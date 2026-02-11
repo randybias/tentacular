@@ -19,9 +19,9 @@ Covers DAG compilation, context/fetch/auth injection, secrets cascade, and execu
 ## Workflow Tests
 
 ```bash
-pipedreamer test                      # all node fixtures
-pipedreamer test my-workflow/fetch    # single node
-pipedreamer test --pipeline           # full DAG end-to-end
+tntc test                      # all node fixtures
+tntc test my-workflow/fetch    # single node
+tntc test --pipeline           # full DAG end-to-end
 ```
 
 ## Test Counts

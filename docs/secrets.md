@@ -22,7 +22,7 @@ The engine loads `.secrets.yaml` at startup. Values are available via `ctx.secre
 
 ## Production (Kubernetes)
 
-`pipedreamer deploy` automatically provisions secrets to Kubernetes from:
+`tntc deploy` automatically provisions secrets to Kubernetes from:
 1. `.secrets/` directory (files as secret entries), or
 2. `.secrets.yaml` file (YAML keys as secret entries)
 

@@ -40,16 +40,16 @@ The generated Dockerfile SHALL use a Deno entrypoint with minimal permissions an
 - **AND** the ENTRYPOINT SHALL pass `--port 8080` to `engine/main.ts`
 
 ### Requirement: Image tag derivation
-The build command SHALL use `pipedreamer-engine:latest` as the default image tag when `--tag` is not specified.
+The build command SHALL use `tentacular-engine:latest` as the default image tag when `--tag` is not specified.
 
 #### Scenario: Default tag
-- **WHEN** `pipedreamer build` is executed without `--tag`
-- **THEN** the image tag SHALL be `pipedreamer-engine:latest`
+- **WHEN** `tntc build` is executed without `--tag`
+- **THEN** the image tag SHALL be `tentacular-engine:latest`
 
 #### Scenario: Custom tag
-- **WHEN** `pipedreamer build --tag my-image:latest` is executed
+- **WHEN** `tntc build --tag my-image:latest` is executed
 - **THEN** the image tag SHALL be `my-image:latest`
 
 #### Scenario: Registry prefix
-- **WHEN** `pipedreamer build --registry gcr.io/myproject` is executed without `--tag`
-- **THEN** the image tag SHALL be `gcr.io/myproject/pipedreamer-engine:latest`
+- **WHEN** `tntc build --registry gcr.io/myproject` is executed without `--tag`
+- **THEN** the image tag SHALL be `gcr.io/myproject/tentacular-engine:latest`

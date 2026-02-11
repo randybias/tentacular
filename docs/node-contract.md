@@ -3,7 +3,7 @@
 Every node is a TypeScript file with a single default export:
 
 ```typescript
-import type { Context } from "pipedreamer";
+import type { Context } from "tentacular";
 
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
   const resp = await ctx.fetch("github", "/user/repos");
@@ -39,7 +39,7 @@ Create a JSON fixture at `tests/fixtures/<node-name>.json`:
 }
 ```
 
-Run with `pipedreamer test` (all nodes) or `pipedreamer test my-workflow/node-name` (single node).
+Run with `tntc test` (all nodes) or `tntc test my-workflow/node-name` (single node).
 
 ## Mock Context
 

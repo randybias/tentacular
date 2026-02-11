@@ -14,8 +14,8 @@ The `engine/deno.json` SHALL configure TypeScript strict mode, import maps for s
 - **WHEN** engine code imports from `"std/yaml"`, `"std/path"`, `"std/flags"`, or `"std/assert"`
 - **THEN** Deno SHALL resolve these to the pinned std library version defined in `deno.json`
 
-#### Scenario: Pipedreamer module import
-- **WHEN** a node file imports `type { Context } from "pipedreamer"`
+#### Scenario: Tentacular module import
+- **WHEN** a node file imports `type { Context } from "tentacular"`
 - **THEN** Deno SHALL resolve this to `engine/mod.ts` via the import map
 
 ### Requirement: Engine entrypoint accepts CLI arguments

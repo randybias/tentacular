@@ -1,6 +1,6 @@
 ## Context
 
-Pipedreamer v2's project foundation (Change 01) established the Go CLI binary and Deno engine scaffold. The validate command exists as a stub. The `pkg/spec/` package directory exists but needs the workflow specification types, YAML parser, and validation engine. The `gopkg.in/yaml.v3` dependency is already in `go.mod`. This change fills in the spec layer that all downstream features (DAG engine, dev command, build/deploy) depend on.
+Tentacular's project foundation (Change 01) established the Go CLI binary and Deno engine scaffold. The validate command exists as a stub. The `pkg/spec/` package directory exists but needs the workflow specification types, YAML parser, and validation engine. The `gopkg.in/yaml.v3` dependency is already in `go.mod`. This change fills in the spec layer that all downstream features (DAG engine, dev command, build/deploy) depend on.
 
 ## Goals / Non-Goals
 
@@ -9,7 +9,7 @@ Pipedreamer v2's project foundation (Change 01) established the Go CLI binary an
 - Implement a YAML parser using `gopkg.in/yaml.v3` that unmarshals workflow.yaml into typed Go structs
 - Implement a validation engine that checks: required fields, kebab-case naming, semver version format, trigger types and required sub-fields, node name format, edge reference integrity, DAG acyclicity
 - Return human-readable error slices (not Go errors) for multi-error reporting
-- Wire `pipedreamer validate [dir]` CLI command to read workflow.yaml and invoke the parser
+- Wire `tntc validate [dir]` CLI command to read workflow.yaml and invoke the parser
 
 **Non-Goals:**
 - Implementing the DAG compiler or executor (Change 03)
