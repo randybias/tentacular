@@ -80,7 +80,8 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 	}
 
 	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
-    app.kubernetes.io/managed-by: tentacular`, wf.Name)
+    app.kubernetes.io/version: "%s"
+    app.kubernetes.io/managed-by: tentacular`, wf.Name, wf.Version)
 
 	content := fmt.Sprintf(`apiVersion: v1
 kind: ConfigMap
@@ -117,7 +118,8 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	var manifests []Manifest
 
 	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
-    app.kubernetes.io/managed-by: tentacular`, wf.Name)
+    app.kubernetes.io/version: "%s"
+    app.kubernetes.io/managed-by: tentacular`, wf.Name, wf.Version)
 
 	// RuntimeClass line (conditional)
 	runtimeClassLine := ""
@@ -172,6 +174,7 @@ spec:
       containers:
         - name: engine
           image: %s
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
               protocol: TCP

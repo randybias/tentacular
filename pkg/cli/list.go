@@ -46,14 +46,14 @@ func runList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("%-24s %-16s %-10s %-10s %s\n", "NAME", "NAMESPACE", "STATUS", "REPLICAS", "AGE")
+	fmt.Printf("%-24s %-8s %-16s %-10s %-10s %s\n", "NAME", "VERSION", "NAMESPACE", "STATUS", "REPLICAS", "AGE")
 	for _, w := range workflows {
 		status := "not ready"
 		if w.Ready {
 			status = "ready"
 		}
 		age := formatAge(time.Since(w.Created))
-		fmt.Printf("%-24s %-16s %-10s %d/%d        %s\n", w.Name, w.Namespace, status, w.Available, w.Replicas, age)
+		fmt.Printf("%-24s %-8s %-16s %-10s %d/%d        %s\n", w.Name, w.Version, w.Namespace, status, w.Available, w.Replicas, age)
 	}
 
 	return nil

@@ -34,7 +34,7 @@ COPY .engine/ /app/engine/
 COPY .engine/deno.json /app/deno.json
 
 # Cache engine dependencies
-RUN ["deno", "cache", "engine/main.ts"]
+RUN ["deno", "cache", "--no-lock", "engine/main.ts"]
 
 # Set DENO_DIR for runtime caching of node dependencies
 ENV DENO_DIR=/tmp/deno-cache
@@ -57,7 +57,7 @@ tntc build --tag my-engine:v2.1
 tntc build -r registry.example.com --tag my-engine:v2.1
 ```
 
-When `--registry` is set, the tag becomes `<registry>/<tag>`.
+When `--registry` is set (via `-r` flag or config file), the tag becomes `<registry>/<tag>`. If `-r` is not explicitly passed, the build command falls back to the `registry` value from the config file (`~/.tentacular/config.yaml` or `.tentacular/config.yaml`).
 
 The tag is saved to `.tentacular/base-image.txt` for `tntc deploy` to use. Workflow-specific versioning is handled separately at deploy time via ConfigMap updates.
 
@@ -83,6 +83,7 @@ metadata:
   namespace: <namespace>
   labels:
     app.kubernetes.io/name: <workflow-name>
+    app.kubernetes.io/version: "<version>"
     app.kubernetes.io/managed-by: tentacular
 data:
   workflow.yaml: |
@@ -97,7 +98,7 @@ data:
 
 **Note on ConfigMap key naming:** Kubernetes ConfigMap data keys cannot contain forward slashes (validation regex: `[-._a-zA-Z0-9]+`). Node files use `__` as a directory separator (e.g., `nodes__fetch.ts`). The Deployment's ConfigMap volume uses the `items` field to map these flattened keys back to proper paths when mounted (e.g., `nodes__fetch.ts` → `nodes/fetch.ts`).
 
-**Deployment** with gVisor RuntimeClass and code volume:
+**Deployment** with gVisor RuntimeClass, security hardening, and code volume:
 
 ```yaml
 apiVersion: apps/v1
@@ -107,6 +108,7 @@ metadata:
   namespace: <namespace>
   labels:
     app.kubernetes.io/name: <workflow-name>
+    app.kubernetes.io/version: "<version>"
     app.kubernetes.io/managed-by: tentacular
 spec:
   replicas: 1
@@ -114,13 +116,43 @@ spec:
     matchLabels:
       app.kubernetes.io/name: <workflow-name>
   template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: <workflow-name>
+        app.kubernetes.io/version: "<version>"
+        app.kubernetes.io/managed-by: tentacular
     spec:
       runtimeClassName: gvisor
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: engine
           image: <image-tag>
+          imagePullPolicy: Always
           ports:
             - containerPort: 8080
+              protocol: TCP
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 3
+            periodSeconds: 5
           volumeMounts:
             - name: code
               mountPath: /app/workflow
@@ -164,6 +196,10 @@ kind: Service
 metadata:
   name: <workflow-name>
   namespace: <namespace>
+  labels:
+    app.kubernetes.io/name: <workflow-name>
+    app.kubernetes.io/version: "<version>"
+    app.kubernetes.io/managed-by: tentacular
 spec:
   type: ClusterIP
   selector:
@@ -171,23 +207,45 @@ spec:
   ports:
     - port: 8080
       targetPort: 8080
+      protocol: TCP
 ```
 
 ### Flags
 
 | Flag | Short | Default | Description |
 |------|-------|---------|-------------|
-| `--namespace` | `-n` | `default` | Kubernetes namespace for deployment |
-| `--image` | | (cascade) | Base engine image tag. Resolves via: --image flag > .tentacular/base-image.txt > tentacular-engine:latest |
+| `--namespace` | `-n` | (cascade) | Kubernetes namespace. Resolves via: `-n` flag > `workflow.yaml deployment.namespace` > config file > `default` |
+| `--image` | | (cascade) | Base engine image tag. Resolves via: `--image` flag > `.tentacular/base-image.txt` > `tentacular-engine:latest` |
 | `--runtime-class` | | `gvisor` | RuntimeClass name for pod sandboxing (empty to disable) |
 
 ```bash
-tntc deploy -n production
-tntc deploy -n production --image my-registry.com/engine:v2
-tntc deploy --runtime-class "" # disable gVisor
+tntc deploy                       # namespace from workflow.yaml or config
+tntc deploy -n production         # explicit namespace override
+tntc deploy --image reg.io/engine:v2
+tntc deploy --runtime-class ""    # disable gVisor
 ```
 
 The `--cluster-registry` flag has been deprecated. Use `--image` to specify the full image reference.
+
+### Namespace Resolution
+
+Namespace is resolved in this order (first non-empty wins):
+
+1. CLI `-n` / `--namespace` flag
+2. `deployment.namespace` in workflow.yaml
+3. `namespace` in config file (`~/.tentacular/config.yaml` or `.tentacular/config.yaml`)
+4. `default`
+
+Set a per-workflow namespace in workflow.yaml:
+
+```yaml
+deployment:
+  namespace: pd-my-workflow
+```
+
+### Version Tracking
+
+All generated K8s resources include an `app.kubernetes.io/version` label from the workflow.yaml `version` field. The version value is always YAML-quoted (e.g., `"1.0"`) to prevent YAML parsers from interpreting it as a float. `tntc list` displays a VERSION column alongside NAME, NAMESPACE, STATUS, REPLICAS, and AGE.
 
 ## Fast Iteration
 
@@ -244,8 +302,9 @@ Runs preflight validation to ensure the cluster is ready for deployment.
 - Kubernetes API reachability
 - Target namespace exists
 - gVisor RuntimeClass is available
-- Required Secrets exist (convention: `<workflow-name>-secrets`)
 - RBAC permissions (including `batch/cronjobs` and `batch/jobs` for cron triggers)
+
+When run standalone (`tntc cluster check`), it also verifies the `<workflow-name>-secrets` Secret exists. During `tntc deploy`, the secret existence check is skipped when local secrets (`.secrets/` or `.secrets.yaml`) are present, since they will be auto-provisioned in the same deploy. This prevents first-deploy failures where the secret doesn't exist yet.
 
 Preflight checks run automatically during `tntc deploy`. Failures abort the deploy with remediation instructions.
 
@@ -284,7 +343,13 @@ tntc list -n production
 tntc list -n production -o json
 ```
 
-Shows all tentacular-managed deployments with status, replicas, and age.
+Shows all tentacular-managed deployments with version, status, replicas, and age:
+
+```
+NAME                     VERSION  NAMESPACE        STATUS     REPLICAS   AGE
+uptime-prober            1.0      pd-uptime-prober ready      1/1        2d
+cluster-health-collector 1.0      pd-cluster-health ready     1/1        5h
+```
 
 ### Check Status
 
@@ -321,7 +386,7 @@ tntc undeploy my-workflow -n production
 tntc undeploy my-workflow -n production --yes
 ```
 
-Deletes the Service, Deployment, Secret (`<name>-secrets`), and all CronJobs matching the workflow's labels. Prompts for confirmation unless `--yes` is passed. Resources that don't exist are silently skipped.
+Deletes the Service, Deployment, Secret (`<name>-secrets`), ConfigMap (`<name>-code`), and all CronJobs matching the workflow's labels. Prompts for confirmation unless `--yes` is passed. Resources that don't exist are silently skipped.
 
 ### Full Lifecycle (No kubectl)
 
@@ -449,7 +514,7 @@ On SIGTERM/SIGINT, the engine:
 
 ### Undeploy Cleanup
 
-`tntc undeploy` removes all resources for a workflow:
+`tntc undeploy` removes the following resources for a workflow:
 
 - Service
 - Deployment
@@ -457,6 +522,8 @@ On SIGTERM/SIGINT, the engine:
 - **All CronJobs** matching labels `app.kubernetes.io/name={name},app.kubernetes.io/managed-by=tentacular`
 
 CronJob cleanup uses label selectors, so it catches all CronJobs regardless of how many triggers existed.
+
+**Note:** All workflow resources including the ConfigMap (`{name}-code`) are deleted by `tntc undeploy`.
 
 ## Security Model (Fortress)
 
@@ -469,11 +536,12 @@ The engine runs with restricted Deno permissions:
 | Flag | Scope | Purpose |
 |------|-------|---------|
 | `--allow-net` | All network | Nodes make HTTP requests via ctx.fetch, NATS connections |
-| `--allow-read=/app` | `/app` only | Read workflow files, engine code, secrets |
+| `--allow-read=/app,/var/run/secrets` | `/app` and `/var/run/secrets` | Read workflow files, engine code, secrets, K8s service account tokens |
 | `--allow-write=/tmp` | `/tmp` only | Temporary file operations only |
 | `--allow-env` | All env vars | Environment variable access for NATS and runtime config |
+| `--unstable-net` | Network | Enables `Deno.createHttpClient()` for custom TLS (e.g., in-cluster K8s API calls) |
 
-No file system access outside `/app` (read) and `/tmp` (write). No subprocess spawning, no FFI.
+No file system access outside `/app` and `/var/run/secrets` (read) and `/tmp` (write). No subprocess spawning, no FFI.
 
 ### Layer 2: Distroless Container
 
@@ -493,6 +561,13 @@ Kubernetes Deployment uses `runtimeClassName: gvisor`:
 
 ## Secrets Management
 
+### Quick Setup
+
+```bash
+tntc secrets check my-workflow    # see what's required vs. provisioned
+tntc secrets init my-workflow     # create .secrets.yaml from template
+```
+
 ### Local Development
 
 Create a `.secrets.yaml` file in the workflow directory:
@@ -509,12 +584,31 @@ The engine loads this file at startup. It is used by `ctx.secrets` and for `ctx.
 
 Use `.secrets.yaml.example` (generated by `tntc init`) as a template. Add `.secrets.yaml` to `.gitignore`.
 
+### Shared Secrets Pool
+
+Place shared secrets at the repo root in `.secrets/`:
+
+```
+.secrets/
+  slack      # contains: {"webhook_url": "https://hooks.slack.com/..."}
+```
+
+Reference them in workflow `.secrets.yaml` with `$shared.<name>`:
+
+```yaml
+slack: $shared.slack
+```
+
+During `tntc deploy`, `$shared.` references are resolved by reading the corresponding file from `<repo-root>/.secrets/`.
+
 ### Production (Kubernetes)
+
+`tntc deploy` automatically provisions secrets to Kubernetes. Nested YAML maps in `.secrets.yaml` are JSON-serialized into K8s Secret `stringData` entries, matching the engine's `loadSecretsFromDir()` JSON parsing.
 
 Secrets are mounted from a Kubernetes Secret as a volume at `/app/secrets`:
 
 ```bash
-# Create the K8s Secret
+# Manual creation (alternative to tntc deploy auto-provisioning)
 kubectl create secret generic my-workflow-secrets \
   -n production \
   --from-file=github=./github-secrets.json \

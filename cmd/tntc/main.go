@@ -38,6 +38,10 @@ func main() {
 	// Cluster commands
 	root.AddCommand(cli.NewClusterCmd())
 
+	// Configuration commands
+	root.AddCommand(cli.NewConfigureCmd())
+	root.AddCommand(cli.NewSecretsCmd())
+
 	// Utility commands
 	root.AddCommand(cli.NewVisualizeCmd())
 

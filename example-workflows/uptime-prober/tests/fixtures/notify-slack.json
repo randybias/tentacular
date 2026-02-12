@@ -11,8 +11,13 @@
     "unhealthyCount": 0,
     "healthyCount": 1
   },
+  "secrets": {
+    "slack": {
+      "webhook_url": "https://hooks.slack.com/services/T00/B00/test"
+    }
+  },
   "expected": {
-    "delivered": false,
-    "status": 0
+    "delivered": true,
+    "status": 200
   }
 }

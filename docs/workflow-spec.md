@@ -10,7 +10,7 @@ version: "1.0"           # semver, required
 description: "What it does"
 
 triggers:
-  - type: manual         # manual | cron
+  - type: manual         # manual | cron | queue
   - type: cron
     schedule: "0 9 * * *"
 
@@ -35,6 +35,24 @@ edges:
 config:
   timeout: 30s
   retries: 1
+
+deployment:                          # optional
+  namespace: pd-my-workflow          # target K8s namespace
+```
+
+## Deployment Section
+
+The optional `deployment` block configures deployment-specific settings.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `deployment.namespace` | string | Target Kubernetes namespace for this workflow |
+
+Namespace resolution order: CLI `-n` flag > `workflow.yaml deployment.namespace` > config file default > `default`.
+
+```yaml
+deployment:
+  namespace: pd-cluster-health
 ```
 
 ## Execution Model

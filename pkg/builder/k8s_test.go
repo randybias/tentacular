@@ -147,6 +147,19 @@ func TestK8sManifestLabels(t *testing.T) {
 	if !strings.Contains(dep, "app.kubernetes.io/managed-by: tentacular") {
 		t.Error("expected app.kubernetes.io/managed-by label")
 	}
+	if !strings.Contains(dep, `app.kubernetes.io/version: "1.0"`) {
+		t.Error("expected app.kubernetes.io/version label")
+	}
+}
+
+func TestK8sManifestImagePullPolicy(t *testing.T) {
+	wf := makeTestWorkflow("pull-test")
+	manifests := GenerateK8sManifests(wf, "pull-test:1-0", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	if !strings.Contains(dep, "imagePullPolicy: Always") {
+		t.Error("expected imagePullPolicy: Always in Deployment")
+	}
 }
 
 func TestK8sManifestVolumes(t *testing.T) {
@@ -206,6 +219,22 @@ func TestK8sManifestService(t *testing.T) {
 	}
 	if !strings.Contains(svc, "port: 8080") {
 		t.Error("expected port: 8080")
+	}
+}
+
+func TestK8sManifestServiceLabels(t *testing.T) {
+	wf := makeTestWorkflow("svc-label-test")
+	manifests := GenerateK8sManifests(wf, "svc-label-test:1-0", "default", DeployOptions{})
+	svc := manifests[1].Content
+
+	if !strings.Contains(svc, "app.kubernetes.io/name: svc-label-test") {
+		t.Error("expected app.kubernetes.io/name label in Service")
+	}
+	if !strings.Contains(svc, "app.kubernetes.io/managed-by: tentacular") {
+		t.Error("expected app.kubernetes.io/managed-by label in Service")
+	}
+	if !strings.Contains(svc, `app.kubernetes.io/version: "1.0"`) {
+		t.Error("expected app.kubernetes.io/version label in Service")
 	}
 }
 
@@ -352,6 +381,9 @@ func TestK8sManifestCronTriggerLabels(t *testing.T) {
 	if !strings.Contains(cronContent, "app.kubernetes.io/managed-by: tentacular") {
 		t.Error("expected app.kubernetes.io/managed-by label in CronJob")
 	}
+	if !strings.Contains(cronContent, `app.kubernetes.io/version: "1.0"`) {
+		t.Error("expected app.kubernetes.io/version label in CronJob")
+	}
 }
 
 func TestK8sManifestManualOnlyNoRegression(t *testing.T) {
@@ -490,6 +522,9 @@ nodes:
 	}
 	if !strings.Contains(cm.Content, "app.kubernetes.io/managed-by: tentacular") {
 		t.Error("expected app.kubernetes.io/managed-by label")
+	}
+	if !strings.Contains(cm.Content, `app.kubernetes.io/version: "1.0"`) {
+		t.Error("expected app.kubernetes.io/version label in ConfigMap")
 	}
 	if !strings.Contains(cm.Content, "workflow.yaml:") {
 		t.Error("expected workflow.yaml data key")

@@ -2,6 +2,9 @@ name: uptime-prober
 version: "1.0"
 description: "Probe HTTP endpoints on a cron schedule, alert when any are down"
 
+deployment:
+  namespace: pd-uptime-prober
+
 triggers:
   - type: manual
   - type: cron

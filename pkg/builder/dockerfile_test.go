@@ -53,6 +53,26 @@ func TestGenerateDockerfile_Entrypoint(t *testing.T) {
 	}
 }
 
+func TestGenerateDockerfileNoLockOnCache(t *testing.T) {
+	df := GenerateDockerfile()
+	// The deno cache line must include --no-lock to avoid lock file conflicts
+	// Find the line that has "deno", "cache" and verify it also has "--no-lock"
+	lines := strings.Split(df, "\n")
+	found := false
+	for _, line := range lines {
+		if strings.Contains(line, `"deno", "cache"`) {
+			found = true
+			if !strings.Contains(line, `"--no-lock"`) {
+				t.Error("expected --no-lock flag in deno cache RUN instruction")
+			}
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected to find a deno cache instruction in Dockerfile")
+	}
+}
+
 func TestGenerateDockerfile_DenoDir(t *testing.T) {
 	df := GenerateDockerfile()
 	if !strings.Contains(df, "ENV DENO_DIR=/tmp/deno-cache") {

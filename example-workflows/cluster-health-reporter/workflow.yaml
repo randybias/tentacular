@@ -2,6 +2,9 @@ name: cluster-health-reporter
 version: "1.0"
 description: "Generate daily cluster health report from Postgres data and send to Slack"
 
+deployment:
+  namespace: pd-cluster-health
+
 triggers:
   - type: manual
   - type: cron

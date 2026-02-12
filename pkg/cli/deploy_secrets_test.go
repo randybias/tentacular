@@ -157,6 +157,91 @@ func TestBuildSecretFromYAMLInvalid(t *testing.T) {
 	}
 }
 
+func TestBuildSecretFromYAMLNested(t *testing.T) {
+	dir := t.TempDir()
+	yamlFile := filepath.Join(dir, ".secrets.yaml")
+	content := `slack:
+  webhook_url: "https://hooks.slack.com/services/T00/B00/xxx"
+`
+	os.WriteFile(yamlFile, []byte(content), 0644)
+
+	m, err := buildSecretFromYAML(yamlFile, "test-secrets", "default")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+	if !strings.Contains(m.Content, "kind: Secret") {
+		t.Error("expected kind: Secret")
+	}
+	if !strings.Contains(m.Content, "stringData:") {
+		t.Error("expected stringData section")
+	}
+	// Nested map should be JSON-serialized
+	if !strings.Contains(m.Content, "slack") {
+		t.Error("expected slack key in stringData")
+	}
+	if !strings.Contains(m.Content, "webhook_url") {
+		t.Error("expected webhook_url in JSON-serialized value")
+	}
+}
+
+func TestBuildSecretFromYAMLMixed(t *testing.T) {
+	dir := t.TempDir()
+	yamlFile := filepath.Join(dir, ".secrets.yaml")
+	content := `api_key: sk_test_123
+slack:
+  webhook_url: "https://hooks.slack.com/services/T00/B00/xxx"
+`
+	os.WriteFile(yamlFile, []byte(content), 0644)
+
+	m, err := buildSecretFromYAML(yamlFile, "test-secrets", "default")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+	// Flat string should still work
+	if !strings.Contains(m.Content, "api_key") {
+		t.Error("expected api_key in stringData")
+	}
+	// Nested map should also be present
+	if !strings.Contains(m.Content, "slack") {
+		t.Error("expected slack key in stringData")
+	}
+}
+
+func TestBuildSecretFromYAMLDeeplyNested(t *testing.T) {
+	dir := t.TempDir()
+	yamlFile := filepath.Join(dir, ".secrets.yaml")
+	content := `azure:
+  storage:
+    account_name: "myaccount"
+    sas_token: "sv=2023"
+`
+	os.WriteFile(yamlFile, []byte(content), 0644)
+
+	m, err := buildSecretFromYAML(yamlFile, "test-secrets", "default")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+	if !strings.Contains(m.Content, "azure") {
+		t.Error("expected azure key in stringData")
+	}
+	// Deep nesting should be JSON-serialized
+	if !strings.Contains(m.Content, "account_name") {
+		t.Error("expected account_name in JSON-serialized nested value")
+	}
+	if !strings.Contains(m.Content, "sas_token") {
+		t.Error("expected sas_token in JSON-serialized nested value")
+	}
+}
+
 func TestBuildSecretManifestPrefersDir(t *testing.T) {
 	dir := t.TempDir()
 
@@ -208,6 +293,44 @@ func TestBuildSecretManifestNoSecrets(t *testing.T) {
 	}
 	if m != nil {
 		t.Error("expected nil manifest when no secrets exist")
+	}
+}
+
+func TestBuildSecretFromYAMLResolvesSharedSecrets(t *testing.T) {
+	// Create a fake repo root with .git marker and .secrets/ directory
+	repoRoot := t.TempDir()
+	os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
+	sharedDir := filepath.Join(repoRoot, ".secrets")
+	os.MkdirAll(sharedDir, 0o755)
+	os.WriteFile(filepath.Join(sharedDir, "slack"), []byte(`{"webhook_url":"https://hooks.slack.com/T00"}`), 0o644)
+
+	// Create a workflow directory under the repo root
+	wfDir := filepath.Join(repoRoot, "workflows", "my-wf")
+	os.MkdirAll(wfDir, 0o755)
+
+	// Create .secrets.yaml with a $shared reference
+	yamlContent := "slack: $shared.slack\napi_key: sk_test_123\n"
+	yamlFile := filepath.Join(wfDir, ".secrets.yaml")
+	os.WriteFile(yamlFile, []byte(yamlContent), 0o644)
+
+	m, err := buildSecretFromYAML(yamlFile, "my-wf-secrets", "default")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if m == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+	// The $shared.slack reference should have been resolved to the JSON content
+	if !strings.Contains(m.Content, "webhook_url") {
+		t.Error("expected shared secret to be resolved with webhook_url content")
+	}
+	// The plain string secret should still be present
+	if !strings.Contains(m.Content, "api_key") {
+		t.Error("expected api_key in stringData")
+	}
+	// The raw $shared. reference should NOT remain
+	if strings.Contains(m.Content, "$shared.") {
+		t.Error("expected $shared. reference to be resolved, not left as-is")
 	}
 }
 

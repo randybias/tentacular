@@ -13,6 +13,7 @@ Complete reference for the Tentacular `workflow.yaml` format.
 | `nodes` | map | Yes | At least one node. Keys are node names matching `^[a-z][a-z0-9_-]*$`. |
 | `edges` | array | Yes | Data flow edges between nodes. Can be empty `[]` for single-node workflows. |
 | `config` | object | No | Workflow-level configuration (timeout, retries). |
+| `deployment` | object | No | Deployment-specific settings (namespace). |
 
 ## Triggers
 
@@ -29,17 +30,28 @@ triggers:
 
 ### cron
 
-Requires `schedule` field with a cron expression.
+Requires `schedule` field with a cron expression. Optional `name` field for parameterized execution (must match `[a-z][a-z0-9_-]*`).
 
 ```yaml
 triggers:
   - type: cron
+    name: six-hourly
     schedule: "0 */6 * * *"  # every 6 hours
+```
+
+### queue
+
+Requires `subject` field with the NATS subject to subscribe to. Also requires `config.nats_url` and `secrets.nats.token` for connection. See [Deployment Guide](deployment-guide.md) for NATS configuration details.
+
+```yaml
+triggers:
+  - type: queue
+    subject: events.github.push
 ```
 
 ### webhook
 
-Requires `path` field defining the HTTP endpoint path.
+Requires `path` field defining the HTTP endpoint path. (Roadmap -- not yet implemented.)
 
 ```yaml
 triggers:
@@ -54,8 +66,8 @@ triggers:
   - type: manual
   - type: cron
     schedule: "0 9 * * 1"
-  - type: webhook
-    path: /hooks/deploy
+  - type: queue
+    subject: events.deploy
 ```
 
 ## Nodes
@@ -106,18 +118,36 @@ The compiler uses Kahn's algorithm for topological sorting and groups nodes into
 
 ## Config
 
-Optional workflow-level configuration.
+Optional workflow-level configuration. The config block is **open** -- it accepts arbitrary keys alongside the typed fields below. Custom keys flow through to `ctx.config` in nodes via `WorkflowConfig.Extras` (Go `yaml:",inline"`).
 
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `timeout` | string | `"30s"` | Per-node execution timeout. Format: `<number>s` or `<number>m` (e.g., `"30s"`, `"5m"`) |
 | `retries` | number | `0` | Number of retry attempts per node on failure. Uses exponential backoff (100ms, 200ms, 400ms, ...) |
+| (any key) | any | — | Custom keys passed through to `ctx.config` in all nodes |
 
 ```yaml
 config:
   timeout: 60s
   retries: 2
+  nats_url: "nats.example.com:4222"
+  custom_setting: "value"
 ```
+
+## Deployment
+
+Optional deployment-specific settings.
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `deployment.namespace` | string | (none) | Target Kubernetes namespace for this workflow |
+
+```yaml
+deployment:
+  namespace: pd-my-workflow
+```
+
+Namespace resolution order: CLI `-n` flag > `workflow.yaml deployment.namespace` > config file default > `default`.
 
 ## Complete Annotated Example
 
@@ -163,9 +193,13 @@ edges:
 config:
   timeout: 60s                      # per-node timeout
   retries: 1                        # retry once on failure
+
+# Deployment settings — optional
+deployment:
+  namespace: pd-github-digest       # target K8s namespace
 ```
 
-This example produces two execution stages:
+This example produces three execution stages:
 - **Stage 1**: `fetch-issues` (no dependencies, runs first)
 - **Stage 2**: `summarize` (depends on fetch-issues)
 - **Stage 3**: `post-slack` (depends on summarize)

@@ -14,7 +14,7 @@ COPY .engine/ /app/engine/
 COPY .engine/deno.json /app/deno.json
 
 # Cache engine dependencies
-RUN ["deno", "cache", "engine/main.ts"]
+RUN ["deno", "cache", "--no-lock", "engine/main.ts"]
 
 # Set DENO_DIR for runtime caching of node dependencies
 ENV DENO_DIR=/tmp/deno-cache

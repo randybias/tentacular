@@ -2,6 +2,9 @@ name: cluster-health-collector
 version: "1.0"
 description: "Collect K8s cluster health data every 5 minutes and store in Postgres"
 
+deployment:
+  namespace: pd-cluster-health
+
 triggers:
   - type: manual
   - type: cron

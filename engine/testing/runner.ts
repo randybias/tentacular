@@ -110,7 +110,10 @@ async function runNodeTests(nodeName: string) {
     try {
       const fixture = await loadFixture(fixturePath);
       const fn = await loadNode(nodeSpec.path, workflowDir);
-      const ctx = createMockContext();
+      const ctx = createMockContext({
+        config: fixture.config ?? {},
+        secrets: fixture.secrets ?? {},
+      });
       const output = await fn(ctx, fixture.input);
 
       if (fixture.expected !== undefined) {
@@ -165,7 +168,7 @@ async function runPipelineTest() {
 
     const executor = new SimpleExecutor({ timeoutMs: 30_000 });
     const graphWithCtx = { ...graph, ctx };
-    const result = await executor.execute(graphWithCtx, runner);
+    const result = await executor.execute(graphWithCtx, runner, ctx);
 
     results.push({
       name: "pipeline",

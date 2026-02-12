@@ -86,7 +86,7 @@ Secrets SHALL be mounted from a K8s Secret as a read-only volume, never as envir
 - **THEN** the pod spec SHALL include an `emptyDir` volume mounted at `/tmp` for temporary file writes
 
 ### Requirement: Deploy command applies manifests via client-go
-The `tntc deploy` command SHALL generate K8s manifests including a code ConfigMap, apply them to the cluster, and trigger a rollout restart.
+The `tntc deploy` command SHALL generate K8s manifests including a code ConfigMap, apply them to the cluster, and trigger a rollout restart. The preflight secret existence check SHALL be skipped when local secrets will be auto-provisioned during the same deploy.
 
 #### Scenario: Successful deployment
 - **WHEN** `tntc deploy` is executed in a directory containing a valid `workflow.yaml`
@@ -109,6 +109,16 @@ The `tntc deploy` command SHALL generate K8s manifests including a code ConfigMa
 #### Scenario: Default namespace
 - **WHEN** `tntc deploy` is executed without `--namespace`
 - **THEN** the default namespace SHALL be `default`
+
+#### Scenario: Preflight skips secret check when local secrets present
+- **WHEN** `tntc deploy` is executed and a `.secrets.yaml` file or `.secrets/` directory exists in the workflow directory
+- **THEN** the preflight check SHALL NOT verify secret existence in the cluster
+- **AND** the deploy SHALL proceed to auto-provision the secret from local files
+
+#### Scenario: Preflight checks secret when no local secrets
+- **WHEN** `tntc deploy` is executed and no `.secrets.yaml` file or `.secrets/` directory exists
+- **THEN** the preflight check SHALL skip the secret existence check entirely
+- **AND** it SHALL log that no local secrets were found
 
 ### Requirement: Deploy validates workflow spec
 The deploy command SHALL validate the workflow spec before deploying.
@@ -224,4 +234,20 @@ The status command SHALL require exactly one argument: the workflow name.
 #### Scenario: Too many arguments
 - **WHEN** `tntc status foo bar` is executed
 - **THEN** it SHALL return an error indicating too many arguments
+
+### Requirement: Undeploy deletes code ConfigMap
+The `tntc undeploy` command SHALL delete the code ConfigMap (`<name>-code`) alongside Service, Deployment, Secret, and CronJobs.
+
+#### Scenario: ConfigMap deleted on undeploy
+- **WHEN** `tntc undeploy my-workflow` is executed and `my-workflow-code` ConfigMap exists
+- **THEN** the ConfigMap `my-workflow-code` SHALL be deleted
+- **AND** the deletion SHALL be reported in the output (e.g., `deleted ConfigMap/my-workflow-code`)
+
+#### Scenario: ConfigMap not found on undeploy
+- **WHEN** `tntc undeploy my-workflow` is executed and `my-workflow-code` ConfigMap does not exist
+- **THEN** the undeploy SHALL continue without error (NotFound is silently skipped)
+
+#### Scenario: Undeploy deletes all resource types
+- **WHEN** `tntc undeploy my-workflow` is executed
+- **THEN** it SHALL attempt to delete: Service, Deployment, Secret (`my-workflow-secrets`), ConfigMap (`my-workflow-code`), and CronJobs matching the label selector
 

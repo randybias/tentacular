@@ -12,20 +12,27 @@ Workflows live in a directory containing a `workflow.yaml` and a `nodes/` direct
 | Command | Usage | Key Flags | Description |
 |---------|-------|-----------|-------------|
 | `init` | `tntc init <name>` | | Scaffold a new workflow directory with workflow.yaml, example node, test fixture, .secrets.yaml.example |
-| `validate` | `tntc validate [dir]` | `-v` verbose | Parse and validate workflow.yaml (name, version, triggers, nodes, edges, DAG acyclicity) |
+| `validate` | `tntc validate [dir]` | | Parse and validate workflow.yaml (name, version, triggers, nodes, edges, DAG acyclicity) |
 | `dev` | `tntc dev [dir]` | `-p` port (default 8080) | Start Deno engine locally with hot-reload (`--watch`). POST /run triggers execution |
 | `test` | `tntc test [dir][/<node>]` | `--pipeline` | Run node-level tests from fixtures, or full pipeline test with `--pipeline` |
-| `build` | `tntc build [dir]` | `-t` tag | Generate Dockerfile (distroless Deno base), build container image via `docker build` |
-| `deploy` | `tntc deploy [dir]` | `-n` namespace, `-r` registry | Generate K8s manifests (Deployment with gVisor, Service) and apply to cluster |
+| `build` | `tntc build [dir]` | `-t` tag, `-r` registry, `--push`, `--platform` | Generate Dockerfile (distroless Deno base), build container image via `docker build` |
+| `deploy` | `tntc deploy [dir]` | `-n` namespace, `--image`, `--runtime-class` | Generate K8s manifests and apply to cluster. Namespace resolves: CLI > workflow.yaml > config > default |
+| `configure` | `tntc configure` | `--registry`, `--namespace`, `--runtime-class`, `--project` | Set default config (user-level or project-level) |
+| `secrets check` | `tntc secrets check [dir]` | | Check secrets provisioning against node requirements |
+| `secrets init` | `tntc secrets init [dir]` | `--force` | Initialize .secrets.yaml from .secrets.yaml.example |
 | `status` | `tntc status <name>` | `-n` namespace, `-o` json, `--detail` | Check deployment status in K8s; `--detail` shows pods, events, resources |
 | `run` | `tntc run <name>` | `-n` namespace, `--timeout` | Trigger a deployed workflow and return JSON result |
 | `logs` | `tntc logs <name>` | `-n` namespace, `-f`/`--follow`, `--tail` | View workflow pod logs; `-f` streams in real time |
-| `list` | `tntc list` | `-n` namespace, `-o` json | List all deployed workflows in a namespace |
-| `undeploy` | `tntc undeploy <name>` | `-n` namespace, `--yes` | Remove a deployed workflow (Service, Deployment, Secret) |
+| `list` | `tntc list` | `-n` namespace, `-o` json | List all deployed workflows with version, status, and age |
+| `undeploy` | `tntc undeploy <name>` | `-n` namespace, `--yes` | Remove a deployed workflow (Service, Deployment, Secret, CronJobs). Note: ConfigMap `<name>-code` is not deleted. |
 | `cluster check` | `tntc cluster check` | `--fix`, `-n` namespace | Preflight validation of cluster readiness; `--fix` auto-remediates |
 | `visualize` | `tntc visualize [dir]` | | Generate Mermaid diagram of the workflow DAG |
 
-Global flags: `-n`/`--namespace` (default "default"), `-r`/`--registry`, `-o`/`--output` (text\|json), `-v`/`--verbose`.
+Global flags: `-n`/`--namespace` (default "default"), `-r`/`--registry`, `-o`/`--output` (text\|json).
+
+Namespace resolution order: CLI `-n` flag > `workflow.yaml deployment.namespace` > config file default > `default`.
+
+Config files: `~/.tentacular/config.yaml` (user-level), `.tentacular/config.yaml` (project-level). Project overrides user.
 
 ## Node Contract
 
@@ -122,21 +129,24 @@ config:
 ## Common Workflow
 
 ```
-tntc init my-workflow     # scaffold directory
+tntc configure --registry reg.io   # one-time setup (user or --project)
+tntc init my-workflow              # scaffold directory
 cd my-workflow
 # edit nodes/*.ts and workflow.yaml
-tntc validate             # check spec validity
-tntc dev                  # local dev server with hot-reload
-tntc test                 # run node tests from fixtures
-tntc test --pipeline      # run full DAG end-to-end
-tntc build                # build container image
-tntc cluster check --fix  # verify K8s cluster readiness
-tntc deploy               # deploy to Kubernetes
-tntc status my-workflow   # check deployment status
-tntc list                 # list all deployed workflows
-tntc run my-workflow      # trigger workflow, get JSON result
-tntc logs my-workflow     # view pod logs
-tntc undeploy my-workflow # remove from cluster
+tntc validate                      # check spec validity
+tntc secrets check                 # verify secrets provisioned
+tntc secrets init                  # create .secrets.yaml from template
+tntc dev                           # local dev server with hot-reload
+tntc test                          # run node tests from fixtures
+tntc test --pipeline               # run full DAG end-to-end
+tntc build                         # build container image
+tntc cluster check --fix           # verify K8s cluster readiness
+tntc deploy                        # deploy (namespace from workflow.yaml)
+tntc status my-workflow            # check deployment status
+tntc list                          # list all deployed workflows + versions
+tntc run my-workflow               # trigger workflow, get JSON result
+tntc logs my-workflow              # view pod logs
+tntc undeploy my-workflow          # remove from cluster
 ```
 
 ## References
