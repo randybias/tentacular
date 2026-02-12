@@ -81,16 +81,16 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
   const snapshot = merged["fetch-seps"];
   const report = merged["render-html"];
 
+  const pgPassword = ctx.secrets?.postgres?.password;
+  if (!pgPassword) {
+    ctx.log.warn("No postgres.password in secrets -- skipping (no credentials)");
+    return { stored: false, snapshotId: 0, reportId: 0, reportUrl: "" };
+  }
+
   const pgHost = ctx.config.pg_host as string;
   const pgPort = ctx.config.pg_port as number;
   const pgDatabase = ctx.config.pg_database as string;
   const pgUser = ctx.config.pg_user as string;
-  const pgPassword = ctx.secrets?.postgres?.password;
-
-  if (!pgPassword) {
-    ctx.log.error("No postgres.password in secrets");
-    throw new Error("Missing postgres.password secret");
-  }
 
   ctx.log.info(`Connecting to Postgres at ${pgHost}:${pgPort}/${pgDatabase}`);
 

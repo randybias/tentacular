@@ -9,6 +9,8 @@ Test fixtures are JSON files stored at `tests/fixtures/<nodename>.json` within t
 ```json
 {
   "input": <value>,
+  "config": { ... },
+  "secrets": { ... },
   "expected": <value>
 }
 ```
@@ -16,6 +18,8 @@ Test fixtures are JSON files stored at `tests/fixtures/<nodename>.json` within t
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `input` | any | Yes | The value passed as the `input` parameter to the node function |
+| `config` | `Record<string, unknown>` | No | Passed to `createMockContext()` as `ctx.config` (default: `{}`) |
+| `secrets` | `Record<string, Record<string, string>>` | No | Passed to `createMockContext()` as `ctx.secrets` (default: `{}`) |
 | `expected` | any | No | If present, the node's return value is compared against this (JSON deep equality) |
 
 When `expected` is omitted, the test passes as long as the node executes without throwing an error.
@@ -54,7 +58,7 @@ tntc test ./my-workflow/fetch-data  # test only the fetch-data node
 The test runner for each node:
 1. Finds fixture files matching the node name in `tests/fixtures/`.
 2. Loads the node module from the path specified in workflow.yaml.
-3. Creates a mock context via `createMockContext()`.
+3. Creates a mock context via `createMockContext()` with fixture `config` and `secrets` (if provided).
 4. Calls the node function with the mock context and fixture input.
 5. If `expected` is defined, compares the output via JSON serialization equality.
 6. Reports pass/fail with execution time.
@@ -171,6 +175,22 @@ const errorResponse = mockFetchResponse({ error: "not found" }, 404);  // 404
 ctx._setFetchResponse("github", "/user", response);
 ```
 
+## Fixture with Config and Secrets
+
+For nodes that read `ctx.config` or `ctx.secrets`, include these in the fixture:
+
+`tests/fixtures/notify-slack.json`:
+
+```json
+{
+  "input": { "alert": true, "summary": "Service down" },
+  "secrets": { "slack": { "webhook_url": "https://hooks.slack.com/test" } },
+  "expected": { "delivered": false, "status": 0 }
+}
+```
+
+The test runner passes `config` and `secrets` to `createMockContext()`, so the node can access `ctx.secrets.slack.webhook_url` and take the appropriate code path instead of the "no secrets" early-exit path.
+
 ## Complete Fixture Example
 
 Workflow directory structure:
@@ -234,3 +254,53 @@ $ tntc test
 
 3/3 tests passed
 ```
+
+## Graceful Degradation Pattern
+
+Nodes that depend on external services (APIs, databases, etc.) should handle missing credentials in the mock context without throwing errors. This enables meaningful testing even when real credentials are not available.
+
+### Pattern
+
+Check for required secrets or config before making external calls. When credentials are absent, return a safe default or skip the external call:
+
+```typescript
+export default async function run(ctx: Context, input: unknown): Promise<unknown> {
+  const token = ctx.secrets.github?.token;
+  if (!token) {
+    ctx.log.warn("no github token, returning empty result");
+    return { issues: [], count: 0, source: "mock" };
+  }
+
+  // Real logic with external calls
+  const res = await ctx.fetch("github", "/repos/owner/repo/issues");
+  const issues = await res.json();
+  return { issues, count: issues.length, source: "live" };
+}
+```
+
+### Testing with and without credentials
+
+Use separate fixtures to test both paths:
+
+`tests/fixtures/fetch-issues.json` (no secrets -- tests graceful degradation):
+
+```json
+{
+  "input": {},
+  "expected": { "issues": [], "count": 0, "source": "mock" }
+}
+```
+
+`tests/fixtures/fetch-issues-live.json` (with secrets -- tests real logic):
+
+```json
+{
+  "input": {},
+  "secrets": { "github": { "token": "test-token" } },
+  "expected": null
+}
+```
+
+The first fixture validates the no-credentials path returns a safe default. The second fixture provides secrets so the node takes the real code path (with `expected: null` or omitted, the test passes as long as no error is thrown).
+
+This pattern is especially important for nodes using Postgres, external APIs, or cloud storage, since the default mock context has empty secrets.

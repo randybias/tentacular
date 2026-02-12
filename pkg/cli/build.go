@@ -19,6 +19,7 @@ func NewBuildCmd() *cobra.Command {
 		RunE:  runBuild,
 	}
 	cmd.Flags().StringP("tag", "t", "", "Image tag (default: tentacular-engine:latest)")
+	cmd.Flags().StringP("registry", "r", "", "Container registry URL")
 	cmd.Flags().Bool("push", false, "Push image to registry after build")
 	cmd.Flags().String("platform", "", "Target platform (e.g., linux/arm64)")
 	return cmd
@@ -50,6 +51,14 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	tag, _ := cmd.Flags().GetString("tag")
 	push, _ := cmd.Flags().GetBool("push")
 	platform, _ := cmd.Flags().GetString("platform")
+
+	// Apply config default for registry
+	if !cmd.Flags().Changed("registry") {
+		cfg := LoadConfig()
+		if cfg.Registry != "" {
+			registry = cfg.Registry
+		}
+	}
 
 	if tag == "" {
 		tag = "tentacular-engine:latest"

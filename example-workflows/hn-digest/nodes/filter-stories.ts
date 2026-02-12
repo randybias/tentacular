@@ -11,7 +11,8 @@ interface Story {
 
 /** Filter stories by minimum score threshold */
 export default async function run(ctx: Context, input: unknown): Promise<{ stories: Story[]; filtered: number }> {
-  const data = input as { stories: Story[] };
+  const data = input as { stories?: Story[] };
+  if (!Array.isArray(data?.stories)) return { stories: [], filtered: 0 };
   const minScore = (ctx.config as Record<string, unknown>).min_score as number ?? 50;
 
   ctx.log.info(`Filtering ${data.stories.length} stories with min score ${minScore}`);

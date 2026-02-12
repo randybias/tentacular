@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -53,6 +54,19 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	clusterRegistry, _ := cmd.Flags().GetString("cluster-registry")
 	runtimeClass, _ := cmd.Flags().GetString("runtime-class")
 
+	// Apply config defaults: CLI flag > workflow.yaml > config file > cobra default
+	cfg := LoadConfig()
+	if !cmd.Flags().Changed("namespace") {
+		if wf.Deployment.Namespace != "" {
+			namespace = wf.Deployment.Namespace
+		} else if cfg.Namespace != "" {
+			namespace = cfg.Namespace
+		}
+	}
+	if !cmd.Flags().Changed("runtime-class") && cfg.RuntimeClass != "" {
+		runtimeClass = cfg.RuntimeClass
+	}
+
 	// Check for deprecated --cluster-registry flag
 	if clusterRegistry != "" {
 		return fmt.Errorf("--cluster-registry is deprecated; use --image instead")
@@ -94,44 +108,32 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating k8s client: %w", err)
 	}
 
+	// Build secret manifest first to validate local secrets before preflight
+	secretManifest, err := buildSecretManifest(absDir, wf.Name, namespace)
+	if err != nil {
+		return fmt.Errorf("building secret manifest: %w", err)
+	}
+	hasLocalSecrets := secretManifest != nil
+
 	// Auto-preflight checks before applying manifests
-	// Only check for secrets if local secrets exist (.secrets/ dir or .secrets.yaml file)
+	// If local secrets exist, we'll create them — pass empty secretNames so preflight
+	// doesn't check K8s for a secret we're about to provision. If no local secrets,
+	// check K8s for a pre-existing secret the Deployment may reference.
 	var secretNames []string
-	secretsDir := filepath.Join(absDir, ".secrets")
-	secretsFile := filepath.Join(absDir, ".secrets.yaml")
-	if info, err := os.Stat(secretsDir); err == nil && info.IsDir() {
-		secretNames = []string{wf.Name + "-secrets"}
-		fmt.Printf("  ℹ Found .secrets/ directory — will verify %s-secrets exists in cluster\n", wf.Name)
-	} else if _, err := os.Stat(secretsFile); err == nil {
-		secretNames = []string{wf.Name + "-secrets"}
-		fmt.Printf("  ℹ Found .secrets.yaml — will verify %s-secrets exists in cluster\n", wf.Name)
+	if hasLocalSecrets {
+		fmt.Printf("  ℹ Found local secrets — will provision %s-secrets\n", wf.Name)
 	} else {
-		fmt.Println("  ℹ No local secrets found — skipping secret preflight check")
+		secretNames = []string{wf.Name + "-secrets"}
 	}
 	results, err := client.PreflightCheck(namespace, false, secretNames)
 	if err != nil {
 		return fmt.Errorf("preflight check failed: %w", err)
 	}
-	failed := false
-	for _, r := range results {
-		if !r.Passed {
-			fmt.Printf("  ✗ %s\n", r.Name)
-			if r.Remediation != "" {
-				fmt.Printf("    → %s\n", r.Remediation)
-			}
-			failed = true
-		}
-	}
-	if failed {
+	if failed := evaluatePreflightResults(results, hasLocalSecrets); failed {
 		return fmt.Errorf("preflight checks failed — fix the issues above and retry")
 	}
 	fmt.Println("  ✓ Preflight checks passed")
 
-	// Auto-provision secrets from local .secrets.yaml or .secrets/ directory
-	secretManifest, err := buildSecretManifest(absDir, wf.Name, namespace)
-	if err != nil {
-		return fmt.Errorf("building secret manifest: %w", err)
-	}
 	if secretManifest != nil {
 		manifests = append(manifests, *secretManifest)
 	}
@@ -148,6 +150,39 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("✓ Deployed %s to %s\n", wf.Name, namespace)
 	return nil
+}
+
+// evaluatePreflightResults displays preflight check results and returns true if
+// any check failed. When hasLocalSecrets is false, secret-reference failures are
+// downgraded to warnings since the Deployment mounts secrets with optional: true.
+func evaluatePreflightResults(results []k8s.CheckResult, hasLocalSecrets bool) bool {
+	failed := false
+	for _, r := range results {
+		if r.Passed {
+			fmt.Printf("  ✓ %s\n", r.Name)
+			if r.Warning != "" {
+				fmt.Printf("    ⚠ %s\n", r.Warning)
+			}
+			continue
+		}
+		// When no local secrets, downgrade secret-reference failures to warnings
+		if !hasLocalSecrets && r.Name == "Secret references" {
+			fmt.Printf("  ⚠ %s (no local secrets — secret volume is optional)\n", r.Name)
+			if r.Remediation != "" {
+				fmt.Printf("    ℹ %s\n", r.Remediation)
+			}
+			continue
+		}
+		fmt.Printf("  ✗ %s\n", r.Name)
+		if r.Warning != "" {
+			fmt.Printf("    ⚠ %s\n", r.Warning)
+		}
+		if r.Remediation != "" {
+			fmt.Printf("    → %s\n", r.Remediation)
+		}
+		failed = true
+	}
+	return failed
 }
 
 // buildSecretManifest creates a K8s Secret manifest from local secrets.
@@ -212,13 +247,15 @@ stringData:
 }
 
 // buildSecretFromYAML creates a K8s Secret from a .secrets.yaml file.
+// Supports nested YAML maps: string values are used as-is, nested maps are
+// JSON-serialized (matching the engine's loadSecretsFromDir JSON parsing).
 func buildSecretFromYAML(filePath, secretName, namespace string) (*builder.Manifest, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
 		return nil, fmt.Errorf("reading secrets file: %w", err)
 	}
 
-	var secrets map[string]string
+	var secrets map[string]interface{}
 	if err := yaml.Unmarshal(data, &secrets); err != nil {
 		return nil, fmt.Errorf("parsing secrets YAML: %w", err)
 	}
@@ -227,9 +264,24 @@ func buildSecretFromYAML(filePath, secretName, namespace string) (*builder.Manif
 		return nil, nil
 	}
 
+	// Resolve $shared.<name> references
+	workflowDir := filepath.Dir(filePath)
+	if err := resolveSharedSecrets(secrets, workflowDir); err != nil {
+		return nil, fmt.Errorf("resolving shared secrets: %w", err)
+	}
+
 	var dataEntries []string
 	for k, v := range secrets {
-		dataEntries = append(dataEntries, fmt.Sprintf("  %s: %q", k, v))
+		switch val := v.(type) {
+		case string:
+			dataEntries = append(dataEntries, fmt.Sprintf("  %s: %q", k, val))
+		default:
+			jsonBytes, err := json.Marshal(val)
+			if err != nil {
+				return nil, fmt.Errorf("serializing secret %q to JSON: %w", k, err)
+			}
+			dataEntries = append(dataEntries, fmt.Sprintf("  %s: %q", k, string(jsonBytes)))
+		}
 	}
 
 	manifest := fmt.Sprintf(`apiVersion: v1

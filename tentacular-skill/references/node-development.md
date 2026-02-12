@@ -140,6 +140,26 @@ const slackKey = ctx.secrets.slack?.api_key;        // "xoxb-..."
 
 Secrets are also used by `ctx.fetch` for automatic auth injection (see above).
 
+### Secrets Auto-Parsing (Production)
+
+In production, secrets are mounted as individual files via a Kubernetes Secret volume at `/app/secrets`. The engine's `loadSecretsFromDir()` function (in `engine/context/secrets.ts`) reads each file and populates `ctx.secrets`:
+
+1. Each file in the directory becomes a key in `ctx.secrets` (filename = service name).
+2. Hidden files (names starting with `.`) are skipped.
+3. Symlinks are followed (Kubernetes mounts Secret data as symlinks).
+4. File content is parsed as JSON first. If it parses to an object, the object is used directly as the service's secrets map.
+5. If the content is not valid JSON or parses to a non-object value (string, number, etc.), it is stored as `{ value: "<content>" }`.
+
+```
+/app/secrets/
+  github    ->  {"token": "ghp_abc123"}           => ctx.secrets.github.token = "ghp_abc123"
+  slack     ->  {"api_key": "xoxb-...", "webhook_url": "https://..."}
+                                                   => ctx.secrets.slack.api_key = "xoxb-..."
+  simple    ->  my-plain-text-value                => ctx.secrets.simple.value = "my-plain-text-value"
+```
+
+The Go CLI's `buildSecretFromYAML()` handles the reverse: nested YAML maps in `.secrets.yaml` are JSON-serialized into K8s Secret `stringData` entries, so the engine's JSON parsing reads them back correctly.
+
 ## Data Passing Between Nodes
 
 Node outputs flow to downstream nodes through edges defined in workflow.yaml.
@@ -247,3 +267,32 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
   return { repo, count: summary.length, issues: summary };
 }
 ```
+
+## Database Patterns
+
+### Postgres via `@db/postgres`
+
+Nodes can use `jsr:@db/postgres` for database access. Import it in the node file and connect using credentials from `ctx.secrets`:
+
+```typescript
+import { Client } from "jsr:@db/postgres@0.19.5";
+
+export default async function run(ctx: Context, input: unknown): Promise<unknown> {
+  const dbUrl = ctx.secrets.postgres?.connection_string;
+  if (!dbUrl) {
+    ctx.log.warn("no postgres credentials, skipping");
+    return { skipped: true, reason: "no credentials" };
+  }
+
+  const client = new Client(dbUrl);
+  await client.connect();
+  try {
+    const result = await client.queryObject("SELECT * FROM snapshots LIMIT 10");
+    return { rows: result.rows };
+  } finally {
+    await client.end();
+  }
+}
+```
+
+**Important:** `@db/postgres` auto-parses JSONB columns to JavaScript objects. Do not call `JSON.parse()` on values from JSONB columns -- they are already objects, and double-parsing will throw an error or produce incorrect results.

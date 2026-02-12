@@ -14,7 +14,7 @@
   "expected": {
     "alert": false,
     "probedAt": "2025-01-01T00:00:00.000Z",
-    "summary": "All 2 endpoint(s) responding normally",
+    "summary": "✅ All 2 endpoint(s) responding normally",
     "sections": {
       "down": "",
       "healthy": "https://example.com — `200` _(50ms)_\nhttps://httpstat.us/200 — `200` _(100ms)_"

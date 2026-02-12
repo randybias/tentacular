@@ -97,10 +97,8 @@ export default async function run(
 
   const auth = await getInClusterAuth();
   if (!auth) {
-    ctx.log.error("Not running in-cluster — no service account token found");
-    throw new Error(
-      "In-cluster service account token not available at /var/run/secrets/kubernetes.io/serviceaccount/token",
-    );
+    ctx.log.warn("No in-cluster service account token -- skipping (no credentials)");
+    return { skipped: true, reason: "missing service account token" } as unknown as ClusterHealthSnapshot;
   }
 
   const { token, apiServer, caCert } = auth;

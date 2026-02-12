@@ -31,16 +31,16 @@ ORDER BY collected_at ASC;
 
 /** Query the last 24 hours of cluster health snapshots from Postgres */
 export default async function run(ctx: Context, _input: unknown): Promise<HealthHistory> {
+  const pgPassword = ctx.secrets?.postgres?.password;
+  if (!pgPassword) {
+    ctx.log.warn("No postgres.password in secrets -- skipping (no credentials)");
+    return { records: [], periodStart: "", periodEnd: "", snapshotCount: 0 };
+  }
+
   const pgHost = ctx.config.pg_host as string;
   const pgPort = ctx.config.pg_port as number;
   const pgDatabase = ctx.config.pg_database as string;
   const pgUser = ctx.config.pg_user as string;
-  const pgPassword = ctx.secrets?.postgres?.password;
-
-  if (!pgPassword) {
-    ctx.log.error("No postgres.password in secrets");
-    throw new Error("Missing postgres.password secret");
-  }
 
   ctx.log.info(`Querying health history from ${pgHost}:${pgPort}/${pgDatabase}`);
 

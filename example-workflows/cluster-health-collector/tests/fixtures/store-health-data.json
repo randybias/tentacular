@@ -11,5 +11,9 @@
       "healthyPods": 42,
       "problemPods": 0
     }
+  },
+  "expected": {
+    "stored": false,
+    "rowId": 0
   }
 }

@@ -44,6 +44,7 @@ Project documentation lives in `docs/`. The primary reference is **[docs/archite
 - Nodes import types via `import type { Context } from "tentacular"` (mapped in `engine/deno.json`)
 - Workflow names must be kebab-case; versions must be semver (e.g., `1.0`)
 - Secrets are never environment variables — always volume mounts or files
+- Container images must always be built as multi-arch (linux/amd64,linux/arm64) using `docker buildx`. Never build single-platform images.
 
 ## Change Tracking
 

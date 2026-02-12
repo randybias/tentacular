@@ -193,6 +193,7 @@ func (c *Client) GetStatus(namespace, name string) (*DeploymentStatus, error) {
 type WorkflowInfo struct {
 	Name      string    `json:"name"`
 	Namespace string    `json:"namespace"`
+	Version   string    `json:"version"`
 	Ready     bool      `json:"ready"`
 	Replicas  int32     `json:"replicas"`
 	Available int32     `json:"available"`
@@ -315,6 +316,19 @@ func (c *Client) DeleteResources(namespace, name string) ([]string, error) {
 		deleted = append(deleted, "Secret/"+secretName)
 	}
 
+	// Delete ConfigMap (code bundle)
+	configMapName := name + "-code"
+	err = c.clientset.CoreV1().ConfigMaps(namespace).Delete(ctx, configMapName, metav1.DeleteOptions{
+		PropagationPolicy: &propagation,
+	})
+	if errors.IsNotFound(err) {
+		// skip
+	} else if err != nil {
+		return deleted, fmt.Errorf("deleting configmap %s: %w", configMapName, err)
+	} else {
+		deleted = append(deleted, "ConfigMap/"+configMapName)
+	}
+
 	// Delete CronJobs by label selector
 	labelSelector := fmt.Sprintf("app.kubernetes.io/name=%s,app.kubernetes.io/managed-by=tentacular", name)
 	cronJobs, err := c.clientset.BatchV1().CronJobs(namespace).List(ctx, metav1.ListOptions{
@@ -363,9 +377,12 @@ func (c *Client) ListWorkflows(namespace string) ([]WorkflowInfo, error) {
 			image = dep.Spec.Template.Spec.Containers[0].Image
 		}
 
+		version := dep.Labels["app.kubernetes.io/version"]
+
 		workflows = append(workflows, WorkflowInfo{
 			Name:      dep.Name,
 			Namespace: dep.Namespace,
+			Version:   version,
 			Ready:     dep.Status.ReadyReplicas == replicas,
 			Replicas:  replicas,
 			Available: dep.Status.AvailableReplicas,

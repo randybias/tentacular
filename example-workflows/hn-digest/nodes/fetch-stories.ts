@@ -15,6 +15,7 @@ export default async function run(ctx: Context, _input: unknown): Promise<{ stor
 
   const topRes = await ctx.fetch("hn", "https://hacker-news.firebaseio.com/v0/topstories.json");
   const topIds: number[] = await topRes.json();
+  if (!Array.isArray(topIds)) return { stories: [] };
 
   // Fetch details for top 10 stories
   const storyIds = topIds.slice(0, 10);

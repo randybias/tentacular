@@ -9,6 +9,12 @@ type Workflow struct {
 	Nodes       map[string]NodeSpec `yaml:"nodes"`
 	Edges       []Edge              `yaml:"edges"`
 	Config      WorkflowConfig      `yaml:"config"`
+	Deployment  DeploymentConfig    `yaml:"deployment,omitempty"`
+}
+
+// DeploymentConfig holds deployment-specific settings embedded in workflow.yaml.
+type DeploymentConfig struct {
+	Namespace string `yaml:"namespace,omitempty"`
 }
 
 type Trigger struct {

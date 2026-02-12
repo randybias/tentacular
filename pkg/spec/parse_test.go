@@ -375,3 +375,45 @@ edges: []
 		t.Fatal("expected cron schedule error")
 	}
 }
+
+func TestParseDeploymentNamespace(t *testing.T) {
+	yaml := `
+name: ns-test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+deployment:
+  namespace: pd-custom-ns
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Deployment.Namespace != "pd-custom-ns" {
+		t.Errorf("expected deployment namespace pd-custom-ns, got %q", wf.Deployment.Namespace)
+	}
+}
+
+func TestParseNoDeploymentSection(t *testing.T) {
+	yaml := `
+name: no-deploy
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Deployment.Namespace != "" {
+		t.Errorf("expected empty deployment namespace when no deployment section, got %q", wf.Deployment.Namespace)
+	}
+}

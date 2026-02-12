@@ -2,6 +2,8 @@ import { resolve } from "std/path";
 
 export interface TestFixture {
   input: unknown;
+  config?: Record<string, unknown>;
+  secrets?: Record<string, Record<string, string>>;
   expected?: unknown;
 }
 
