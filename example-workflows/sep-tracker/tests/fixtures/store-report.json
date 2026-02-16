@@ -23,6 +23,16 @@
       "html": "<html><body>Test report</body></html>",
       "title": "SEP Status Report - 2025-01-15T12:00:00Z",
       "summary": "Initial snapshot: 1 SEPs"
+    },
+    "diff-seps": {
+      "timestamp": "2025-01-15T12:00:00Z",
+      "repo": "modelcontextprotocol/specification",
+      "changes": [],
+      "addedCount": 0,
+      "removedCount": 0,
+      "updatedCount": 0,
+      "totalCount": 1,
+      "isFirstRun": false
     }
   },
   "expected": {

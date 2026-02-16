@@ -1,0 +1,19 @@
+flowchart TD
+    trigger_manual{{manual}}
+    trigger_cron{{cron: weekly-sunday}}
+    fetch-seps[fetch-seps]
+    diff-seps[diff-seps]
+    render-html[render-html]
+    store-report[store-report]
+    notify[notify]
+
+    trigger_manual --> fetch-seps
+    trigger_cron --> fetch-seps
+    fetch-seps --> diff-seps
+    diff-seps --> render-html
+    fetch-seps --> render-html
+    fetch-seps --> store-report
+    render-html --> store-report
+    diff-seps --> store-report
+    store-report --> notify
+    diff-seps --> notify

@@ -27,6 +27,12 @@ interface HtmlReport {
   summary: string;
 }
 
+interface SepDelta {
+  addedCount: number;
+  removedCount: number;
+  updatedCount: number;
+}
+
 interface StoreResult {
   stored: boolean;
   snapshotId: number;
@@ -61,9 +67,14 @@ function formatBlobTimestamp(iso: string): string {
 /** Store SEP snapshot to Postgres, upload HTML report to Azure Blob Storage */
 export default async function run(ctx: Context, input: unknown): Promise<StoreResult> {
   // Fan-in: input is keyed by upstream node names
-  const merged = input as { "fetch-seps": SepSnapshot; "render-html": HtmlReport };
+  const merged = input as {
+    "fetch-seps": SepSnapshot;
+    "render-html": HtmlReport;
+    "diff-seps"?: SepDelta;
+  };
   const snapshot = merged["fetch-seps"];
   const report = merged["render-html"];
+  const delta = merged["diff-seps"];
 
   const pgPassword = ctx.secrets?.postgres?.password;
   if (!pgPassword) {
@@ -112,6 +123,14 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
   let reportUrl = "";
   const sasToken = ctx.secrets?.azure?.sas_token;
   const blobBaseUrl = ctx.config.azure_blob_base_url as string;
+  const totalChanges = delta
+    ? delta.addedCount + delta.removedCount + delta.updatedCount
+    : undefined;
+
+  if (totalChanges === 0) {
+    ctx.log.info("No SEP changes detected, skipping Azure report upload");
+    return { stored: true, snapshotId, reportUrl };
+  }
 
   if (sasToken && blobBaseUrl) {
     const blobName = `sep-report-${formatBlobTimestamp(snapshot.timestamp)}.html`;
