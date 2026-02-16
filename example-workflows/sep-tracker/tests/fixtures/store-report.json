@@ -28,7 +28,6 @@
   "expected": {
     "stored": false,
     "snapshotId": 0,
-    "reportId": 0,
     "reportUrl": ""
   }
 }

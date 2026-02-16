@@ -30,7 +30,6 @@ interface SepDelta {
 interface StoreResult {
   stored: boolean;
   snapshotId: number;
-  reportId: number;
   reportUrl: string;
 }
 
@@ -83,7 +82,7 @@ export default async function run(ctx: Context, input: unknown): Promise<NotifyO
 
   // Build storage line
   const storageLine = storeResult.stored
-    ? `:floppy_disk: Stored as snapshot #${storeResult.snapshotId}, report #${storeResult.reportId}`
+    ? `:floppy_disk: Stored as snapshot #${storeResult.snapshotId}`
     : ":warning: Storage failed";
 
   const blocks: Record<string, unknown>[] = [

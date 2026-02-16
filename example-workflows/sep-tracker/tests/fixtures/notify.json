@@ -3,7 +3,6 @@
     "store-report": {
       "stored": true,
       "snapshotId": 1,
-      "reportId": 1,
       "reportUrl": "https://mcpreports9276621.blob.core.windows.net/sep-reports/sep-report-20250115-120000.html"
     },
     "diff-seps": {
