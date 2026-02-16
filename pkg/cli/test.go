@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"time"
 
 	"github.com/spf13/cobra"
 )
@@ -17,10 +18,19 @@ func NewTestCmd() *cobra.Command {
 		RunE:  runTest,
 	}
 	cmd.Flags().Bool("pipeline", false, "Run full pipeline test")
+	cmd.Flags().Bool("live", false, "Deploy and test against a real cluster")
+	cmd.Flags().String("env", "dev", "Environment to use for live testing")
+	cmd.Flags().Bool("keep", false, "Keep deployment after live test (do not clean up)")
+	cmd.Flags().Duration("timeout", 120*time.Second, "Timeout for live test (deploy + run)")
 	return cmd
 }
 
 func runTest(cmd *cobra.Command, args []string) error {
+	live, _ := cmd.Flags().GetBool("live")
+	if live {
+		return runLiveTest(cmd, args)
+	}
+
 	target := "."
 	var nodeName string
 
@@ -29,11 +39,6 @@ func runTest(cmd *cobra.Command, args []string) error {
 		// Support workflow/node syntax: if the target path is not a directory,
 		// treat the last component as a node name and the parent as the
 		// workflow directory.
-		// Examples:
-		//   "myworkflow/fetch-data" -> dir="myworkflow", node="fetch-data"
-		//   "/tmp/test-workflow/greet" -> dir="/tmp/test-workflow", node="greet"
-		//   "myworkflow" (is a dir) -> dir="myworkflow", node=""
-		//   "/tmp/test-workflow" (is a dir) -> dir="/tmp/test-workflow", node=""
 		if info, err := os.Stat(target); err != nil || !info.IsDir() {
 			nodeName = filepath.Base(target)
 			target = filepath.Dir(target)

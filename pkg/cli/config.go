@@ -9,9 +9,10 @@ import (
 
 // TentacularConfig holds default configuration values.
 type TentacularConfig struct {
-	Registry     string `yaml:"registry,omitempty"`
-	Namespace    string `yaml:"namespace,omitempty"`
-	RuntimeClass string `yaml:"runtime_class,omitempty"`
+	Registry     string                          `yaml:"registry,omitempty"`
+	Namespace    string                          `yaml:"namespace,omitempty"`
+	RuntimeClass string                          `yaml:"runtime_class,omitempty"`
+	Environments map[string]EnvironmentConfig    `yaml:"environments,omitempty"`
 }
 
 // LoadConfig returns merged config: project > user > defaults.
@@ -48,5 +49,13 @@ func mergeConfig(base, override *TentacularConfig) {
 	}
 	if override.RuntimeClass != "" {
 		base.RuntimeClass = override.RuntimeClass
+	}
+	if len(override.Environments) > 0 {
+		if base.Environments == nil {
+			base.Environments = make(map[string]EnvironmentConfig)
+		}
+		for k, v := range override.Environments {
+			base.Environments[k] = v
+		}
 	}
 }

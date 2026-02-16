@@ -20,6 +20,7 @@ type Manifest struct {
 // DeployOptions controls optional features in generated manifests.
 type DeployOptions struct {
 	RuntimeClassName string // If empty, omit runtimeClassName from pod spec
+	ImagePullPolicy  string // If empty, defaults to "Always"
 }
 
 // GenerateCodeConfigMap produces a ConfigMap containing workflow code (workflow.yaml + nodes/*.ts).
@@ -127,6 +128,12 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		runtimeClassLine = fmt.Sprintf("      runtimeClassName: %s\n", opts.RuntimeClassName)
 	}
 
+	// ImagePullPolicy (default: Always)
+	imagePullPolicy := opts.ImagePullPolicy
+	if imagePullPolicy == "" {
+		imagePullPolicy = "Always"
+	}
+
 	// Build ConfigMap items to map flattened keys back to proper paths
 	// K8s ConfigMap keys cannot contain slashes, so we use __ as separator
 	var configMapItems []string
@@ -174,7 +181,7 @@ spec:
       containers:
         - name: engine
           image: %s
-          imagePullPolicy: Always
+          imagePullPolicy: %s
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -224,7 +231,7 @@ spec:
             optional: true
         - name: tmp
           emptyDir: {}
-`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, wf.Name, strings.Join(configMapItems, "\n"), wf.Name)
+`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, wf.Name, strings.Join(configMapItems, "\n"), wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
