@@ -1,0 +1,30 @@
+# Tentacular project-level configuration
+# Copy to .tentacular/config.yaml and customize.
+# User-level config: ~/.tentacular/config.yaml
+# Project overrides user. CLI flags override both.
+
+# Default registry for tntc build --push
+registry: ""
+
+# Default namespace (overridden by workflow.yaml or CLI -n)
+namespace: default
+
+# Default RuntimeClass (empty disables gVisor)
+runtime_class: gvisor
+
+# Named environments for tntc deploy --env and tntc test --live --env
+environments:
+  dev:
+    context: kind-tentacular-dev    # kubeconfig context name
+    namespace: dev-workflows
+    runtime_class: ""               # no gVisor in kind
+    # image: tentacular-engine:latest  # optional; defaults to base-image.txt
+
+  prod:
+    context: Default                # kubeconfig context name
+    namespace: tentacular
+    runtime_class: ""
+    # image: reg.io/tentacular-engine:v1.0
+    # config_overrides:
+    #   pg_host: "postgres.db.svc.cluster.local"
+    #   pg_port: 5432
