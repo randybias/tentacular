@@ -1,0 +1,8 @@
+registry: ghcr.io/randybias
+namespace: default
+runtime_class: gvisor
+
+environments:
+  prod:
+    image: ghcr.io/randybias/tentacular-engine:latest
+    runtime_class: gvisor

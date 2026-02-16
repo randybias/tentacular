@@ -18,6 +18,7 @@ vendor/
 # Build artifacts
 .tentacular/
 !/.tentacular/
+!/.tentacular/config.yaml
 !/.tentacular/config.yaml.example
 
 # Scratch (agent/dev temp files)

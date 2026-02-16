@@ -101,6 +101,35 @@ Config files: `~/.tentacular/config.yaml` (user-level),
 `.tentacular/config.yaml` (project-level). Project
 overrides user.
 
+### Create Config From Scratch
+
+For this repository, the canonical public engine image is:
+`ghcr.io/randybias/tentacular-engine:latest`.
+
+Use this bootstrap flow:
+
+```bash
+mkdir -p .tentacular
+cp .tentacular/config.yaml.example .tentacular/config.yaml
+```
+
+Then set at least a registry and environment image:
+
+```yaml
+registry: ghcr.io/randybias
+namespace: default
+runtime_class: gvisor
+
+environments:
+  prod:
+    image: ghcr.io/randybias/tentacular-engine:latest
+    runtime_class: gvisor
+```
+
+Without an explicit environment `image`, deploy/test-live may
+fall back to `<workflow-dir>/.tentacular/base-image.txt` or
+the internal default `tentacular-engine:latest`.
+
 ## Node Contract
 
 Every node is a TypeScript file with a single default
@@ -320,14 +349,14 @@ Example deploy output with `-o json`:
 Named environments extend the existing config cascade. Define environments in `~/.tentacular/config.yaml` (user-level) or `.tentacular/config.yaml` (project-level).
 
 ```yaml
-registry: reg.io
+registry: ghcr.io/randybias
 namespace: default
 
 environments:
   dev:
     context: kind-dev              # kubeconfig context name
     namespace: dev-workflows
-    image: tentacular-engine:latest
+    image: ghcr.io/randybias/tentacular-engine:latest
     runtime_class: ""              # no gVisor in dev
     config_overrides:
       timeout: 60s
@@ -336,7 +365,7 @@ environments:
   staging:
     context: staging-cluster
     namespace: staging
-    image: reg.io/tentacular-engine:v2.1
+    image: ghcr.io/randybias/tentacular-engine:latest
     runtime_class: gvisor
 ```
 
@@ -408,6 +437,10 @@ The CLI resolves the engine image in this order:
 3. `<workflow-dir>/.tentacular/base-image.txt` (written
    by `tntc build`)
 4. `tentacular-engine:latest` (fallback)
+
+Repository default: configure `environments.<name>.image`
+to `ghcr.io/randybias/tentacular-engine:latest` so deploys
+do not rely on the unqualified fallback tag.
 
 `tntc build` writes the built tag to the workflow directory,
 not the current working directory. Both `deploy` and
