@@ -304,3 +304,135 @@ Use separate fixtures to test both paths:
 The first fixture validates the no-credentials path returns a safe default. The second fixture provides secrets so the node takes the real code path (with `expected: null` or omitted, the test passes as long as no error is thrown).
 
 This pattern is especially important for nodes using Postgres, external APIs, or cloud storage, since the default mock context has empty secrets.
+
+## Live Testing
+
+Live testing deploys a workflow to a real Kubernetes cluster, triggers it, validates the result, and cleans up. This validates the full deployment pipeline including container builds, K8s manifests, secrets mounting, and real network calls.
+
+### Prerequisites
+
+A named environment must be configured. See the [Deployment Guide](deployment-guide.md) for environment configuration details.
+
+Minimal config (`~/.tentacular/config.yaml` or `.tentacular/config.yaml`):
+
+```yaml
+environments:
+  dev:
+    context: kind-dev
+    namespace: dev-workflows
+```
+
+### Running Live Tests
+
+```bash
+tntc test --live                       # live test using "dev" environment (default)
+tntc test --live --env staging         # live test using "staging" environment
+tntc test --live --keep                # skip cleanup (leave deployed for debugging)
+tntc test --live --timeout 180s        # override default 120s timeout
+tntc test --live -o json              # structured JSON output
+```
+
+### Live Test Flow
+
+The live test executes these steps in order:
+
+1. **Load environment config** -- reads the named environment from the config cascade, resolving context, namespace, image, and runtime class.
+2. **Deploy** -- calls the shared `deployWorkflow()` function which handles kind cluster detection (adjusting RuntimeClass and ImagePullPolicy), manifest generation, preflight checks, and applying manifests to the environment namespace. If the environment specifies a kubeconfig context, it connects to that cluster.
+3. **Wait for Ready** -- polls the Deployment until `ReadyReplicas == Replicas` or the timeout expires.
+4. **Trigger workflow** -- sends a `POST /run` to the deployed workflow via a temporary curl pod and captures the execution result.
+5. **Parse and validate** -- parses the JSON execution result and checks the `success` field.
+6. **Cleanup** -- removes the deployed workflow from the environment namespace (skipped with `--keep`).
+7. **Emit result** -- outputs structured test result (text or JSON based on `-o` flag).
+
+### Live Test Output
+
+Text output:
+
+```
+Live test: environment=dev, namespace=dev-workflows
+Deploying my-workflow to namespace dev-workflows...
+  Preflight checks passed
+  Triggered rollout restart
+Deployed my-workflow to dev-workflows
+Waiting for my-workflow to become ready (timeout: 120s)...
+  Deployment ready
+Running workflow my-workflow...
+[PASS] workflow completed successfully
+  (8510ms)
+Cleaning up my-workflow from dev-workflows...
+  deleted Deployment/my-workflow
+  deleted Service/my-workflow
+  deleted ConfigMap/my-workflow-code
+```
+
+JSON output (with `-o json`):
+
+```json
+{
+  "version": "1",
+  "command": "test",
+  "status": "pass",
+  "summary": "workflow completed successfully",
+  "hints": [],
+  "execution": {
+    "success": true,
+    "outputs": { "hello": { "result": "done" } },
+    "timing": { "totalMs": 1800 }
+  },
+  "timing": {
+    "startedAt": "2026-02-16T09:00:00Z",
+    "durationMs": 8510
+  }
+}
+```
+
+When the live test fails:
+
+```json
+{
+  "version": "1",
+  "command": "test",
+  "status": "fail",
+  "summary": "workflow returned success=false",
+  "hints": ["check deployment logs with: tntc logs <workflow-name>"],
+  "execution": {
+    "success": false,
+    "errors": ["node fetch-data threw: connection refused"]
+  },
+  "timing": {
+    "startedAt": "2026-02-16T09:00:00Z",
+    "durationMs": 12200
+  }
+}
+```
+
+### Flags
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--live` | false | Run a live cluster test instead of mock tests |
+| `--env` | `dev` | Named environment to test against (must be defined in config) |
+| `--keep` | false | Do not clean up the deployed workflow after testing |
+| `--timeout` | `120s` | Maximum time to wait for deployment readiness |
+| `-o json` | text | Emit structured JSON output |
+
+### Combining Mock and Live Tests
+
+Mock tests and live tests serve different purposes and should both be part of the workflow development cycle:
+
+| Aspect | Mock (`tntc test`) | Live (`tntc test --live`) |
+|--------|-------------------|--------------------------|
+| Speed | Milliseconds | Seconds to minutes |
+| Dependencies | None | Kubernetes cluster |
+| Credentials | Not needed | Real credentials required |
+| Scope | Node logic | Full deployment pipeline |
+| When to use | During development | Before deploying to production |
+
+A typical workflow:
+
+```bash
+tntc test                           # fast feedback during development
+tntc test --pipeline                # validate full DAG data flow
+tntc test --live --env dev          # validate real deployment before promoting
+tntc deploy -n production           # deploy auto-gates on live test
+```

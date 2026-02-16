@@ -74,9 +74,9 @@ a default-exported async function.
 | `init` | `tntc init <name>` | | Scaffold a new workflow directory with workflow.yaml, example node, test fixture, .secrets.yaml.example |
 | `validate` | `tntc validate [dir]` | | Parse and validate workflow.yaml (name, version, triggers, nodes, edges, DAG acyclicity) |
 | `dev` | `tntc dev [dir]` | `-p` port (default 8080) | Start Deno engine locally with hot-reload (`--watch`). POST /run triggers execution |
-| `test` | `tntc test [dir][/<node>]` | `--pipeline` | Run node-level tests from fixtures, or full pipeline test with `--pipeline` |
+| `test` | `tntc test [dir][/<node>]` | `--pipeline`, `--live`, `--env`, `--keep`, `--timeout` | Run node-level tests from fixtures, full pipeline test with `--pipeline`, or live cluster test with `--live` |
 | `build` | `tntc build [dir]` | `-t` tag, `-r` registry, `--push`, `--platform` | Generate Dockerfile (distroless Deno base), build container image via `docker build` |
-| `deploy` | `tntc deploy [dir]` | `-n` namespace, `--image`, `--runtime-class` | Generate K8s manifests and apply to cluster. Namespace resolves: CLI > workflow.yaml > config > default |
+| `deploy` | `tntc deploy [dir]` | `-n` namespace, `--env`, `--image`, `--runtime-class`, `--force`, `--verify` | Generate K8s manifests and apply to cluster. `--env` targets a named environment (context, namespace, image). Auto-gates on live test if dev env configured; `--force` skips. Namespace resolves: CLI > env > workflow.yaml > config > default |
 | `configure` | `tntc configure` | `--registry`, `--namespace`, `--runtime-class`, `--project` | Set default config (user-level or project-level) |
 | `secrets check` | `tntc secrets check [dir]` | | Check secrets provisioning against node requirements |
 | `secrets init` | `tntc secrets init [dir]` | `--force` | Initialize .secrets.yaml from .secrets.yaml.example |
@@ -84,7 +84,7 @@ a default-exported async function.
 | `run` | `tntc run <name>` | `-n` namespace, `--timeout` | Trigger a deployed workflow and return JSON result |
 | `logs` | `tntc logs <name>` | `-n` namespace, `-f`/`--follow`, `--tail` | View workflow pod logs; `-f` streams in real time |
 | `list` | `tntc list` | `-n` namespace, `-o` json | List all deployed workflows with version, status, and age |
-| `undeploy` | `tntc undeploy <name>` | `-n` namespace, `--yes` | Remove a deployed workflow (Service, Deployment, Secret, CronJobs). Note: ConfigMap `<name>-code` is not deleted. |
+| `undeploy` | `tntc undeploy <name>` | `-n` namespace, `--yes`/`-y` | Remove a deployed workflow (Service, Deployment, Secret, CronJobs). Use `-y` to skip confirmation in scripts. Note: ConfigMap `<name>-code` is not deleted. |
 | `cluster check` | `tntc cluster check` | `--fix`, `-n` namespace | Preflight validation of cluster readiness; `--fix` auto-remediates |
 | `visualize` | `tntc visualize [dir]` | | Generate Mermaid diagram of the workflow DAG |
 
@@ -93,7 +93,9 @@ Global flags: `-n`/`--namespace` (default "default"),
 
 Namespace resolution order: CLI `-n` flag >
 `workflow.yaml deployment.namespace` > config file
-default > `default`.
+default > `default`. When `--env` is used (deploy,
+test --live), environment namespace is inserted after
+CLI `-n`.
 
 Config files: `~/.tentacular/config.yaml` (user-level),
 `.tentacular/config.yaml` (project-level). Project
@@ -238,6 +240,266 @@ tntc logs my-workflow              # view pod logs
 tntc undeploy my-workflow          # remove from cluster
 ```
 
+## Deployment Flow
+
+The recommended agentic deployment flow validates workflows through five steps. Each step produces structured JSON output (with `-o json`) for automation.
+
+```
+tntc validate -o json           # 1. Parse and validate workflow.yaml
+tntc test -o json               # 2. Run mock tests (node-level + pipeline)
+tntc test --live --env dev -o json  # 3. Live test against dev environment
+tntc deploy -o json             # 4. Deploy (auto-gates on live test)
+tntc run <name> -o json         # 5. Post-deploy verification
+```
+
+### Step Details
+
+1. **Validate** -- parses workflow.yaml, checks name/version format, trigger definitions, node paths, edge references, and DAG acyclicity. Catches spec errors before any execution.
+
+2. **Mock Test** -- runs node-level tests from fixtures using the mock context. No cluster or credentials required. Validates node logic and data flow in isolation.
+
+3. **Live Test** -- deploys the workflow to a configured dev environment, triggers it, validates the result, and cleans up. Requires a `dev` environment in config (see [Environment Configuration](#environment-configuration)). Use `--env <name>` to target a different environment. Add `--keep` to skip cleanup for debugging. Default timeout is 120 seconds (`--timeout` to override).
+
+4. **Deploy** -- generates K8s manifests and applies to the target cluster. When a dev environment is configured, deploy automatically runs a live test first and aborts if it fails. Use `--force` (alias `--skip-live-test`) to skip the live test gate. Add `--verify` to run post-deploy verification (trigger workflow once after deploy).
+
+5. **Post-Deploy Verification** -- triggers the deployed workflow once and validates the result. Confirms the workflow runs successfully in its target environment.
+
+### Deploy Gate
+
+When a dev environment is configured, `tntc deploy` runs a live test before applying manifests. This prevents deploying broken workflows.
+
+```bash
+tntc deploy                     # auto-runs live test first (if dev env configured)
+tntc deploy --force             # skip live test, deploy directly
+tntc deploy --skip-live-test    # alias for --force
+```
+
+If the live test fails, deploy aborts with a structured error including the test failure details and hints for remediation.
+
+### Structured Output
+
+All commands support `-o json` for agent-consumable output. Every JSON response uses a common envelope:
+
+```json
+{
+  "version": "1",
+  "command": "validate|test|deploy|run",
+  "status": "pass|fail",
+  "summary": "human-readable one-liner",
+  "hints": ["actionable suggestion if failed"],
+  "timing": {
+    "startedAt": "2026-02-16T09:00:00Z",
+    "durationMs": 1234
+  }
+}
+```
+
+Commands add their own fields to the envelope:
+
+- **validate**: validation errors array
+- **test**: per-node test results with pass/fail, expected vs. actual, execution time
+- **test --live**: `execution` field with the workflow run result (success, outputs, errors, timing)
+- **deploy**: `execution` field on verification failure; `hints` with remediation steps on failure
+- **run**: execution result with outputs, errors, and workflow timing
+
+Example deploy output with `-o json`:
+
+```json
+{
+  "version": "1",
+  "command": "deploy",
+  "status": "pass",
+  "summary": "deployed my-workflow to production",
+  "hints": [],
+  "timing": { "startedAt": "2026-02-16T09:00:00Z", "durationMs": 17000 }
+}
+```
+
+## Environment Configuration
+
+Named environments extend the existing config cascade. Define environments in `~/.tentacular/config.yaml` (user-level) or `.tentacular/config.yaml` (project-level).
+
+```yaml
+registry: reg.io
+namespace: default
+
+environments:
+  dev:
+    context: kind-dev              # kubeconfig context name
+    namespace: dev-workflows
+    image: tentacular-engine:latest
+    runtime_class: ""              # no gVisor in dev
+    config_overrides:
+      timeout: 60s
+      debug: true
+    secrets_source: .secrets.yaml
+  staging:
+    context: staging-cluster
+    namespace: staging
+    image: reg.io/tentacular-engine:v2.1
+    runtime_class: gvisor
+```
+
+### Environment Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `context` | string | Kubeconfig context to use for this environment |
+| `namespace` | string | Target K8s namespace |
+| `image` | string | Engine image tag |
+| `runtime_class` | string | RuntimeClass name (empty to disable gVisor) |
+| `config_overrides` | map | Merged into workflow config for this environment |
+| `secrets_source` | string | Path to secrets file for this environment |
+
+Environment values override the base config. CLI flags override environment values. Resolution order: CLI flags > environment config > project config > user config > defaults.
+
+### Kind Cluster Detection
+
+When deploying to a kind cluster, the CLI auto-detects it (kubeconfig context with `kind-` prefix and localhost server) and adjusts:
+
+- **RuntimeClass**: Set to empty (kind does not support gVisor)
+- **ImagePullPolicy**: Set to `IfNotPresent` (images are loaded locally)
+- **Image loading**: After `tntc build`, images are loaded into kind via `kind load docker-image`
+
+Detection is automatic -- no manual configuration needed. A diagnostic message is printed:
+
+```
+Detected kind cluster 'dev', adjusted: no gVisor, imagePullPolicy=IfNotPresent
+```
+
+## Agent Workflow Guide
+
+This section documents the non-interactive workflow for coding
+agents deploying and testing tentacular workflows. All commands
+support `-o json` for structured output; when active, progress
+messages go to stderr and only the JSON envelope goes to stdout.
+
+### Full E2E Cycle (Non-Interactive)
+
+```bash
+# 1. Validate spec
+tntc validate example-workflows/my-wf -o json
+
+# 2. Mock tests (no cluster needed)
+tntc test example-workflows/my-wf -o json
+
+# 3. Build container image
+tntc build example-workflows/my-wf -t tentacular-engine:my-wf
+
+# 4. Live test on dev (deploy -> run -> validate -> cleanup)
+tntc test --live --env dev example-workflows/my-wf -o json
+
+# 5. Deploy to target environment
+tntc deploy --env prod example-workflows/my-wf -o json
+
+# 6. Post-deploy run
+tntc run my-wf -n <namespace> -o json
+
+# 7. Cleanup when done
+tntc undeploy my-wf -n <namespace> -y
+```
+
+### Image Tag Cascade
+
+The CLI resolves the engine image in this order:
+
+1. `--image` flag (highest priority)
+2. Environment config `image` field (`--env`)
+3. `<workflow-dir>/.tentacular/base-image.txt` (written
+   by `tntc build`)
+4. `tentacular-engine:latest` (fallback)
+
+`tntc build` writes the built tag to the workflow directory,
+not the current working directory. Both `deploy` and
+`test --live` read from the workflow directory automatically.
+
+### Build + Registry Interaction
+
+The config `registry` value is prepended to the `-t` tag only
+when the tag does not already contain a registry prefix (a `/`
+before the `:`). This prevents double-prefixing:
+
+```bash
+# Config has registry: reg.io
+tntc build -t my-image:v1          # builds reg.io/my-image:v1
+tntc build -t reg.io/my-image:v1   # builds reg.io/my-image:v1 (no double prefix)
+```
+
+When pushing to a remote registry for ARM64 clusters:
+
+```bash
+tntc build -t tentacular-engine:my-wf \
+  -r reg.io --push --platform linux/arm64
+```
+
+### Deploy with --env
+
+The `--env` flag resolves context, namespace, runtime-class,
+and image from the named environment in config. CLI flags
+override environment values:
+
+```bash
+# Use everything from prod environment config
+tntc deploy --env prod example-workflows/my-wf
+
+# Override namespace from environment
+tntc deploy --env prod -n custom-ns example-workflows/my-wf
+
+# Force deploy (skip live test gate)
+tntc deploy --env prod --force example-workflows/my-wf
+```
+
+### Fresh Deploy vs. Update
+
+On fresh deployments (all resources created, none updated),
+the CLI skips the rollout restart since Kubernetes already
+starts pods for new Deployments. On updates to existing
+resources, a rollout restart is triggered automatically.
+
+### JSON Output Behavior
+
+When `-o json` is active:
+
+- **stdout**: Only the structured JSON envelope
+- **stderr**: All progress messages (preflight checks,
+  manifest application, rollout status, cleanup)
+
+This lets agents parse stdout as JSON while still seeing
+progress in stderr. Parse the `status` field ("pass" or
+"fail") to determine success. On failure, check `hints`
+for remediation steps.
+
+### Common Gotchas for Agents
+
+1. **undeploy needs confirmation**: Always pass `-y`
+   in non-interactive scripts. Without it, the command
+   blocks waiting for stdin.
+
+2. **Namespace must exist**: `deploy` does not create
+   namespaces. Create them first with `kubectl create
+   namespace <name>`.
+
+3. **kubeconfig context**: When targeting multiple
+   clusters, use `--env` to switch contexts automatically.
+   Without `--env`, the CLI uses the current kubeconfig
+   context.
+
+4. **kind clusters**: Auto-detected by context name
+   prefix `kind-`. gVisor and imagePullPolicy are
+   adjusted automatically. After `tntc build`, images
+   are loaded into kind via `kind load docker-image`.
+
+5. **Secrets**: Local secrets come from
+   `<workflow-dir>/.secrets.yaml`. The CLI generates a
+   K8s Secret manifest from this file during deploy.
+   If `.secrets/` directory exists, it takes precedence
+   over `.secrets.yaml`.
+
+6. **Deploy gate**: When a `dev` environment is
+   configured, `deploy` auto-runs a live test first.
+   Use `--force` to skip. This only triggers when the
+   CLI detects a dev environment in config.
+
 ## References
 
 For detailed documentation on specific topics:
@@ -250,7 +512,7 @@ For detailed documentation on specific topics:
   patterns
 - [Testing Guide](references/testing-guide.md)
   -- fixture format, mock context, node and pipeline
-  testing
+  testing, live testing
 - [Deployment Guide](references/deployment-guide.md)
   -- build, deploy, cluster check, security model,
-  secrets
+  secrets, environment config, deploy gate
