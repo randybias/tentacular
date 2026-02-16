@@ -60,49 +60,57 @@ deployment:
 - `tntc list --all-namespaces` queries the cluster directly for all tentacular-managed resources
 - Local `.tentacular/last-deploy.json` (git-ignored) caches the last deploy per-workflow for convenience (timestamp, namespace, cluster, image tag) — not a registry, just a "what did I last do from this machine" cache
 
+### 14. OpenTelemetry Integration
+
+Instrument the Deno engine with OTel SDK: per-workflow trace, per-node spans, error recording, and optional metrics export. Configure via workflow.yaml `telemetry` section or environment variables. Enables integration with Grafana, Jaeger, Datadog, etc.
+
+### 15. Token Usage Reporting
+
+Workflows calling LLM APIs have no mechanism to report back token consumption. Add a `ctx.usage()` API (or similar) that nodes can call to record token counts, and surface totals in `tntc status` / `tntc logs` output. May emit through OTel metrics if available (#14).
+
 ---
 
 ## Tier 4: First Month (Scaling)
 
 Items listed in approximate priority order within this tier.
 
-### 14. ConfigMap-Mounted Runtime Config Overrides
+### 16. ConfigMap-Mounted Runtime Config Overrides
 
 Mount a K8s ConfigMap at `/app/config` to override workflow config values at runtime without rebuilding the container. The engine merges ConfigMap values on top of workflow.yaml config.
 
-### 15. NATS JetStream Durable Subscriptions
+### 17. NATS JetStream Durable Subscriptions
 
 Upgrade from core NATS (at-most-once) to JetStream (at-least-once delivery) for queue triggers: durable subscriptions, acknowledgment with timeout-based redelivery, and replay for debugging or reprocessing.
 
-### 16. Rate Limiting / Concurrency Control for Queue Triggers
+### 18. Rate Limiting / Concurrency Control for Queue Triggers
 
 Max concurrent executions, token bucket / sliding window rate limiting, and backpressure to slow down NATS subscription when at capacity.
 
-### 17. Dead Letter Queue for Failed Executions
+### 19. Dead Letter Queue for Failed Executions
 
 Failed NATS-triggered executions publish the original message to `{subject}.dlq`. Enables retry from DLQ, alerting on DLQ depth, and forensic analysis.
 
-### 18. Multi-Cluster Deployment
+### 20. Multi-Cluster Deployment
 
 Deploy workflows across multiple K8s clusters with a single command. CLI discovers available clusters from kubeconfig contexts and generates manifests for each.
 
-### 19. Canary Deploys / Traffic Splitting
+### 21. Canary Deploys / Traffic Splitting
 
 Run multiple versions of a workflow simultaneously. CronJobs and NATS subscriptions route to the active version. Canary sends a percentage of traffic to the new version.
 
-### 20. Webhook Triggers via NATS Bridge
+### 22. Webhook Triggers via NATS Bridge
 
 A single gateway workflow subscribes to HTTP webhooks and publishes events to NATS subjects. Downstream workflows subscribe via queue triggers. Avoids per-workflow Ingress, centralizes webhook handling and TLS termination.
 
-### 21. Message Payload Passthrough
+### 23. Message Payload Passthrough
 
 Support binary payloads, content-type negotiation, and schema validation for incoming NATS trigger messages (currently JSON-only).
 
-### 22. Multi-Workflow Namespace Coordination
+### 24. Multi-Workflow Namespace Coordination
 
 `tntc deploy` treats each workflow independently, but related workflows (e.g., collector + reporter) often share a namespace and secrets. A `tntc deploy-group` command or project-level manifest could coordinate multiple related workflows. The per-workflow namespace feature (#5) solves the single-workflow case; this addresses the multi-workflow orchestration case.
 
-### 23. JSR Import Migration
+### 25. JSR Import Migration
 
 The engine uses `deno.land/std` URL-based imports, but third-party JSR libraries import `@std/*` bare specifiers that the engine's import map doesn't cover. Current fix is whack-a-mole (adding mappings as failures surface). Long-term fix: migrate engine to JSR imports (`jsr:@std/yaml`, `jsr:@std/path`, etc.) so JSR resolution works naturally.
 
