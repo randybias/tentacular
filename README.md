@@ -1,6 +1,8 @@
 # Tentacular
 
-Tentacular is a workflow execution engine that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. You define workflows as directed acyclic graphs of TypeScript functions, and Tentacular handles compilation, local development, container packaging, and Kubernetes deployment with gVisor kernel isolation.
+Tentacular is a secure workflow build and execution system for AI agents. Instead of long-lived monolithic automation stacks or generic node catalogs, you build purpose-fit TypeScript DAG workflows for each job, then iterate or replace them quickly.
+
+It runs those workflows on Kubernetes with defense-in-depth sandboxing: distroless runtime images, Deno permission locking, hardened pod security context, secrets as mounted files (not env vars), and optional gVisor kernel isolation.
 
 A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs inside hardened containers.
 
