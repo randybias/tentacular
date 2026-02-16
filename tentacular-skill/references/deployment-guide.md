@@ -217,12 +217,16 @@ spec:
 | `--namespace` | `-n` | (cascade) | Kubernetes namespace. Resolves via: `-n` flag > `workflow.yaml deployment.namespace` > config file > `default` |
 | `--image` | | (cascade) | Base engine image tag. Resolves via: `--image` flag > `.tentacular/base-image.txt` > `tentacular-engine:latest` |
 | `--runtime-class` | | `gvisor` | RuntimeClass name for pod sandboxing (empty to disable) |
+| `--force` | | false | Skip the live test gate (alias: `--skip-live-test`) |
+| `--verify` | | false | Run post-deploy verification (trigger workflow once after deploy) |
 
 ```bash
 tntc deploy                       # namespace from workflow.yaml or config
 tntc deploy -n production         # explicit namespace override
 tntc deploy --image reg.io/engine:v2
 tntc deploy --runtime-class ""    # disable gVisor
+tntc deploy --force               # skip live test gate
+tntc deploy -o json               # structured output with all phases
 ```
 
 The `--cluster-registry` flag has been deprecated. Use `--image` to specify the full image reference.
@@ -246,6 +250,216 @@ deployment:
 ### Version Tracking
 
 All generated K8s resources include an `app.kubernetes.io/version` label from the workflow.yaml `version` field. The version value is always YAML-quoted (e.g., `"1.0"`) to prevent YAML parsers from interpreting it as a float. `tntc list` displays a VERSION column alongside NAME, NAMESPACE, STATUS, REPLICAS, and AGE.
+
+## Environment Configuration
+
+Named environments extend the config cascade with cluster-specific settings for dev, staging, production, etc. Environments are defined in `~/.tentacular/config.yaml` (user-level) or `.tentacular/config.yaml` (project-level).
+
+### Config File Format
+
+```yaml
+# Base config (applies to all environments)
+registry: reg.io
+namespace: default
+
+# Named environments
+environments:
+  dev:
+    context: kind-dev                # kubeconfig context name
+    namespace: dev-workflows         # target namespace
+    image: tentacular-engine:latest  # engine image
+    runtime_class: ""                # no gVisor (kind cluster)
+    config_overrides:                # merged into workflow config
+      timeout: 60s
+      debug: true
+    secrets_source: .secrets.yaml    # secrets file path
+  staging:
+    context: staging-cluster
+    namespace: staging
+    image: reg.io/tentacular-engine:v2.1
+    runtime_class: gvisor
+  production:
+    context: prod-cluster
+    namespace: production
+    image: reg.io/tentacular-engine:v2.1
+    runtime_class: gvisor
+```
+
+### Environment Fields
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `context` | string | No | Kubeconfig context name. If set, the CLI switches to this context before operating. |
+| `namespace` | string | No | Target K8s namespace for this environment |
+| `image` | string | No | Engine image tag to use |
+| `runtime_class` | string | No | RuntimeClass name. Empty string disables gVisor. |
+| `config_overrides` | map | No | Key-value pairs merged into workflow config for this environment |
+| `secrets_source` | string | No | Path to the secrets file for this environment |
+
+### Resolution Order
+
+Environment values fit into the existing config cascade. The full resolution order is:
+
+1. CLI flags (`-n`, `--image`, `--runtime-class`)
+2. Environment config (from `--env <name>`)
+3. `workflow.yaml` settings (e.g., `deployment.namespace`)
+4. Project config (`.tentacular/config.yaml`)
+5. User config (`~/.tentacular/config.yaml`)
+6. Defaults
+
+### Config Overrides
+
+The `config_overrides` map is merged into the workflow's `config` section at deploy time. This enables environment-specific values without modifying workflow.yaml.
+
+For example, a workflow with `config.timeout: 30s` deployed with the `dev` environment above gets `config.timeout: 60s` and `config.debug: true` in its ConfigMap.
+
+### Usage
+
+Environments are used by `tntc test --live` and by `tntc deploy` (for the live test gate):
+
+```bash
+tntc test --live --env dev         # live test against dev environment
+tntc test --live --env staging     # live test against staging
+tntc deploy                        # auto-runs live test against dev (if configured)
+```
+
+## Kind Cluster Detection
+
+When deploying to a [kind](https://kind.sigs.k8s.io/) (Kubernetes in Docker) cluster, the CLI auto-detects it and adjusts deployment parameters. Detection is fully automatic -- no manual configuration required.
+
+### Detection Method
+
+A cluster is identified as kind when the kubeconfig context has:
+- A name prefixed with `kind-` (e.g., `kind-dev`, `kind-tentacular`)
+- A server address pointing to localhost
+
+### Adjustments
+
+When a kind cluster is detected, the CLI makes these changes:
+
+| Parameter | Normal | Kind |
+|-----------|--------|------|
+| RuntimeClass | `gvisor` | (empty -- kind does not support gVisor) |
+| ImagePullPolicy | `Always` | `IfNotPresent` (images loaded locally) |
+
+A diagnostic message is printed:
+
+```
+Detected kind cluster 'dev', adjusted: no gVisor, imagePullPolicy=IfNotPresent
+```
+
+### Image Loading
+
+After `tntc build`, the CLI detects kind and loads the image directly into the kind cluster using `kind load docker-image`. This avoids the need for a container registry during local development.
+
+```bash
+tntc build                         # builds image + loads into kind automatically
+```
+
+### Kind with Environments
+
+When using named environments, set `runtime_class: ""` for kind-based environments:
+
+```yaml
+environments:
+  dev:
+    context: kind-dev
+    namespace: dev-workflows
+    runtime_class: ""              # explicit: kind has no gVisor
+```
+
+The auto-detection still runs and overrides RuntimeClass and ImagePullPolicy regardless of config, but setting `runtime_class: ""` in config makes the intent explicit.
+
+## Deploy Gate
+
+When a dev environment is configured, `tntc deploy` automatically runs a live test before applying manifests. This prevents deploying broken workflows to production.
+
+### How It Works
+
+1. Deploy checks if a `dev` environment exists in the config cascade.
+2. If found (and `--force` is not set): runs `tntc test --live --env dev` internally.
+3. If the live test passes: proceeds with the normal deploy flow.
+4. If the live test fails: aborts with a structured error and does not apply manifests.
+
+### Skipping the Gate
+
+Use `--force` (alias `--skip-live-test`) to deploy without running the live test:
+
+```bash
+tntc deploy --force                # skip live test, deploy directly
+tntc deploy --skip-live-test       # same thing
+```
+
+This is useful for:
+- Hotfixes that need immediate deployment
+- Workflows where the dev environment is unavailable
+- Cases where the live test is known to fail for environment-specific reasons
+
+### Post-Deploy Verification
+
+When `--verify` is passed, deploy runs post-deploy verification after applying manifests. It waits for the rollout to complete, triggers the deployed workflow once, and validates the result. This flag is opt-in (default: false).
+
+### JSON Output
+
+With `-o json`, deploy emits a structured result using the standard command envelope:
+
+```json
+{
+  "version": "1",
+  "command": "deploy",
+  "status": "pass",
+  "summary": "deployed my-workflow to production",
+  "hints": [],
+  "timing": {
+    "startedAt": "2026-02-16T09:00:00Z",
+    "durationMs": 17000
+  }
+}
+```
+
+When `--verify` is used and verification fails, the `execution` field contains the workflow result:
+
+```json
+{
+  "version": "1",
+  "command": "deploy",
+  "status": "fail",
+  "summary": "verification: workflow returned success=false",
+  "execution": {
+    "success": false,
+    "errors": ["node fetch-data threw: GitHub API returned 401"]
+  },
+  "hints": [
+    "use --force to skip pre-deploy live test",
+    "check deployment logs with: tntc logs <workflow-name>"
+  ],
+  "timing": {
+    "startedAt": "2026-02-16T09:00:00Z",
+    "durationMs": 17000
+  }
+}
+```
+
+### Failure Output
+
+When the live test gate or deploy fails, the CLI returns a non-zero exit code with a structured error. The `hints` array provides actionable remediation steps:
+
+```json
+{
+  "version": "1",
+  "command": "deploy",
+  "status": "fail",
+  "summary": "deploy failed: pre-deploy live test failed (use --force to skip): workflow returned success=false",
+  "hints": [
+    "use --force to skip pre-deploy live test",
+    "check deployment logs with: tntc logs <workflow-name>"
+  ],
+  "timing": {
+    "startedAt": "2026-02-16T09:00:00Z",
+    "durationMs": 12200
+  }
+}
+```
 
 ## Fast Iteration
 

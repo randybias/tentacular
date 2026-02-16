@@ -5,8 +5,10 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/randybias/tentacular/pkg/builder"
+	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
 )
@@ -63,7 +65,9 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	if tag == "" {
 		tag = "tentacular-engine:latest"
 	}
-	if registry != "" {
+	// Only prepend registry if the tag doesn't already contain one.
+	// A tag with "/" before ":" indicates a registry prefix is present.
+	if registry != "" && !strings.Contains(strings.SplitN(tag, ":", 2)[0], "/") {
 		tag = registry + "/" + tag
 	}
 
@@ -109,6 +113,19 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Printf("✓ Built image: %s\n", tag)
+
+	// If kind cluster detected and not pushing to a remote registry, load into kind
+	if !push {
+		kindInfo, _ := k8s.DetectKindCluster()
+		if kindInfo != nil && kindInfo.IsKind {
+			fmt.Printf("Loading image into kind cluster '%s'...\n", kindInfo.ClusterName)
+			if err := k8s.LoadImageToKind(tag, kindInfo.ClusterName); err != nil {
+				fmt.Fprintf(os.Stderr, "Warning: failed to load image into kind: %v\n", err)
+			} else {
+				fmt.Printf("✓ Loaded image into kind cluster '%s'\n", kindInfo.ClusterName)
+			}
+		}
+	}
 
 	// Push if requested
 	if push {

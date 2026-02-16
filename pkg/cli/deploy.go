@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/randybias/tentacular/pkg/builder"
 	"github.com/randybias/tentacular/pkg/k8s"
@@ -21,13 +24,36 @@ func NewDeployCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runDeploy,
 	}
+	cmd.Flags().String("env", "", "Target environment from config (resolves context, namespace, runtime-class)")
 	cmd.Flags().String("image", "", "Base engine image (default: read from .tentacular/base-image.txt or use tentacular-engine:latest)")
 	cmd.Flags().String("cluster-registry", "", "DEPRECATED: Use --image instead")
 	cmd.Flags().String("runtime-class", "gvisor", "RuntimeClass name (empty to disable)")
+	cmd.Flags().Bool("force", false, "Skip pre-deploy live test")
+	cmd.Flags().Bool("skip-live-test", false, "Skip pre-deploy live test (alias for --force)")
+	cmd.Flags().Bool("verify", false, "Run workflow once after deploy to verify")
 	return cmd
 }
 
+// InternalDeployOptions controls deployment behavior when called programmatically.
+type InternalDeployOptions struct {
+	Namespace       string
+	Image           string
+	RuntimeClass    string
+	ImagePullPolicy string
+	Context         string    // kubeconfig context override
+	StatusOut       io.Writer // writer for progress messages (nil defaults to os.Stdout)
+}
+
+// DeployResult holds the result of a deployment.
+type DeployResult struct {
+	WorkflowName string
+	Namespace    string
+	Client       *k8s.Client
+}
+
 func runDeploy(cmd *cobra.Command, args []string) error {
+	startedAt := time.Now().UTC()
+
 	dir := "."
 	if len(args) > 0 {
 		dir = args[0]
@@ -38,33 +64,18 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	specPath := filepath.Join(absDir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
-	if err != nil {
-		return fmt.Errorf("reading workflow spec: %w", err)
-	}
-
-	wf, errs := spec.Parse(data)
-	if len(errs) > 0 {
-		return fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
-	}
-
+	envName, _ := cmd.Flags().GetString("env")
 	namespace, _ := cmd.Flags().GetString("namespace")
 	imageFlagValue, _ := cmd.Flags().GetString("image")
 	clusterRegistry, _ := cmd.Flags().GetString("cluster-registry")
 	runtimeClass, _ := cmd.Flags().GetString("runtime-class")
+	force, _ := cmd.Flags().GetBool("force")
+	skipLiveTest, _ := cmd.Flags().GetBool("skip-live-test")
+	verify, _ := cmd.Flags().GetBool("verify")
 
-	// Apply config defaults: CLI flag > workflow.yaml > config file > cobra default
-	cfg := LoadConfig()
-	if !cmd.Flags().Changed("namespace") {
-		if wf.Deployment.Namespace != "" {
-			namespace = wf.Deployment.Namespace
-		} else if cfg.Namespace != "" {
-			namespace = cfg.Namespace
-		}
-	}
-	if !cmd.Flags().Changed("runtime-class") && cfg.RuntimeClass != "" {
-		runtimeClass = cfg.RuntimeClass
+	// --skip-live-test is an alias for --force
+	if skipLiveTest {
+		force = true
 	}
 
 	// Check for deprecated --cluster-registry flag
@@ -72,113 +83,327 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--cluster-registry is deprecated; use --image instead")
 	}
 
-	// Image resolution cascade: --image flag > .tentacular/base-image.txt > tentacular-engine:latest
+	// Apply config defaults: CLI flag > workflow.yaml > config file > cobra default
+	cfg := LoadConfig()
+
+	// Resolve --env: environment config provides context, namespace, runtime-class defaults.
+	// CLI flags still override environment values.
+	var envContext string
+	if envName != "" {
+		env, envErr := cfg.LoadEnvironment(envName)
+		if envErr != nil {
+			return fmt.Errorf("loading environment %q: %w", envName, envErr)
+		}
+		envContext = env.Context
+		if !cmd.Flags().Changed("namespace") && env.Namespace != "" {
+			namespace = env.Namespace
+		}
+		if !cmd.Flags().Changed("runtime-class") && env.RuntimeClass != "" {
+			runtimeClass = env.RuntimeClass
+		}
+		if !cmd.Flags().Changed("runtime-class") && env.RuntimeClass == "" {
+			runtimeClass = ""
+		}
+		if !cmd.Flags().Changed("image") && env.Image != "" {
+			imageFlagValue = env.Image
+		}
+	}
+
+	specPath := filepath.Join(absDir, "workflow.yaml")
+	data, err := os.ReadFile(specPath)
+	if err != nil {
+		return fmt.Errorf("reading workflow spec: %w", err)
+	}
+	wf, errs := spec.Parse(data)
+	if len(errs) > 0 {
+		return fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
+	}
+
+	// Namespace cascade: CLI -n > --env > workflow.yaml > config > default
+	if !cmd.Flags().Changed("namespace") && envName == "" {
+		if wf.Deployment.Namespace != "" {
+			namespace = wf.Deployment.Namespace
+		} else if cfg.Namespace != "" {
+			namespace = cfg.Namespace
+		}
+	}
+	if !cmd.Flags().Changed("runtime-class") && envName == "" && cfg.RuntimeClass != "" {
+		runtimeClass = cfg.RuntimeClass
+	}
+
+	// Image resolution cascade: --image flag > env.Image > <workflow>/.tentacular/base-image.txt > tentacular-engine:latest
 	imageTag := imageFlagValue
 	if imageTag == "" {
-		// Try reading from .tentacular/base-image.txt
-		tagFilePath := ".tentacular/base-image.txt"
+		tagFilePath := filepath.Join(absDir, ".tentacular", "base-image.txt")
 		if tagData, err := os.ReadFile(tagFilePath); err == nil {
 			imageTag = strings.TrimSpace(string(tagData))
 		}
 	}
 	if imageTag == "" {
-		// Fallback to default
+		imageTag = "tentacular-engine:latest"
+	}
+
+	// Determine status output writer (stderr when -o json)
+	w := StatusWriter(cmd)
+
+	// Pre-deploy live test gate: if dev environment is configured and --force is not set,
+	// run a live test first to catch issues before deploying.
+	if !force {
+		devEnv, envErr := cfg.LoadEnvironment("dev")
+		if envErr == nil && devEnv.Namespace != "" {
+			fmt.Fprintln(w, "Running pre-deploy live test in dev environment...")
+			liveOpts := InternalDeployOptions{
+				Namespace:    devEnv.Namespace,
+				Image:        imageTag,
+				RuntimeClass: devEnv.RuntimeClass,
+				Context:      devEnv.Context,
+				StatusOut:    w,
+			}
+			liveResult, liveErr := deployWorkflow(absDir, liveOpts)
+			if liveErr != nil {
+				return fmt.Errorf("pre-deploy live test failed (use --force to skip): %w", liveErr)
+			}
+
+			// Wait for ready and run once
+			liveCtx, liveCancel := context.WithTimeout(context.Background(), 120*time.Second)
+			defer liveCancel()
+
+			if waitErr := liveResult.Client.WaitForReady(liveCtx, liveResult.Namespace, liveResult.WorkflowName); waitErr != nil {
+				// Clean up before failing
+				liveResult.Client.DeleteResources(liveResult.Namespace, liveResult.WorkflowName)
+				return fmt.Errorf("pre-deploy live test: deployment not ready (use --force to skip): %w", waitErr)
+			}
+
+			runOutput, runErr := liveResult.Client.RunWorkflow(liveCtx, liveResult.Namespace, liveResult.WorkflowName)
+			// Clean up the dev deployment
+			liveResult.Client.DeleteResources(liveResult.Namespace, liveResult.WorkflowName)
+
+			if runErr != nil {
+				return fmt.Errorf("pre-deploy live test: workflow run failed (use --force to skip): %w", runErr)
+			}
+
+			var execResult map[string]interface{}
+			if json.Unmarshal([]byte(runOutput), &execResult) == nil {
+				if success, ok := execResult["success"].(bool); ok && !success {
+					return fmt.Errorf("pre-deploy live test: workflow returned success=false (use --force to skip)")
+				}
+			}
+			fmt.Fprintln(w, "  Pre-deploy live test passed")
+		}
+	}
+
+	// Deploy
+	deployOpts := InternalDeployOptions{
+		Namespace:    namespace,
+		Image:        imageTag,
+		RuntimeClass: runtimeClass,
+		Context:      envContext,
+		StatusOut:    w,
+	}
+
+	deployResult, err := deployWorkflow(absDir, deployOpts)
+	if err != nil {
+		return emitDeployResult(cmd, "fail", "deploy failed: "+err.Error(), nil, startedAt)
+	}
+
+	// Post-deploy verification
+	if verify {
+		fmt.Fprintln(w, "Verifying deployment...")
+		verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 120*time.Second)
+		defer verifyCancel()
+
+		if waitErr := deployResult.Client.WaitForReady(verifyCtx, deployResult.Namespace, deployResult.WorkflowName); waitErr != nil {
+			return emitDeployResult(cmd, "fail", "verification: deployment not ready: "+waitErr.Error(), nil, startedAt)
+		}
+
+		runOutput, runErr := deployResult.Client.RunWorkflow(verifyCtx, deployResult.Namespace, deployResult.WorkflowName)
+		if runErr != nil {
+			return emitDeployResult(cmd, "fail", "verification: workflow run failed: "+runErr.Error(), nil, startedAt)
+		}
+
+		var execResult map[string]interface{}
+		if json.Unmarshal([]byte(runOutput), &execResult) == nil {
+			if success, ok := execResult["success"].(bool); ok && !success {
+				return emitDeployResult(cmd, "fail", "verification: workflow returned success=false", execResult, startedAt)
+			}
+		}
+		fmt.Fprintln(w, "  Verification passed")
+	}
+
+	return emitDeployResult(cmd, "pass", fmt.Sprintf("deployed %s to %s", deployResult.WorkflowName, deployResult.Namespace), nil, startedAt)
+}
+
+// emitDeployResult outputs the deploy result in the appropriate format.
+func emitDeployResult(cmd *cobra.Command, status, summary string, execution interface{}, startedAt time.Time) error {
+	result := CommandResult{
+		Version: "1",
+		Command: "deploy",
+		Status:  status,
+		Summary: summary,
+		Hints:   []string{},
+		Timing: TimingInfo{
+			StartedAt:  startedAt.Format(time.RFC3339),
+			DurationMs: time.Since(startedAt).Milliseconds(),
+		},
+		Execution: execution,
+	}
+
+	if status == "fail" {
+		result.Hints = append(result.Hints, "use --force to skip pre-deploy live test")
+		result.Hints = append(result.Hints, "check deployment logs with: tntc logs <workflow-name>")
+	}
+
+	if err := EmitResult(cmd, result, os.Stdout); err != nil {
+		return err
+	}
+
+	if status == "fail" {
+		return fmt.Errorf("%s", summary)
+	}
+	return nil
+}
+
+// deployWorkflow is the internal deployment function used by both `tntc deploy` and `tntc test --live`.
+func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResult, error) {
+	w := opts.StatusOut
+	if w == nil {
+		w = os.Stdout
+	}
+
+	specPath := filepath.Join(workflowDir, "workflow.yaml")
+	data, err := os.ReadFile(specPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading workflow spec: %w", err)
+	}
+
+	wf, errs := spec.Parse(data)
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
+	}
+
+	namespace := opts.Namespace
+	imageTag := opts.Image
+	runtimeClass := opts.RuntimeClass
+	imagePullPolicy := opts.ImagePullPolicy
+
+	if imageTag == "" {
 		imageTag = "tentacular-engine:latest"
 	}
 
 	// Generate ConfigMap for workflow code
-	configMap, err := builder.GenerateCodeConfigMap(wf, absDir, namespace)
+	configMap, err := builder.GenerateCodeConfigMap(wf, workflowDir, namespace)
 	if err != nil {
-		return fmt.Errorf("generating ConfigMap: %w", err)
+		return nil, fmt.Errorf("generating ConfigMap: %w", err)
+	}
+
+	// Detect kind cluster and adjust defaults
+	kindInfo, _ := k8s.DetectKindCluster()
+	if kindInfo != nil && kindInfo.IsKind {
+		fmt.Fprintf(w, "  Detected kind cluster '%s', adjusted: no gVisor, imagePullPolicy=IfNotPresent\n", kindInfo.ClusterName)
+		runtimeClass = ""
+		if imagePullPolicy == "" {
+			imagePullPolicy = "IfNotPresent"
+		}
 	}
 
 	// Generate K8s manifests
-	opts := builder.DeployOptions{
+	buildOpts := builder.DeployOptions{
 		RuntimeClassName: runtimeClass,
+		ImagePullPolicy:  imagePullPolicy,
 	}
-	manifests := builder.GenerateK8sManifests(wf, imageTag, namespace, opts)
+	manifests := builder.GenerateK8sManifests(wf, imageTag, namespace, buildOpts)
 
 	// Prepend ConfigMap to manifest list
 	manifests = append([]builder.Manifest{configMap}, manifests...)
 
-	fmt.Printf("Deploying %s to namespace %s...\n", wf.Name, namespace)
+	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, namespace)
 
-	client, err := k8s.NewClient()
+	// Create K8s client (with optional context override)
+	var client *k8s.Client
+	if opts.Context != "" {
+		client, err = k8s.NewClientWithContext(opts.Context)
+	} else {
+		client, err = k8s.NewClient()
+	}
 	if err != nil {
-		return fmt.Errorf("creating k8s client: %w", err)
+		return nil, fmt.Errorf("creating k8s client: %w", err)
 	}
 
 	// Build secret manifest first to validate local secrets before preflight
-	secretManifest, err := buildSecretManifest(absDir, wf.Name, namespace)
+	secretManifest, err := buildSecretManifest(workflowDir, wf.Name, namespace)
 	if err != nil {
-		return fmt.Errorf("building secret manifest: %w", err)
+		return nil, fmt.Errorf("building secret manifest: %w", err)
 	}
 	hasLocalSecrets := secretManifest != nil
 
-	// Auto-preflight checks before applying manifests
-	// If local secrets exist, we'll create them — pass empty secretNames so preflight
-	// doesn't check K8s for a secret we're about to provision. If no local secrets,
-	// check K8s for a pre-existing secret the Deployment may reference.
+	// Auto-preflight checks
 	var secretNames []string
 	if hasLocalSecrets {
-		fmt.Printf("  ℹ Found local secrets — will provision %s-secrets\n", wf.Name)
+		fmt.Fprintf(w, "  Found local secrets -- will provision %s-secrets\n", wf.Name)
 	} else {
 		secretNames = []string{wf.Name + "-secrets"}
 	}
 	results, err := client.PreflightCheck(namespace, false, secretNames)
 	if err != nil {
-		return fmt.Errorf("preflight check failed: %w", err)
+		return nil, fmt.Errorf("preflight check failed: %w", err)
 	}
-	if failed := evaluatePreflightResults(results, hasLocalSecrets); failed {
-		return fmt.Errorf("preflight checks failed — fix the issues above and retry")
+	if failed := evaluatePreflightResults(w, results, hasLocalSecrets); failed {
+		return nil, fmt.Errorf("preflight checks failed -- fix the issues above and retry")
 	}
-	fmt.Println("  ✓ Preflight checks passed")
+	fmt.Fprintln(w, "  Preflight checks passed")
 
 	if secretManifest != nil {
 		manifests = append(manifests, *secretManifest)
 	}
 
-	if err := client.Apply(namespace, manifests); err != nil {
-		return fmt.Errorf("applying manifests: %w", err)
+	if err := client.ApplyWithStatus(w, namespace, manifests); err != nil {
+		return nil, fmt.Errorf("applying manifests: %w", err)
 	}
 
-	// Trigger rollout restart to pick up new ConfigMap
-	if err := client.RolloutRestart(namespace, wf.Name); err != nil {
-		return fmt.Errorf("triggering rollout restart: %w", err)
+	// Only rollout restart on updates (skip for fresh deployments to avoid
+	// double-pod creation and the associated readiness race condition).
+	if client.LastApplyHadUpdates() {
+		if err := client.RolloutRestart(namespace, wf.Name); err != nil {
+			return nil, fmt.Errorf("triggering rollout restart: %w", err)
+		}
+		fmt.Fprintln(w, "  Triggered rollout restart")
 	}
-	fmt.Println("  ✓ Triggered rollout restart")
 
-	fmt.Printf("✓ Deployed %s to %s\n", wf.Name, namespace)
-	return nil
+	fmt.Fprintf(w, "Deployed %s to %s\n", wf.Name, namespace)
+	return &DeployResult{
+		WorkflowName: wf.Name,
+		Namespace:    namespace,
+		Client:       client,
+	}, nil
 }
 
 // evaluatePreflightResults displays preflight check results and returns true if
 // any check failed. When hasLocalSecrets is false, secret-reference failures are
 // downgraded to warnings since the Deployment mounts secrets with optional: true.
-func evaluatePreflightResults(results []k8s.CheckResult, hasLocalSecrets bool) bool {
+func evaluatePreflightResults(w io.Writer, results []k8s.CheckResult, hasLocalSecrets bool) bool {
 	failed := false
 	for _, r := range results {
 		if r.Passed {
-			fmt.Printf("  ✓ %s\n", r.Name)
+			fmt.Fprintf(w, "  ✓ %s\n", r.Name)
 			if r.Warning != "" {
-				fmt.Printf("    ⚠ %s\n", r.Warning)
+				fmt.Fprintf(w, "    ⚠ %s\n", r.Warning)
 			}
 			continue
 		}
 		// When no local secrets, downgrade secret-reference failures to warnings
 		if !hasLocalSecrets && r.Name == "Secret references" {
-			fmt.Printf("  ⚠ %s (no local secrets — secret volume is optional)\n", r.Name)
+			fmt.Fprintf(w, "  ⚠ %s (no local secrets — secret volume is optional)\n", r.Name)
 			if r.Remediation != "" {
-				fmt.Printf("    ℹ %s\n", r.Remediation)
+				fmt.Fprintf(w, "    ℹ %s\n", r.Remediation)
 			}
 			continue
 		}
-		fmt.Printf("  ✗ %s\n", r.Name)
+		fmt.Fprintf(w, "  ✗ %s\n", r.Name)
 		if r.Warning != "" {
-			fmt.Printf("    ⚠ %s\n", r.Warning)
+			fmt.Fprintf(w, "    ⚠ %s\n", r.Warning)
 		}
 		if r.Remediation != "" {
-			fmt.Printf("    → %s\n", r.Remediation)
+			fmt.Fprintf(w, "    → %s\n", r.Remediation)
 		}
 		failed = true
 	}

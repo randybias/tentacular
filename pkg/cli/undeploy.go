@@ -17,7 +17,7 @@ func NewUndeployCmd() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE:  runUndeploy,
 	}
-	cmd.Flags().Bool("yes", false, "Skip confirmation prompt")
+	cmd.Flags().BoolP("yes", "y", false, "Skip confirmation prompt")
 	return cmd
 }
 

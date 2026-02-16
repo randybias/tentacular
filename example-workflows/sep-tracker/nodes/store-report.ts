@@ -30,7 +30,6 @@ interface HtmlReport {
 interface StoreResult {
   stored: boolean;
   snapshotId: number;
-  reportId: number;
   reportUrl: string;
 }
 
@@ -45,26 +44,11 @@ CREATE TABLE IF NOT EXISTS sep_snapshots (
 
 CREATE INDEX IF NOT EXISTS idx_sep_snapshots_repo_collected
   ON sep_snapshots (repo, collected_at DESC);
-
-CREATE TABLE IF NOT EXISTS sep_reports (
-  id SERIAL PRIMARY KEY,
-  created_at TIMESTAMPTZ NOT NULL,
-  title TEXT NOT NULL,
-  summary TEXT NOT NULL,
-  html TEXT NOT NULL,
-  snapshot_id INT REFERENCES sep_snapshots(id)
-);
 `;
 
 const INSERT_SNAPSHOT = `
 INSERT INTO sep_snapshots (collected_at, repo, sep_count, seps_json)
 VALUES ($1, $2, $3, $4)
-RETURNING id;
-`;
-
-const INSERT_REPORT = `
-INSERT INTO sep_reports (created_at, title, summary, html, snapshot_id)
-VALUES ($1, $2, $3, $4, $5)
 RETURNING id;
 `;
 
@@ -74,7 +58,7 @@ function formatBlobTimestamp(iso: string): string {
   return `${d.getUTCFullYear()}${pad(d.getUTCMonth() + 1)}${pad(d.getUTCDate())}-${pad(d.getUTCHours())}${pad(d.getUTCMinutes())}${pad(d.getUTCSeconds())}`;
 }
 
-/** Store SEP snapshot and HTML report to Postgres, upload HTML to Azure Blob Storage */
+/** Store SEP snapshot to Postgres, upload HTML report to Azure Blob Storage */
 export default async function run(ctx: Context, input: unknown): Promise<StoreResult> {
   // Fan-in: input is keyed by upstream node names
   const merged = input as { "fetch-seps": SepSnapshot; "render-html": HtmlReport };
@@ -84,7 +68,7 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
   const pgPassword = ctx.secrets?.postgres?.password;
   if (!pgPassword) {
     ctx.log.warn("No postgres.password in secrets -- skipping (no credentials)");
-    return { stored: false, snapshotId: 0, reportId: 0, reportUrl: "" };
+    return { stored: false, snapshotId: 0, reportUrl: "" };
   }
 
   const pgHost = ctx.config.pg_host as string;
@@ -104,7 +88,6 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
   });
 
   let snapshotId = 0;
-  let reportId = 0;
 
   try {
     await client.connect();
@@ -121,17 +104,6 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
     ]);
     snapshotId = Number(snapResult.rows[0]?.[0] ?? 0);
     ctx.log.info(`Stored snapshot as row ${snapshotId}`);
-
-    // Insert report
-    const reportResult = await client.queryArray(INSERT_REPORT, [
-      snapshot.timestamp,
-      report.title,
-      report.summary,
-      report.html,
-      snapshotId,
-    ]);
-    reportId = Number(reportResult.rows[0]?.[0] ?? 0);
-    ctx.log.info(`Stored report as row ${reportId}`);
   } finally {
     await client.end();
   }
@@ -172,5 +144,5 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
     ctx.log.warn("No azure.sas_token in secrets or azure_blob_base_url in config, skipping blob upload");
   }
 
-  return { stored: true, snapshotId, reportId, reportUrl };
+  return { stored: true, snapshotId, reportUrl };
 }

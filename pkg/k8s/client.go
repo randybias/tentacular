@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"time"
 
+
 	"github.com/randybias/tentacular/pkg/builder"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -29,9 +30,10 @@ import (
 
 // Client wraps K8s client-go for tentacular operations.
 type Client struct {
-	clientset *kubernetes.Clientset
-	dynamic   dynamic.Interface
-	config    *rest.Config
+	clientset       *kubernetes.Clientset
+	dynamic         dynamic.Interface
+	config          *rest.Config
+	lastApplyUpdate bool // true if the last Apply/ApplyWithStatus had any updates (vs all creates)
 }
 
 // NewClient creates a K8s client from kubeconfig or in-cluster config.
@@ -39,6 +41,30 @@ func NewClient() (*Client, error) {
 	config, err := loadConfig()
 	if err != nil {
 		return nil, fmt.Errorf("loading kubeconfig: %w", err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating clientset: %w", err)
+	}
+
+	dyn, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating dynamic client: %w", err)
+	}
+
+	return &Client{
+		clientset: clientset,
+		dynamic:   dyn,
+		config:    config,
+	}, nil
+}
+
+// NewClientWithContext creates a K8s client using an explicit kubeconfig context.
+func NewClientWithContext(contextName string) (*Client, error) {
+	config, err := loadConfigWithContext(contextName)
+	if err != nil {
+		return nil, fmt.Errorf("loading kubeconfig for context %s: %w", contextName, err)
 	}
 
 	clientset, err := kubernetes.NewForConfig(config)
@@ -74,10 +100,57 @@ func loadConfig() (*rest.Config, error) {
 	return clientcmd.BuildConfigFromFlags("", kubeconfig)
 }
 
+func loadConfigWithContext(contextName string) (*rest.Config, error) {
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		home, _ := os.UserHomeDir()
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	}
+
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfig},
+		&clientcmd.ConfigOverrides{CurrentContext: contextName},
+	).ClientConfig()
+}
+
+// WaitForReady polls until a deployment's ReadyReplicas equals Replicas or the context expires.
+func (c *Client) WaitForReady(ctx context.Context, namespace, name string) error {
+	for {
+		dep, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, name, metav1.GetOptions{})
+		if err != nil {
+			return fmt.Errorf("getting deployment %s: %w", name, err)
+		}
+
+		replicas := int32(1)
+		if dep.Spec.Replicas != nil {
+			replicas = *dep.Spec.Replicas
+		}
+
+		if dep.Status.ReadyReplicas >= replicas {
+			return nil
+		}
+
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("timed out waiting for deployment %s to become ready (ready: %d/%d)", name, dep.Status.ReadyReplicas, replicas)
+		case <-time.After(2 * time.Second):
+			// poll again
+		}
+	}
+}
+
 const k8sTimeout = 30 * time.Second
 
 // Apply applies a set of K8s manifests to the cluster.
+// Status messages are written to os.Stdout. Use ApplyWithStatus to control output destination.
 func (c *Client) Apply(namespace string, manifests []builder.Manifest) error {
+	return c.ApplyWithStatus(os.Stdout, namespace, manifests)
+}
+
+// ApplyWithStatus applies K8s manifests and writes status messages to w.
+// Tracks whether any resources were updated (vs all created) for rollout restart decisions.
+func (c *Client) ApplyWithStatus(w io.Writer, namespace string, manifests []builder.Manifest) error {
+	c.lastApplyUpdate = false
 	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
 	defer cancel()
 	decSerializer := yaml.NewDecodingSerializer(unstructured.UnstructuredJSONScheme)
@@ -102,7 +175,7 @@ func (c *Client) Apply(namespace string, manifests []builder.Manifest) error {
 			if err != nil {
 				return fmt.Errorf("creating %s %s: %w", m.Kind, m.Name, err)
 			}
-			fmt.Printf("  created %s/%s\n", m.Kind, m.Name)
+			fmt.Fprintf(w, "  created %s/%s\n", m.Kind, m.Name)
 		} else if err != nil {
 			return fmt.Errorf("checking %s %s: %w", m.Kind, m.Name, err)
 		} else {
@@ -111,11 +184,18 @@ func (c *Client) Apply(namespace string, manifests []builder.Manifest) error {
 			if err != nil {
 				return fmt.Errorf("updating %s %s: %w", m.Kind, m.Name, err)
 			}
-			fmt.Printf("  updated %s/%s\n", m.Kind, m.Name)
+			fmt.Fprintf(w, "  updated %s/%s\n", m.Kind, m.Name)
+			c.lastApplyUpdate = true
 		}
 	}
 
 	return nil
+}
+
+// LastApplyHadUpdates returns true if the most recent Apply/ApplyWithStatus call
+// updated any existing resources (as opposed to creating all new ones).
+func (c *Client) LastApplyHadUpdates() bool {
+	return c.lastApplyUpdate
 }
 
 func (c *Client) findResource(group, version, kind string) (schema.GroupVersionResource, error) {
