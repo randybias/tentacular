@@ -387,3 +387,37 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 ```
 
 **Important:** `@db/postgres` auto-parses JSONB columns to JavaScript objects. Do not call `JSON.parse()` on values from JSONB columns -- they are already objects, and double-parsing will throw an error or produce incorrect results.
+
+## LLM API Patterns
+
+### OpenAI Chat Completions
+
+When calling OpenAI's chat completions API from nodes:
+
+```typescript
+const openai = ctx.dependency("openai-api");
+const resp = await globalThis.fetch("https://api.openai.com/v1/chat/completions", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "Authorization": `Bearer ${openai.secret}`,
+  },
+  body: JSON.stringify({
+    model: "gpt-5.2",
+    messages: [
+      { role: "system", content: "You are a helpful assistant." },
+      { role: "user", content: "Summarize this data..." },
+    ],
+    temperature: 0.3,
+    max_completion_tokens: 2000,
+  }),
+});
+```
+
+**Critical: `max_completion_tokens` vs `max_tokens`.**
+Newer OpenAI models (gpt-5 and later) require
+`max_completion_tokens`. The legacy `max_tokens`
+parameter returns a 400 error on these models. Always
+use `max_completion_tokens` for gpt-5, gpt-5.1,
+gpt-5.2, and newer. The older `max_tokens` only works
+with legacy models (gpt-4, gpt-4-turbo, gpt-3.5).
