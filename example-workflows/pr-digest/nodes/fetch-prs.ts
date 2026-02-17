@@ -16,7 +16,10 @@ export default async function run(ctx: Context, _input: unknown): Promise<{ prs:
   const repo = "denoland/deno";
   ctx.log.info(`Fetching open PRs from ${repo}`);
 
-  const response = await ctx.fetch("github", `/repos/${repo}/pulls?state=open&per_page=10&sort=updated`);
+  const github = ctx.dependency("github");
+  const response = await github.fetch!(`/repos/${repo}/pulls?state=open&per_page=10&sort=updated`, {
+    headers: { "Authorization": `Bearer ${github.secret}` },
+  });
   const data = await response.json();
 
   const prs: PullRequest[] = Array.isArray(data)

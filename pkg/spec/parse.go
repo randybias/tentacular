@@ -2,15 +2,18 @@ package spec
 
 import (
 	"fmt"
+	"log"
+	"net"
 	"regexp"
 
 	"gopkg.in/yaml.v3"
 )
 
 var (
-	kebabRe  = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
-	identRe  = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
-	semverRe = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
+	kebabRe      = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+	identRe      = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+	semverRe     = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
+	secretKeyRe  = regexp.MustCompile(`^[a-z][a-z0-9_-]*\.[a-z][a-z0-9_-]*$`)
 )
 
 var validTriggerTypes = map[string]bool{
@@ -18,6 +21,19 @@ var validTriggerTypes = map[string]bool{
 	"cron":    true,
 	"webhook": true,
 	"queue":   true,
+}
+
+var validProtocols = map[string]bool{
+	"https":      true,
+	"postgresql": true,
+	"nats":       true,
+	"blob":       true,
+}
+
+var protocolDefaultPorts = map[string]int{
+	"https":      443,
+	"postgresql": 5432,
+	"nats":       4222,
 }
 
 // Parse parses and validates a workflow YAML spec.
@@ -103,6 +119,13 @@ func Parse(data []byte) (*Workflow, []string) {
 		errs = append(errs, cycleErrs...)
 	}
 
+	// Contract validation (optional section)
+	if wf.Contract != nil {
+		if contractErrs := ValidateContract(wf.Contract); len(contractErrs) > 0 {
+			errs = append(errs, contractErrs...)
+		}
+	}
+
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -151,4 +174,146 @@ func checkCycles(wf *Workflow) []string {
 		}
 	}
 	return errs
+}
+
+// ValidateContract validates contract section including dependencies and network policy overrides.
+// Exported for use in deploy preflight checks.
+func ValidateContract(c *Contract) []string {
+	var errs []string
+
+	// Validate contract version
+	if c.Version == "" {
+		errs = append(errs, "contract.version is required")
+	} else if c.Version != "1" {
+		errs = append(errs, fmt.Sprintf("contract.version must be \"1\", got: %q", c.Version))
+	}
+
+	if c.Dependencies == nil {
+		c.Dependencies = make(map[string]Dependency)
+	}
+
+	// Check for duplicate dependency names (map keys are unique by definition, but validate anyway)
+	depNames := make(map[string]bool)
+	for name := range c.Dependencies {
+		if depNames[name] {
+			errs = append(errs, fmt.Sprintf("contract: duplicate dependency name %q", name))
+		}
+		depNames[name] = true
+	}
+
+	// Validate each dependency
+	for name, dep := range c.Dependencies {
+		if !identRe.MatchString(name) {
+			errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: name must match [a-z][a-z0-9_-]*", name))
+		}
+
+		// Protocol validation
+		if dep.Protocol == "" {
+			errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: protocol is required", name))
+			continue
+		}
+		if !validProtocols[dep.Protocol] {
+			log.Printf("Warning: contract.dependencies[%q]: unknown protocol %q (known protocols: https, postgresql, nats, blob)", name, dep.Protocol)
+		}
+
+		// Dynamic-target dependencies have their own validation
+		if dep.Type == "dynamic-target" {
+			if dep.CIDR == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: dynamic-target requires cidr", name))
+			} else if !isValidCIDR(dep.CIDR) {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: invalid CIDR format %q", name, dep.CIDR))
+			}
+			if len(dep.DynPorts) == 0 {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: dynamic-target requires dynPorts", name))
+			} else {
+				for j, portSpec := range dep.DynPorts {
+					port, _ := parsePortSpec(portSpec)
+					if port <= 0 {
+						errs = append(errs, fmt.Sprintf("contract.dependencies[%q].dynPorts[%d]: invalid port spec %q", name, j, portSpec))
+					}
+				}
+			}
+			// Skip protocol-specific field validation for dynamic-target
+			if dep.Auth != nil {
+				if dep.Auth.Type == "" {
+					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.type is required when auth is present", name))
+				}
+				if dep.Auth.Secret == "" {
+					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))
+				} else if !secretKeyRe.MatchString(dep.Auth.Secret) {
+					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret must be in \"service.key\" format, got: %q", name, dep.Auth.Secret))
+				}
+			}
+			continue
+		}
+
+		// Protocol-specific field validation
+		switch dep.Protocol {
+		case "https":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: https requires host", name))
+			}
+		case "postgresql":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: postgresql requires host", name))
+			}
+			if dep.Database == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: postgresql requires database", name))
+			}
+			if dep.User == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: postgresql requires user", name))
+			}
+		case "nats":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: nats requires host", name))
+			}
+			if dep.Subject == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: nats requires subject", name))
+			}
+		case "blob":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: blob requires host", name))
+			}
+			if dep.Container == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: blob requires container", name))
+			}
+		}
+
+		// Auth validation
+		if dep.Auth != nil {
+			if dep.Auth.Type == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.type is required when auth is present", name))
+			}
+			if dep.Auth.Secret == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))
+			} else if !secretKeyRe.MatchString(dep.Auth.Secret) {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret must be in \"service.key\" format, got: %q", name, dep.Auth.Secret))
+			}
+		}
+	}
+
+	// Validate networkPolicy CIDR overrides
+	if c.NetworkPolicy != nil {
+		for i, override := range c.NetworkPolicy.AdditionalEgress {
+			if override.ToCIDR == "" {
+				errs = append(errs, fmt.Sprintf("contract.networkPolicy.additionalEgress[%d]: toCIDR is required", i))
+			} else if !isValidCIDR(override.ToCIDR) {
+				errs = append(errs, fmt.Sprintf("contract.networkPolicy.additionalEgress[%d]: invalid CIDR format %q", i, override.ToCIDR))
+			}
+			for j, portSpec := range override.Ports {
+				port, _ := parsePortSpec(portSpec)
+				if port <= 0 {
+					errs = append(errs, fmt.Sprintf("contract.networkPolicy.additionalEgress[%d].ports[%d]: invalid port spec %q", i, j, portSpec))
+				}
+			}
+		}
+	}
+
+	return errs
+}
+
+// isValidCIDR validates CIDR notation.
+func isValidCIDR(s string) bool {
+	_, _, err := net.ParseCIDR(s)
+	return err == nil
 }

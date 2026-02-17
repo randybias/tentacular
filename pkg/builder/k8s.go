@@ -165,6 +165,8 @@ metadata:
     %s
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: %s
@@ -306,6 +308,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            tentacular.dev/role: trigger
         spec:
           restartPolicy: OnFailure
           containers:

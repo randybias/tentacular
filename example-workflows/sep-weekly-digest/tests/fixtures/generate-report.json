@@ -1,0 +1,34 @@
+{
+  "input": {
+    "fetch-seps": {
+      "timestamp": "2026-02-15T20:00:00Z",
+      "repo": "modelcontextprotocol/specification",
+      "seps": [
+        {
+          "number": 42,
+          "sepId": "SEP-001",
+          "title": "SEP-001: Example proposal",
+          "state": "open",
+          "author": "testuser",
+          "createdAt": "2025-12-01T00:00:00Z",
+          "updatedAt": "2026-02-10T00:00:00Z",
+          "url": "https://github.com/modelcontextprotocol/specification/pull/42",
+          "labels": ["sep"],
+          "summary": "An example SEP for testing"
+        }
+      ],
+      "count": 1
+    },
+    "analyze-activity": {
+      "highVelocity": [],
+      "inactive": [],
+      "newThisWeek": [],
+      "closedThisWeek": [],
+      "stateTransitions": [],
+      "totalActive": 0,
+      "totalInactive": 0,
+      "velocityScore": 0,
+      "weekOverWeek": []
+    }
+  }
+}

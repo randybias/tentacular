@@ -113,6 +113,43 @@ func loadConfigWithContext(contextName string) (*rest.Config, error) {
 	).ClientConfig()
 }
 
+func loadConfigFromFile(kubeconfigPath, contextName string) (*rest.Config, error) {
+	overrides := &clientcmd.ConfigOverrides{}
+	if contextName != "" {
+		overrides.CurrentContext = contextName
+	}
+	return clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeconfigPath},
+		overrides,
+	).ClientConfig()
+}
+
+// NewClientFromConfig creates a K8s client using an explicit kubeconfig file path
+// and optional context name. This is used when environment config specifies a
+// kubeconfig file rather than relying on KUBECONFIG env var.
+func NewClientFromConfig(kubeconfigPath, contextName string) (*Client, error) {
+	config, err := loadConfigFromFile(kubeconfigPath, contextName)
+	if err != nil {
+		return nil, fmt.Errorf("loading kubeconfig %s: %w", kubeconfigPath, err)
+	}
+
+	clientset, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating clientset: %w", err)
+	}
+
+	dyn, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("creating dynamic client: %w", err)
+	}
+
+	return &Client{
+		clientset: clientset,
+		dynamic:   dyn,
+		config:    config,
+	}, nil
+}
+
 // WaitForReady polls until a deployment's ReadyReplicas equals Replicas or the context expires.
 func (c *Client) WaitForReady(ctx context.Context, namespace, name string) error {
 	for {
@@ -200,11 +237,12 @@ func (c *Client) LastApplyHadUpdates() bool {
 
 func (c *Client) findResource(group, version, kind string) (schema.GroupVersionResource, error) {
 	resourceMap := map[string]string{
-		"Deployment": "deployments",
-		"Service":    "services",
-		"ConfigMap":  "configmaps",
-		"Secret":     "secrets",
-		"CronJob":    "cronjobs",
+		"Deployment":    "deployments",
+		"Service":       "services",
+		"ConfigMap":     "configmaps",
+		"Secret":        "secrets",
+		"CronJob":       "cronjobs",
+		"NetworkPolicy": "networkpolicies",
 	}
 
 	resource, ok := resourceMap[kind]
@@ -522,6 +560,7 @@ func (c *Client) RunWorkflow(ctx context.Context, namespace, name string) (strin
 			Labels: map[string]string{
 				"app.kubernetes.io/managed-by": "tentacular",
 				"tentacular/run-target":        name,
+				"tentacular.dev/role":          "trigger",
 			},
 		},
 		Spec: corev1.PodSpec{
@@ -732,4 +771,55 @@ func (c *Client) RolloutRestart(namespace, deploymentName string) error {
 	}
 
 	return nil
+}
+
+// GetNetworkPolicy retrieves a NetworkPolicy resource.
+func (c *Client) GetNetworkPolicy(namespace, name string) (*unstructured.Unstructured, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	gvr := schema.GroupVersionResource{
+		Group:    "networking.k8s.io",
+		Version:  "v1",
+		Resource: "networkpolicies",
+	}
+
+	return c.dynamic.Resource(gvr).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+}
+
+// GetConfigMap retrieves a ConfigMap resource.
+func (c *Client) GetConfigMap(namespace, name string) (*corev1.ConfigMap, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	return c.clientset.CoreV1().ConfigMaps(namespace).Get(ctx, name, metav1.GetOptions{})
+}
+
+// GetSecret retrieves a Secret resource.
+func (c *Client) GetSecret(namespace, name string) (*corev1.Secret, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	return c.clientset.CoreV1().Secrets(namespace).Get(ctx, name, metav1.GetOptions{})
+}
+
+// GetCronJobs retrieves all CronJobs with a specific label selector.
+func (c *Client) GetCronJobs(namespace string, labelSelector string) ([]unstructured.Unstructured, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	gvr := schema.GroupVersionResource{
+		Group:    "batch",
+		Version:  "v1",
+		Resource: "cronjobs",
+	}
+
+	list, err := c.dynamic.Resource(gvr).Namespace(namespace).List(ctx, metav1.ListOptions{
+		LabelSelector: labelSelector,
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return list.Items, nil
 }

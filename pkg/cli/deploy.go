@@ -31,6 +31,7 @@ func NewDeployCmd() *cobra.Command {
 	cmd.Flags().Bool("force", false, "Skip pre-deploy live test")
 	cmd.Flags().Bool("skip-live-test", false, "Skip pre-deploy live test (alias for --force)")
 	cmd.Flags().Bool("verify", false, "Run workflow once after deploy to verify")
+	cmd.Flags().Bool("warn", false, "Audit mode: contract violations produce warnings instead of failures")
 	return cmd
 }
 
@@ -40,6 +41,7 @@ type InternalDeployOptions struct {
 	Image           string
 	RuntimeClass    string
 	ImagePullPolicy string
+	Kubeconfig      string    // explicit kubeconfig file path
 	Context         string    // kubeconfig context override
 	StatusOut       io.Writer // writer for progress messages (nil defaults to os.Stdout)
 }
@@ -89,12 +91,14 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Resolve --env: environment config provides context, namespace, runtime-class defaults.
 	// CLI flags still override environment values.
 	var envContext string
+	var envKubeconfig string
 	if envName != "" {
 		env, envErr := cfg.LoadEnvironment(envName)
 		if envErr != nil {
 			return fmt.Errorf("loading environment %q: %w", envName, envErr)
 		}
 		envContext = env.Context
+		envKubeconfig = env.Kubeconfig
 		if !cmd.Flags().Changed("namespace") && env.Namespace != "" {
 			namespace = env.Namespace
 		}
@@ -117,6 +121,27 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	wf, errs := spec.Parse(data)
 	if len(errs) > 0 {
 		return fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
+	}
+
+	// Contract preflight gate: validate contract before deploy
+	warnMode, _ := cmd.Flags().GetBool("warn")
+	if wf.Contract != nil {
+		contractErrs := spec.ValidateContract(wf.Contract)
+		if len(contractErrs) > 0 {
+			if warnMode {
+				fmt.Fprintf(os.Stderr, "⚠️  WARNING: Contract validation failed with %d error(s):\n", len(contractErrs))
+				for _, e := range contractErrs {
+					fmt.Fprintf(os.Stderr, "  - %s\n", e)
+				}
+				fmt.Fprintf(os.Stderr, "Proceeding with deploy in audit mode (use strict mode in production)\n\n")
+			} else {
+				fmt.Fprintf(os.Stderr, "❌ Contract validation failed with %d error(s):\n", len(contractErrs))
+				for _, e := range contractErrs {
+					fmt.Fprintf(os.Stderr, "  - %s\n", e)
+				}
+				return fmt.Errorf("deploy aborted: contract validation failed (use --warn for audit mode)")
+			}
+		}
 	}
 
 	// Namespace cascade: CLI -n > --env > workflow.yaml > config > default
@@ -156,6 +181,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 				Namespace:    devEnv.Namespace,
 				Image:        imageTag,
 				RuntimeClass: devEnv.RuntimeClass,
+				Kubeconfig:   devEnv.Kubeconfig,
 				Context:      devEnv.Context,
 				StatusOut:    w,
 			}
@@ -197,6 +223,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		Namespace:    namespace,
 		Image:        imageTag,
 		RuntimeClass: runtimeClass,
+		Kubeconfig:   envKubeconfig,
 		Context:      envContext,
 		StatusOut:    w,
 	}
@@ -281,6 +308,14 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 		return nil, fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
 	}
 
+	// Contract preflight gate: validate contract before deploy (strict mode for internal calls)
+	if wf.Contract != nil {
+		contractErrs := spec.ValidateContract(wf.Contract)
+		if len(contractErrs) > 0 {
+			return nil, fmt.Errorf("deploy aborted: contract validation failed with %d error(s)", len(contractErrs))
+		}
+	}
+
 	namespace := opts.Namespace
 	imageTag := opts.Image
 	runtimeClass := opts.RuntimeClass
@@ -316,11 +351,18 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	// Prepend ConfigMap to manifest list
 	manifests = append([]builder.Manifest{configMap}, manifests...)
 
+	// Add NetworkPolicy if contract present
+	if netpol := k8s.GenerateNetworkPolicy(wf, namespace); netpol != nil {
+		manifests = append(manifests, *netpol)
+	}
+
 	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, namespace)
 
-	// Create K8s client (with optional context override)
+	// Create K8s client (with optional kubeconfig file and/or context override)
 	var client *k8s.Client
-	if opts.Context != "" {
+	if opts.Kubeconfig != "" {
+		client, err = k8s.NewClientFromConfig(opts.Kubeconfig, opts.Context)
+	} else if opts.Context != "" {
 		client, err = k8s.NewClientWithContext(opts.Context)
 	} else {
 		client, err = k8s.NewClient()

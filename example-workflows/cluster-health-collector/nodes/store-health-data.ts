@@ -45,25 +45,20 @@ RETURNING id;
 export default async function run(ctx: Context, input: unknown): Promise<{ stored: boolean; rowId: number }> {
   const snapshot = input as ClusterHealthSnapshot;
 
-  const pgPassword = ctx.secrets?.postgres?.password;
-  if (!pgPassword) {
+  const postgres = ctx.dependency("postgres");
+  if (!postgres.secret) {
     ctx.log.warn("No postgres.password in secrets -- skipping (no credentials)");
     return { stored: false, rowId: 0 };
   }
 
-  const pgHost = ctx.config.pg_host as string;
-  const pgPort = ctx.config.pg_port as number;
-  const pgDatabase = ctx.config.pg_database as string;
-  const pgUser = ctx.config.pg_user as string;
-
-  ctx.log.info(`Connecting to Postgres at ${pgHost}:${pgPort}/${pgDatabase}`);
+  ctx.log.info(`Connecting to Postgres at ${postgres.host}:${postgres.port}/${postgres.database}`);
 
   const client = new Client({
-    hostname: pgHost,
-    port: pgPort,
-    database: pgDatabase,
-    user: pgUser,
-    password: pgPassword,
+    hostname: postgres.host,
+    port: postgres.port,
+    database: postgres.database,
+    user: postgres.user,
+    password: postgres.secret,
     tls: { enabled: false },
   });
 

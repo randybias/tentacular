@@ -1,0 +1,70 @@
+{
+  "input": {
+    "fetch-codex": {
+      "repo": "openai/codex",
+      "fetchedAt": "2026-02-17T00:00:00Z",
+      "stars": 60000,
+      "forks": 8000,
+      "openIssues": 1200,
+      "openPRs": 120,
+      "recentCommits": 45,
+      "recentReleases": [
+        { "tag": "v0.101.0", "name": "v0.101.0", "publishedAt": "2026-02-12T00:00:00Z" }
+      ],
+      "topContributors": [
+        { "login": "dev1", "contributions": 500 }
+      ],
+      "commitActivity": [
+        { "week": "2026-02-10", "count": 45 },
+        { "week": "2026-02-03", "count": 40 },
+        { "week": "2026-01-27", "count": 38 },
+        { "week": "2026-01-20", "count": 35 }
+      ],
+      "languages": { "Rust": 960000, "TypeScript": 24000 }
+    },
+    "fetch-gemini": {
+      "repo": "google-gemini/gemini-cli",
+      "fetchedAt": "2026-02-17T00:00:00Z",
+      "stars": 94000,
+      "forks": 11000,
+      "openIssues": 2000,
+      "openPRs": 240,
+      "recentCommits": 60,
+      "recentReleases": [
+        { "tag": "v0.28.0", "name": "v0.28.0", "publishedAt": "2026-02-10T00:00:00Z" }
+      ],
+      "topContributors": [
+        { "login": "dev2", "contributions": 800 }
+      ],
+      "commitActivity": [
+        { "week": "2026-02-10", "count": 60 },
+        { "week": "2026-02-03", "count": 55 },
+        { "week": "2026-01-27", "count": 50 },
+        { "week": "2026-01-20", "count": 48 }
+      ],
+      "languages": { "TypeScript": 900000, "JavaScript": 50000 }
+    },
+    "fetch-goose": {
+      "repo": "block/goose",
+      "fetchedAt": "2026-02-17T00:00:00Z",
+      "stars": 30000,
+      "forks": 2800,
+      "openIssues": 250,
+      "openPRs": 85,
+      "recentCommits": 35,
+      "recentReleases": [
+        { "tag": "v1.24.0", "name": "v1.24.0", "publishedAt": "2026-02-12T00:00:00Z" }
+      ],
+      "topContributors": [
+        { "login": "dev3", "contributions": 300 }
+      ],
+      "commitActivity": [
+        { "week": "2026-02-10", "count": 35 },
+        { "week": "2026-02-03", "count": 30 },
+        { "week": "2026-01-27", "count": 28 },
+        { "week": "2026-01-20", "count": 25 }
+      ],
+      "languages": { "Rust": 800000, "Python": 30000 }
+    }
+  }
+}

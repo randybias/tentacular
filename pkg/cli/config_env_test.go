@@ -637,3 +637,186 @@ func TestEnvironmentSecretsSource(t *testing.T) {
 		t.Errorf("expected vault://prod/tentacular, got %s", env.SecretsSource)
 	}
 }
+
+// --- Group 2.2: Enforcement Config Tests ---
+
+func TestEnvironmentEnforcementModes(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tmpHome := t.TempDir()
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	userDir := filepath.Join(tmpHome, ".tentacular")
+	os.MkdirAll(userDir, 0o755)
+	configYAML := `environments:
+  dev:
+    namespace: dev-ns
+    enforcement: audit
+  staging:
+    namespace: staging-ns
+    enforcement: strict
+  prod:
+    namespace: prod-ns
+    # No enforcement specified (defaults to strict)
+`
+	os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
+
+	// Dev should have audit mode
+	devEnv, err := LoadEnvironment("dev")
+	if err != nil {
+		t.Fatalf("unexpected error loading dev: %v", err)
+	}
+	if devEnv.Enforcement != "audit" {
+		t.Errorf("expected dev enforcement=audit, got %s", devEnv.Enforcement)
+	}
+
+	// Staging should have strict mode
+	stagingEnv, err := LoadEnvironment("staging")
+	if err != nil {
+		t.Fatalf("unexpected error loading staging: %v", err)
+	}
+	if stagingEnv.Enforcement != "strict" {
+		t.Errorf("expected staging enforcement=strict, got %s", stagingEnv.Enforcement)
+	}
+
+	// Prod should have empty enforcement (defaults to strict at runtime)
+	prodEnv, err := LoadEnvironment("prod")
+	if err != nil {
+		t.Fatalf("unexpected error loading prod: %v", err)
+	}
+	if prodEnv.Enforcement != "" {
+		t.Errorf("expected prod enforcement empty (defaults to strict), got %s", prodEnv.Enforcement)
+	}
+}
+
+func TestEnvironmentEnforcementRoundTrip(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tmpHome := t.TempDir()
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	userDir := filepath.Join(tmpHome, ".tentacular")
+	os.MkdirAll(userDir, 0o755)
+	configYAML := `environments:
+  test:
+    namespace: test-ns
+    enforcement: audit
+`
+	os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
+
+	cfg := LoadConfig()
+	if cfg.Environments == nil {
+		t.Fatal("expected Environments to be non-nil")
+	}
+	testEnv, ok := cfg.Environments["test"]
+	if !ok {
+		t.Fatal("expected test environment to exist")
+	}
+	if testEnv.Enforcement != "audit" {
+		t.Errorf("expected enforcement=audit after parsing, got %s", testEnv.Enforcement)
+	}
+}
+
+func TestEnvironmentKubeconfigField(t *testing.T) {
+	origHome := os.Getenv("HOME")
+	tmpHome := t.TempDir()
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	userDir := filepath.Join(tmpHome, ".tentacular")
+	os.MkdirAll(userDir, 0o755)
+	configYAML := `environments:
+  dev:
+    kubeconfig: ~/dev-secrets/nats-admin.kubeconfig
+    namespace: tentacular-dev
+  prod:
+    kubeconfig: /etc/kubernetes/prod.kubeconfig
+    context: prod-context
+    namespace: tentacular-prod
+  legacy:
+    context: legacy-ctx
+    namespace: legacy-ns
+`
+	os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
+
+	// Dev: kubeconfig with ~ should be expanded to home dir
+	devEnv, err := LoadEnvironment("dev")
+	if err != nil {
+		t.Fatalf("unexpected error loading dev: %v", err)
+	}
+	expectedPath := filepath.Join(tmpHome, "dev-secrets", "nats-admin.kubeconfig")
+	if devEnv.Kubeconfig != expectedPath {
+		t.Errorf("expected kubeconfig %s, got %s", expectedPath, devEnv.Kubeconfig)
+	}
+	if devEnv.Namespace != "tentacular-dev" {
+		t.Errorf("expected namespace tentacular-dev, got %s", devEnv.Namespace)
+	}
+
+	// Prod: absolute path should be unchanged
+	prodEnv, err := LoadEnvironment("prod")
+	if err != nil {
+		t.Fatalf("unexpected error loading prod: %v", err)
+	}
+	if prodEnv.Kubeconfig != "/etc/kubernetes/prod.kubeconfig" {
+		t.Errorf("expected absolute path unchanged, got %s", prodEnv.Kubeconfig)
+	}
+	if prodEnv.Context != "prod-context" {
+		t.Errorf("expected prod-context, got %s", prodEnv.Context)
+	}
+
+	// Legacy: no kubeconfig field should remain empty
+	legacyEnv, err := LoadEnvironment("legacy")
+	if err != nil {
+		t.Fatalf("unexpected error loading legacy: %v", err)
+	}
+	if legacyEnv.Kubeconfig != "" {
+		t.Errorf("expected empty kubeconfig for legacy env, got %s", legacyEnv.Kubeconfig)
+	}
+	if legacyEnv.Context != "legacy-ctx" {
+		t.Errorf("expected legacy-ctx, got %s", legacyEnv.Context)
+	}
+}
+
+func TestEnvironmentEnforcementOmittedWhenEmpty(t *testing.T) {
+	// When enforcement is empty, it should be omitted from YAML output (omitempty tag)
+	origHome := os.Getenv("HOME")
+	tmpHome := t.TempDir()
+	os.Setenv("HOME", tmpHome)
+	defer os.Setenv("HOME", origHome)
+
+	origDir, _ := os.Getwd()
+	tmpDir := t.TempDir()
+	os.Chdir(tmpDir)
+	defer os.Chdir(origDir)
+
+	userDir := filepath.Join(tmpHome, ".tentacular")
+	os.MkdirAll(userDir, 0o755)
+	configYAML := `environments:
+  minimal:
+    namespace: minimal-ns
+`
+	os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
+
+	env, err := LoadEnvironment("minimal")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if env.Enforcement != "" {
+		t.Errorf("expected empty enforcement, got %s", env.Enforcement)
+	}
+}

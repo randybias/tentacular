@@ -1,0 +1,91 @@
+name: agent-activity-report
+version: "1.0"
+description: "Weekly composite report of development activity across Codex, Gemini CLI, and Goose open-source AI agent projects"
+
+triggers:
+  - type: manual
+  - type: cron
+    name: weekly-sunday
+    schedule: "0 20 * * 0"
+
+nodes:
+  fetch-codex:
+    path: ./nodes/fetch-codex.ts
+  fetch-gemini:
+    path: ./nodes/fetch-gemini.ts
+  fetch-goose:
+    path: ./nodes/fetch-goose.ts
+  compute-metrics:
+    path: ./nodes/compute-metrics.ts
+  generate-analysis:
+    path: ./nodes/generate-analysis.ts
+  render-html:
+    path: ./nodes/render-html.ts
+  publish-report:
+    path: ./nodes/publish-report.ts
+  notify:
+    path: ./nodes/notify.ts
+
+edges:
+  - from: fetch-codex
+    to: compute-metrics
+  - from: fetch-gemini
+    to: compute-metrics
+  - from: fetch-goose
+    to: compute-metrics
+  - from: compute-metrics
+    to: generate-analysis
+  - from: generate-analysis
+    to: render-html
+  - from: compute-metrics
+    to: render-html
+  - from: render-html
+    to: publish-report
+  - from: publish-report
+    to: notify
+  - from: compute-metrics
+    to: notify
+
+config:
+  timeout: 120s
+  retries: 1
+  repos:
+    - owner: openai
+      name: codex
+    - owner: google-gemini
+      name: gemini-cli
+    - owner: block
+      name: goose
+  azure_blob_base_url: "https://mcpreports9276621.blob.core.windows.net/sep-reports"
+
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+    openai:
+      protocol: https
+      host: api.openai.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: openai.api_key
+    azure-blob:
+      protocol: https
+      host: mcpreports9276621.blob.core.windows.net
+      port: 443
+      auth:
+        type: sas-token
+        secret: azure.sas_token
+    slack-webhook:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url

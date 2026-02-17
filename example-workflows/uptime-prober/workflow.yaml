@@ -37,3 +37,21 @@ config:
     - https://www.google.com
     - https://www.anthropic.com
     - https://thisdomaindoesnotexist.invalid
+
+contract:
+  version: "1"
+  dependencies:
+    slack:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url
+    probe-targets:
+      type: dynamic-target
+      protocol: https
+      cidr: "0.0.0.0/0"
+      dynPorts:
+        - "443/TCP"
+        - "80/TCP"

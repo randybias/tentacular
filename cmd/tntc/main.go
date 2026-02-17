@@ -44,6 +44,7 @@ func main() {
 
 	// Utility commands
 	root.AddCommand(cli.NewVisualizeCmd())
+	root.AddCommand(cli.NewAuditCommand())
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

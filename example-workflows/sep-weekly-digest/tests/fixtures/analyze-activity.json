@@ -1,0 +1,24 @@
+{
+  "input": {
+    "store-snapshots": {
+      "stored": false,
+      "snapshotId": 0,
+      "weeklyHistory": []
+    }
+  },
+  "expected": {
+    "highVelocity": [],
+    "inactive": [],
+    "newThisWeek": [],
+    "closedThisWeek": [],
+    "stateTransitions": [],
+    "totalActive": 0,
+    "totalInactive": 0,
+    "velocityScore": 0,
+    "weekOverWeek": [
+      { "metric": "total", "thisWeek": 0, "lastWeek": 0, "delta": 0 },
+      { "metric": "active", "thisWeek": 0, "lastWeek": 0, "delta": 0 },
+      { "metric": "inactive", "thisWeek": 0, "lastWeek": 0, "delta": 0 }
+    ]
+  }
+}

@@ -15,17 +15,116 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 }
 ```
 
-- `ctx` -- the Context object providing fetch, logging, config, and secrets.
+- `ctx` -- the Context object providing dependency resolution, logging, config, and secrets.
 - `input` -- data from upstream node(s) via edges. `{}` for root nodes (no incoming edges).
 - Return value -- passed as input to downstream node(s) via edges.
 
 The engine validates that the default export is a function at load time. If the export is missing or not a function, the engine throws an error.
 
-## Context.fetch
+## Context.dependency (Primary API)
+
+```typescript
+ctx.dependency(name: string): DependencyConnection
+```
+
+Returns connection metadata for a declared contract dependency. This is the primary API for accessing external services.
+
+### DependencyConnection Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `protocol` | `string` | Dependency protocol (any string; known: `https`, `postgresql`, `nats`, `blob`) |
+| `host` | `string` | Dependency host |
+| `port` | `number` | Dependency port (protocol defaults applied) |
+| `authType` | `string \| undefined` | Auth mechanism from contract (any string, e.g., `bearer-token`, `api-key`, `hmac-sha256`) |
+| `secret` | `string \| undefined` | Resolved secret value |
+| `database` | `string \| undefined` | Database name (postgresql) |
+| `user` | `string \| undefined` | Database user (postgresql) |
+| `subject` | `string \| undefined` | NATS subject |
+| `container` | `string \| undefined` | Blob container |
+| `fetch` | `(path, init?) => Promise<Response> \| undefined` | URL builder for HTTPS deps (no auth injection) |
+
+### HTTPS Dependencies
+
+HTTPS dependencies include a `fetch()` convenience method that builds the URL as `https://<host>:<port><path>`. It does not inject auth headers -- nodes must handle auth explicitly.
+
+```typescript
+const gh = ctx.dependency("github-api");
+
+// fetch() builds the URL, but auth must be set explicitly:
+const res = await gh.fetch!("/repos/owner/repo/issues", {
+  headers: { "Authorization": `Bearer ${gh.secret}` },
+});
+```
+
+### Non-HTTPS Dependencies
+
+For non-HTTPS protocols (postgresql, nats, etc.), use the connection metadata to build connections:
+
+```typescript
+import { Client } from "jsr:@db/postgres@0.19.5";
+
+const pg = ctx.dependency("postgres");
+const connStr = `postgresql://${pg.user}:${pg.secret}@${pg.host}:${pg.port}/${pg.database}`;
+const client = new Client(connStr);
+await client.connect();
+```
+
+### Auth Patterns
+
+`dep.authType` is any string describing the auth mechanism. Nodes use it with `dep.secret` to set auth:
+
+```typescript
+// Bearer token
+const gh = ctx.dependency("github-api");
+// gh.authType === "bearer-token"
+await gh.fetch!("/repos/org/repo", {
+  headers: { "Authorization": `Bearer ${gh.secret}` },
+});
+
+// API key
+const svc = ctx.dependency("my-service");
+// svc.authType === "api-key"
+await svc.fetch!("/data", {
+  headers: { "X-API-Key": svc.secret! },
+});
+
+// SAS token (appended to URL query)
+const blob = ctx.dependency("azure-blob");
+// blob.authType === "sas-token"
+await blob.fetch!(`/container/file.html?${blob.secret}`, {
+  method: "PUT",
+  body: htmlContent,
+});
+
+// Custom auth (e.g., HMAC signature)
+const api = ctx.dependency("webhook-target");
+// api.authType === "hmac-sha256"
+const sig = computeHmac(api.secret!, body);
+await api.fetch!("/hook", {
+  method: "POST",
+  headers: { "X-Signature": sig },
+  body,
+});
+```
+
+### Undeclared Dependency Error
+
+Calling `ctx.dependency()` with a name not in the contract throws an error:
+
+```typescript
+// Throws: Dependency "unknown" not declared in contract.
+// Add it to workflow.yaml contract.dependencies.
+ctx.dependency("unknown");
+```
+
+## Context.fetch (Legacy)
 
 ```typescript
 ctx.fetch(service: string, path: string, init?: RequestInit): Promise<Response>
 ```
+
+**Legacy API.** Flagged as a contract violation when a contract is present. Use `ctx.dependency()` instead.
 
 Makes HTTP requests with automatic URL construction and auth injection.
 
@@ -37,9 +136,6 @@ Makes HTTP requests with automatic URL construction and auth injection.
 ```typescript
 // Resolves to: https://api.github.com/repos/owner/repo/issues
 const res = await ctx.fetch("github", "/repos/owner/repo/issues");
-
-// Uses the full URL directly
-const res = await ctx.fetch("custom", "https://my-service.internal/data");
 ```
 
 ### Auth Injection
@@ -52,26 +148,6 @@ Auth headers are injected automatically from `ctx.secrets[service]`:
 | `api_key` | `X-API-Key: <value>` |
 
 If the service has no entry in secrets, no auth headers are added.
-
-```typescript
-// If ctx.secrets.github.token = "ghp_abc123"
-// then the request includes: Authorization: Bearer ghp_abc123
-const res = await ctx.fetch("github", "/user");
-```
-
-### Request Options
-
-The third parameter accepts standard `RequestInit` options:
-
-```typescript
-const res = await ctx.fetch("slack", "/api/chat.postMessage", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ channel: "#general", text: "Hello" }),
-});
-```
-
-Custom headers are merged with injected auth headers. Auth headers are set first, so custom headers can override them if needed.
 
 ## Context.log
 
@@ -114,11 +190,13 @@ const timeout = ctx.config.timeout; // "60s"
 const retries = ctx.config.retries; // 1
 ```
 
-## Context.secrets
+## Context.secrets (Legacy)
 
 ```typescript
 ctx.secrets: Record<string, Record<string, string>>
 ```
+
+**Legacy API.** Flagged as a contract violation when a contract is present. Use `ctx.dependency("name").secret` instead.
 
 Secrets are loaded from two sources (merged at startup):
 
@@ -220,7 +298,10 @@ If `retries` is configured in workflow.yaml, failed nodes are retried with expon
 
 ```typescript
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
-  const res = await ctx.fetch("github", "/repos/owner/repo");
+  const gh = ctx.dependency("github-api");
+  const res = await gh.fetch!("/repos/owner/repo", {
+    headers: { "Authorization": `Bearer ${gh.secret}` },
+  });
   if (!res.ok) {
     throw new Error(`GitHub API error: ${res.status} ${res.statusText}`);
   }
@@ -246,7 +327,15 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
   const repo = ctx.config.repo as string ?? "owner/repo";
   ctx.log.info("fetching open issues", { repo });
 
-  const res = await ctx.fetch("github", `/repos/${repo}/issues?state=open`);
+  const gh = ctx.dependency("github-api");
+  if (!gh.secret) {
+    ctx.log.warn("no github credentials, returning empty");
+    return { repo, count: 0, issues: [], source: "mock" };
+  }
+
+  const res = await gh.fetch!(`/repos/${repo}/issues?state=open`, {
+    headers: { "Authorization": `Bearer ${gh.secret}` },
+  });
   if (!res.ok) {
     ctx.log.error("failed to fetch issues", { status: res.status });
     throw new Error(`GitHub API returned ${res.status}`);
@@ -272,19 +361,21 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 
 ### Postgres via `@db/postgres`
 
-Nodes can use `jsr:@db/postgres` for database access. Import it in the node file and connect using credentials from `ctx.secrets`:
+Nodes can use `jsr:@db/postgres` for database access. Use `ctx.dependency()` to get connection metadata:
 
 ```typescript
 import { Client } from "jsr:@db/postgres@0.19.5";
+import type { Context } from "tentacular";
 
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
-  const dbUrl = ctx.secrets.postgres?.connection_string;
-  if (!dbUrl) {
+  const pg = ctx.dependency("postgres");
+  if (!pg.secret) {
     ctx.log.warn("no postgres credentials, skipping");
     return { skipped: true, reason: "no credentials" };
   }
 
-  const client = new Client(dbUrl);
+  const connStr = `postgresql://${pg.user}:${pg.secret}@${pg.host}:${pg.port}/${pg.database}`;
+  const client = new Client(connStr);
   await client.connect();
   try {
     const result = await client.queryObject("SELECT * FROM snapshots LIMIT 10");

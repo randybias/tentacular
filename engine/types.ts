@@ -9,6 +9,28 @@ export interface WorkflowSpec {
   nodes: Record<string, NodeSpec>;
   edges: Edge[];
   config?: WorkflowConfig;
+  contract?: ContractSpec;
+}
+
+/** Contract specification for external dependencies */
+export interface ContractSpec {
+  version: string;
+  dependencies: Record<string, DependencySpec>;
+}
+
+export interface DependencySpec {
+  protocol: string;
+  host: string;
+  port?: number;
+  auth?: {
+    type: string;
+    secret: string;
+  };
+  // Protocol-specific fields
+  database?: string;
+  user?: string;
+  subject?: string;
+  container?: string;
 }
 
 export interface Trigger {
@@ -86,6 +108,8 @@ export interface Context {
   config: Record<string, unknown>;
   /** Workflow-level secrets (loaded from file or K8s volume) */
   secrets: Record<string, Record<string, string>>;
+  /** Access external service dependency with connection metadata and auth */
+  dependency(name: string): DependencyConnection;
 }
 
 export interface Logger {
@@ -93,4 +117,20 @@ export interface Logger {
   warn(msg: string, ...args: unknown[]): void;
   error(msg: string, ...args: unknown[]): void;
   debug(msg: string, ...args: unknown[]): void;
+}
+
+/** Dependency connection metadata resolved from contract */
+export interface DependencyConnection {
+  protocol: string;
+  host: string;
+  port: number;
+  authType?: string;
+  secret?: string;
+  // Protocol-specific fields
+  database?: string; // postgresql
+  user?: string;     // postgresql
+  subject?: string;  // nats
+  container?: string; // blob
+  // Convenience method for HTTPS dependencies
+  fetch?(path: string, init?: RequestInit): Promise<Response>;
 }

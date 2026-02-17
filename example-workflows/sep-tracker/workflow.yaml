@@ -46,8 +46,37 @@ config:
   retries: 1
   target_repo: "modelcontextprotocol/specification"
   sep_label: "sep"
-  pg_host: "postgres-postgresql.postgres.svc.cluster.local"
-  pg_port: 5432
-  pg_database: "appdb"
-  pg_user: "postgres"
-  azure_blob_base_url: "https://mcpreports9276621.blob.core.windows.net/sep-reports"
+
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+    postgres:
+      protocol: postgresql
+      host: postgres-postgresql.postgres.svc.cluster.local
+      port: 5432
+      database: appdb
+      user: postgres
+      auth:
+        type: password
+        secret: postgres.password
+    azure-blob:
+      protocol: https
+      host: mcpreports9276621.blob.core.windows.net
+      port: 443
+      auth:
+        type: sas-token
+        secret: azure.sas_token
+    slack-webhook:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url

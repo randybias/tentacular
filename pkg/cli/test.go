@@ -22,6 +22,8 @@ func NewTestCmd() *cobra.Command {
 	cmd.Flags().String("env", "dev", "Environment to use for live testing")
 	cmd.Flags().Bool("keep", false, "Keep deployment after live test (do not clean up)")
 	cmd.Flags().Duration("timeout", 120*time.Second, "Timeout for live test (deploy + run)")
+	cmd.Flags().StringP("output", "o", "", "Output format (json)")
+	cmd.Flags().Bool("warn", false, "Audit mode: contract violations produce warnings instead of failures")
 	return cmd
 }
 
@@ -61,6 +63,8 @@ func runTest(cmd *cobra.Command, args []string) error {
 	}
 
 	pipeline, _ := cmd.Flags().GetBool("pipeline")
+	outputFormat, _ := cmd.Flags().GetString("output")
+	warnMode, _ := cmd.Flags().GetBool("warn")
 
 	denoArgs := []string{
 		"run", "--allow-net", "--allow-read", "--allow-write=/tmp", "--allow-env",
@@ -73,6 +77,12 @@ func runTest(cmd *cobra.Command, args []string) error {
 	}
 	if pipeline {
 		denoArgs = append(denoArgs, "--pipeline")
+	}
+	if outputFormat != "" {
+		denoArgs = append(denoArgs, "-o", outputFormat)
+	}
+	if warnMode {
+		denoArgs = append(denoArgs, "--warn")
 	}
 
 	denoBin := findDeno()

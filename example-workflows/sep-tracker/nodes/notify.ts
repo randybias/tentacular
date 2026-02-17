@@ -45,8 +45,8 @@ export default async function run(ctx: Context, input: unknown): Promise<NotifyO
   const storeResult = merged["store-report"];
   const delta = merged["diff-seps"];
 
-  const webhookUrl = ctx.secrets?.slack?.webhook_url;
-  if (!webhookUrl) {
+  const slack = ctx.dependency("slack-webhook");
+  if (!slack.secret) {
     ctx.log.warn("No slack webhook_url in secrets, skipping notification");
     return { delivered: false, status: 0 };
   }
@@ -128,7 +128,9 @@ export default async function run(ctx: Context, input: unknown): Promise<NotifyO
 
   ctx.log.info("Sending Slack notification");
 
-  const res = await ctx.fetch("slack", webhookUrl, {
+  // For webhook-url type, the secret IS the full webhook URL
+  const webhookUrl = slack.secret!;
+  const res = await globalThis.fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ blocks }),

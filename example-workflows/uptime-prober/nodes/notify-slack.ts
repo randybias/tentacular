@@ -14,8 +14,8 @@ interface ReportInput {
 export default async function run(ctx: Context, input: unknown): Promise<{ delivered: boolean; status: number }> {
   const data = input as ReportInput;
 
-  const webhookUrl = ctx.secrets?.slack?.webhook_url;
-  if (!webhookUrl) {
+  const slack = ctx.dependency("slack");
+  if (!slack.secret) {
     ctx.log.error("No slack.webhook_url in secrets — cannot send notification");
     return { delivered: false, status: 0 };
   }
@@ -86,7 +86,9 @@ export default async function run(ctx: Context, input: unknown): Promise<{ deliv
 
   ctx.log.info(`Sending ${data.alert ? "alert" : "all-clear"} to Slack`);
 
-  const response = await ctx.fetch("slack", webhookUrl, {
+  // For webhook-url type, the secret IS the full webhook URL
+  const webhookUrl = slack.secret;
+  const response = await globalThis.fetch(webhookUrl, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),

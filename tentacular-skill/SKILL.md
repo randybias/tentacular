@@ -21,9 +21,9 @@ constrained sandbox, without a tool chain or other
 ancillary systems. Only what is needed is deployed into a
 production runtime ([gVisor](https://gvisor.dev/)). In addition, each
 workflow's networking and other access requirements are
-specified in the workflow definition, which allows runtime
-configuration of network policies to lockdown the
-workflow's production access (WORK IN PROGRESS).
+declared in the workflow contract, which drives automatic
+generation of Kubernetes NetworkPolicy to lockdown the
+workflow's production network access.
 
 In tentacular, every node in the DAG is created at build
 time by (you) the coding agent, tested end to end in a
@@ -59,76 +59,15 @@ It is composed of two key components;
 - **Deno/TypeScript Engine** (`engine/`) -- executes
   workflows as DAGs. Compiles workflow.yaml into
   topologically sorted stages, loads TypeScript node
-  modules, runs them with a Context providing fetch,
-  logging, config, and secrets. Exposes HTTP triggers
-  (`POST /run`, `GET /health`).
+  modules, runs them with a Context providing dependency
+  resolution, fetch, logging, config, and secrets.
+  Exposes HTTP triggers (`POST /run`, `GET /health`).
 
 Workflows live in a directory containing a `workflow.yaml`
 and a `nodes/` directory of TypeScript files. Each node is
 a default-exported async function.
 
-## CLI Quick Reference
-
-| Command | Usage | Key Flags | Description |
-|---------|-------|-----------|-------------|
-| `init` | `tntc init <name>` | | Scaffold a new workflow directory with workflow.yaml, example node, test fixture, .secrets.yaml.example |
-| `validate` | `tntc validate [dir]` | | Parse and validate workflow.yaml (name, version, triggers, nodes, edges, DAG acyclicity) |
-| `dev` | `tntc dev [dir]` | `-p` port (default 8080) | Start Deno engine locally with hot-reload (`--watch`). POST /run triggers execution |
-| `test` | `tntc test [dir][/<node>]` | `--pipeline`, `--live`, `--env`, `--keep`, `--timeout` | Run node-level tests from fixtures, full pipeline test with `--pipeline`, or live cluster test with `--live` |
-| `build` | `tntc build [dir]` | `-t` tag, `-r` registry, `--push`, `--platform` | Generate Dockerfile (distroless Deno base), build container image via `docker build` |
-| `deploy` | `tntc deploy [dir]` | `-n` namespace, `--env`, `--image`, `--runtime-class`, `--force`, `--verify` | Generate K8s manifests and apply to cluster. `--env` targets a named environment (context, namespace, image). Auto-gates on live test if dev env configured; `--force` skips. Namespace resolves: CLI > env > workflow.yaml > config > default |
-| `configure` | `tntc configure` | `--registry`, `--namespace`, `--runtime-class`, `--project` | Set default config (user-level or project-level) |
-| `secrets check` | `tntc secrets check [dir]` | | Check secrets provisioning against node requirements |
-| `secrets init` | `tntc secrets init [dir]` | `--force` | Initialize .secrets.yaml from .secrets.yaml.example |
-| `status` | `tntc status <name>` | `-n` namespace, `-o` json, `--detail` | Check deployment status in K8s; `--detail` shows pods, events, resources |
-| `run` | `tntc run <name>` | `-n` namespace, `--timeout` | Trigger a deployed workflow and return JSON result |
-| `logs` | `tntc logs <name>` | `-n` namespace, `-f`/`--follow`, `--tail` | View workflow pod logs; `-f` streams in real time |
-| `list` | `tntc list` | `-n` namespace, `-o` json | List all deployed workflows with version, status, and age |
-| `undeploy` | `tntc undeploy <name>` | `-n` namespace, `--yes`/`-y` | Remove a deployed workflow (Service, Deployment, Secret, CronJobs). Use `-y` to skip confirmation in scripts. Note: ConfigMap `<name>-code` is not deleted. |
-| `cluster check` | `tntc cluster check` | `--fix`, `-n` namespace | Preflight validation of cluster readiness; `--fix` auto-remediates |
-| `visualize` | `tntc visualize [dir]` | | Generate Mermaid diagram of the workflow DAG |
-
-Global flags: `-n`/`--namespace` (default "default"),
-`-r`/`--registry`, `-o`/`--output` (text\|json).
-
-Namespace resolution order: CLI `-n` flag >
-`workflow.yaml deployment.namespace` > config file
-default > `default`. When `--env` is used (deploy,
-test --live), environment namespace is inserted after
-CLI `-n`.
-
-Config files: `~/.tentacular/config.yaml` (user-level),
-`.tentacular/config.yaml` (project-level). Project
-overrides user.
-
-### Create Config From Scratch
-
-For this repository, the canonical public engine image is:
-`ghcr.io/randybias/tentacular-engine:latest`.
-
-Use this bootstrap flow:
-
-```bash
-mkdir -p .tentacular
-cp .tentacular/config.yaml.example .tentacular/config.yaml
-```
-
-Then set at least a registry and environment image:
-
-```yaml
-registry: ghcr.io/randybias
-namespace: default
-runtime_class: gvisor
-
-environments:
-  prod:
-    image: ghcr.io/randybias/tentacular-engine:latest
-    runtime_class: gvisor
-```
-
-Without an explicit environment `image`, deploy/test-live may
-fall back to `<workflow-dir>/.tentacular/base-image.txt` or
-the internal default `tentacular-engine:latest`.
+For full CLI reference, read [references/cli.md](references/cli.md).
 
 ## Node Contract
 
@@ -153,19 +92,52 @@ export default async function run(
 
 | Member | Type | Description |
 |--------|------|-------------|
-| `ctx.fetch(service, path, init?)` | `(string, string, RequestInit?) => Promise<Response>` | HTTP request with auto URL construction (`https://api.<service>.com<path>`) and auth injection from secrets (Bearer token or X-API-Key). Use full URL in `path` to bypass service resolution. |
+| `ctx.dependency(name)` | `(string) => DependencyConnection` | **Primary API** for external services. Returns connection metadata (host, port, protocol, authType, protocol-specific fields) and resolved secret value. HTTPS deps also get a `fetch(path, init?)` convenience method that builds the URL (no auth injection -- nodes handle auth explicitly). Throws if the dependency is not declared in the contract. |
 | `ctx.log` | `Logger` | Structured logging with `info`, `warn`, `error`, `debug` methods. All output prefixed with `[nodeId]`. |
-| `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml. |
-| `ctx.secrets` | `Record<string, Record<string, string>>` | Secrets loaded from `.secrets.yaml` (local) or K8s Secret volume at `/app/secrets` (production). Keyed by service name. |
+| `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml. Use for business-logic parameters only (e.g., `target_repo`). |
+| `ctx.fetch(service, path, init?)` | `(string, string, RequestInit?) => Promise<Response>` | **Legacy.** HTTP request with auto URL construction. Flagged as contract violation when a contract is present. Use `ctx.dependency()` instead. |
+| `ctx.secrets` | `Record<string, Record<string, string>>` | **Legacy.** Direct secret access. Flagged as contract violation when a contract is present. Use `ctx.dependency()` instead. |
+
+### Using ctx.dependency()
+
+Nodes access external service connection info through
+the contract dependency API:
+
+```typescript
+const pg = ctx.dependency("postgres");
+// pg.protocol, pg.host, pg.port, pg.database, pg.user
+// pg.authType -- "password", pg.secret -- resolved value
+
+const gh = ctx.dependency("github-api");
+// gh.fetch(path, init?) -- URL builder (no auth injection)
+const resp = await gh.fetch!("/repos/org/repo", {
+  headers: { "Authorization": `Bearer ${gh.secret}` },
+});
+```
+
+**Auth is explicit.** `dep.fetch()` builds the URL
+(`https://<host>:<port><path>`) but does not inject
+auth headers. Nodes set auth headers themselves using
+`dep.secret` and `dep.authType`.
+
+In mock context (during `tntc test`), `ctx.dependency()`
+returns mock values and records access for drift
+detection.
+
+**Migration note:** Replace `ctx.config` + `ctx.secrets`
+assembly with `ctx.dependency()`. Connection metadata
+and secret references belong in `contract.dependencies`.
+The `config` section should contain only business-logic
+parameters (e.g., `target_repo`, `sep_label`).
 
 ## Trigger Types
 
 | Type | Mechanism | Required Fields | K8s Resources | Status |
 |------|-----------|----------------|---------------|--------|
-| `manual` | HTTP POST `/run` | none | — | Implemented |
+| `manual` | HTTP POST `/run` | none | -- | Implemented |
 | `cron` | K8s CronJob -> curl POST `/run` | `schedule`, optional `name` | CronJob | Implemented |
-| `queue` | NATS subscription -> execute | `subject` | — | Implemented |
-| `webhook` | Future: gateway -> NATS bridge | `path` | — | Roadmap |
+| `queue` | NATS subscription -> execute | `subject` | -- | Implemented |
+| `webhook` | Future: gateway -> NATS bridge | `path` | -- | Roadmap |
 
 ### Trigger Name Field
 
@@ -190,21 +162,25 @@ nodes receive this as `input.trigger` to branch behavior.
 
 ### Queue Trigger (NATS)
 
-Queue triggers subscribe to NATS subjects. The engine
-connects using config and secrets:
+Queue triggers subscribe to NATS subjects. Config:
+`config.nats_url`, auth: `secrets.nats.token`. If
+either is missing, the engine warns and skips NATS
+(graceful degradation). Messages are parsed as JSON
+and passed as input to root nodes.
 
-- **URL**: `config.nats_url` in workflow.yaml
-  (e.g., `nats.ospo-dev.miralabs.dev:18453`)
-- **Auth**: `secrets.nats.token` (token authentication)
-- **TLS**: Uses system CA trust store (Let's Encrypt
-  certs work automatically)
+## Contract Model
 
-If either `nats_url` or `nats.token` is missing, the
-engine warns and skips NATS setup (graceful degradation).
+The `contract` section declares every external dependency
+a workflow needs. Dependencies are the single primitive:
+secrets, NetworkPolicy, connection config, and validation
+are all derived from the dependency list. There is no
+separate `secrets` or `networkPolicy` section to author.
 
-Messages are parsed as JSON and passed as input to root
-nodes. If the NATS message has a reply subject, the
-workflow result is sent back (request-reply pattern).
+For the complete contract specification, including
+structure, dependency protocols, auth types, enforcement
+modes, drift detection, dynamic-target dependencies,
+label-scoped ingress, and NetworkPolicy overrides, read
+[references/contract.md](references/contract.md).
 
 ## Config Block
 
@@ -234,6 +210,10 @@ description: "A minimal workflow"
 
 triggers:
   - type: manual
+
+contract:
+  version: "1"
+  dependencies: {}
 
 nodes:
   hello:
@@ -271,414 +251,75 @@ tntc undeploy my-workflow          # remove from cluster
 
 ## Deployment Flow
 
-The recommended agentic deployment flow validates workflows through five steps. Each step produces structured JSON output (with `-o json`) for automation.
+The recommended agentic deployment flow validates
+workflows through six steps:
 
 ```
-tntc validate -o json           # 1. Parse and validate workflow.yaml
-tntc test -o json               # 2. Run mock tests (node-level + pipeline)
-tntc test --live --env dev -o json  # 3. Live test against dev environment
-tntc deploy -o json             # 4. Deploy (auto-gates on live test)
-tntc run <name> -o json         # 5. Post-deploy verification
+tntc validate -o json               # 1. Validate spec + contract
+tntc visualize --rich --write       # 2. Persist contract artifacts
+tntc test -o json                   # 3. Mock tests + drift detection
+tntc test --live --env dev -o json  # 4. Live test against dev
+tntc deploy -o json                 # 5. Deploy (auto-gates on live)
+tntc run <name> -o json             # 6. Post-deploy verification
 ```
 
-### Step Details
+**Required checklist before build/deploy:**
 
-1. **Validate** -- parses workflow.yaml, checks name/version format, trigger definitions, node paths, edge references, and DAG acyclicity. Catches spec errors before any execution.
+- [ ] Contract section present in workflow.yaml
+- [ ] `tntc validate` passes (contract + spec)
+- [ ] `tntc visualize --rich --write` reviewed with user
+- [ ] Dependency hosts and ports confirmed
+- [ ] Secret refs match `.secrets.yaml` keys
+- [ ] Derived NetworkPolicy matches expected access
+- [ ] `tntc test` passes with zero drift
+- [ ] `workflow-diagram.md` and `contract-summary.md` committed to repo
 
-2. **Mock Test** -- runs node-level tests from fixtures using the mock context. No cluster or credentials required. Validates node logic and data flow in isolation.
-
-3. **Live Test** -- deploys the workflow to a configured dev environment, triggers it, validates the result, and cleans up. Requires a `dev` environment in config (see [Environment Configuration](#environment-configuration)). Use `--env <name>` to target a different environment. Add `--keep` to skip cleanup for debugging. Default timeout is 120 seconds (`--timeout` to override).
-
-4. **Deploy** -- generates K8s manifests and applies to the target cluster. When a dev environment is configured, deploy automatically runs a live test first and aborts if it fails. Use `--force` (alias `--skip-live-test`) to skip the live test gate. Add `--verify` to run post-deploy verification (trigger workflow once after deploy).
-
-5. **Post-Deploy Verification** -- triggers the deployed workflow once and validates the result. Confirms the workflow runs successfully in its target environment.
-
-### Deploy Gate
-
-When a dev environment is configured, `tntc deploy` runs a live test before applying manifests. This prevents deploying broken workflows.
-
-```bash
-tntc deploy                     # auto-runs live test first (if dev env configured)
-tntc deploy --force             # skip live test, deploy directly
-tntc deploy --skip-live-test    # alias for --force
-```
-
-If the live test fails, deploy aborts with a structured error including the test failure details and hints for remediation.
-
-### Structured Output
-
-All commands support `-o json` for agent-consumable output. Every JSON response uses a common envelope:
-
-```json
-{
-  "version": "1",
-  "command": "validate|test|deploy|run",
-  "status": "pass|fail",
-  "summary": "human-readable one-liner",
-  "hints": ["actionable suggestion if failed"],
-  "timing": {
-    "startedAt": "2026-02-16T09:00:00Z",
-    "durationMs": 1234
-  }
-}
-```
-
-Commands add their own fields to the envelope:
-
-- **validate**: validation errors array
-- **test**: per-node test results with pass/fail, expected vs. actual, execution time
-- **test --live**: `execution` field with the workflow run result (success, outputs, errors, timing)
-- **deploy**: `execution` field on verification failure; `hints` with remediation steps on failure
-- **run**: execution result with outputs, errors, and workflow timing
-
-Example deploy output with `-o json`:
-
-```json
-{
-  "version": "1",
-  "command": "deploy",
-  "status": "pass",
-  "summary": "deployed my-workflow to production",
-  "hints": [],
-  "timing": { "startedAt": "2026-02-16T09:00:00Z", "durationMs": 17000 }
-}
-```
+For step details, deploy gate behavior, structured
+output format, and the pre-build review gate, read
+[references/deployment-guide.md](references/deployment-guide.md).
 
 ## Environment Configuration
 
-Named environments extend the existing config cascade. Define environments in `~/.tentacular/config.yaml` (user-level) or `.tentacular/config.yaml` (project-level).
-
-```yaml
-registry: ghcr.io/randybias
-namespace: default
-
-environments:
-  dev:
-    context: kind-dev              # kubeconfig context name
-    namespace: dev-workflows
-    image: ghcr.io/randybias/tentacular-engine:latest
-    runtime_class: ""              # no gVisor in dev
-    config_overrides:
-      timeout: 60s
-      debug: true
-    secrets_source: .secrets.yaml
-  staging:
-    context: staging-cluster
-    namespace: staging
-    image: ghcr.io/randybias/tentacular-engine:latest
-    runtime_class: gvisor
-```
-
-### Environment Fields
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `context` | string | Kubeconfig context to use for this environment |
-| `namespace` | string | Target K8s namespace |
-| `image` | string | Engine image tag |
-| `runtime_class` | string | RuntimeClass name (empty to disable gVisor) |
-| `config_overrides` | map | Merged into workflow config for this environment |
-| `secrets_source` | string | Path to secrets file for this environment |
-
-Environment values override the base config. CLI flags override environment values. Resolution order: CLI flags > environment config > project config > user config > defaults.
-
-### Kind Cluster Detection
-
-When deploying to a kind cluster, the CLI auto-detects it (kubeconfig context with `kind-` prefix and localhost server) and adjusts:
-
-- **RuntimeClass**: Set to empty (kind does not support gVisor)
-- **ImagePullPolicy**: Set to `IfNotPresent` (images are loaded locally)
-- **Image loading**: After `tntc build`, images are loaded into kind via `kind load docker-image`
-
-Detection is automatic -- no manual configuration needed. A diagnostic message is printed:
-
-```
-Detected kind cluster 'dev', adjusted: no gVisor, imagePullPolicy=IfNotPresent
-```
+Named environments (`dev`, `staging`, `production`)
+extend the config cascade with cluster-specific
+settings. Define them in `~/.tentacular/config.yaml`
+or `.tentacular/config.yaml`. Each environment can
+specify `context`, `namespace`, `image`,
+`runtime_class`, `config_overrides`, and
+`secrets_source`. Resolution order: CLI flags >
+environment config > project config > user config >
+defaults. See
+[references/deployment-guide.md](references/deployment-guide.md)
+for full environment configuration details.
 
 ## Agent Workflow Guide
 
-This section documents the non-interactive workflow for coding
-agents deploying and testing tentacular workflows. All commands
-support `-o json` for structured output; when active, progress
-messages go to stderr and only the JSON envelope goes to stdout.
-
-### Develop a Plan in Advance for New or Updated Workflows
-
-Before writing or changing workflow code, the agent MUST run a
-planning loop with the user. The goal is to eliminate hidden
-dependencies (especially secrets and runtime config) before
-implementation starts.
-
-#### Planning Objectives
-
-1. Confirm the user's intent and expected outcome.
-2. Identify every external dependency and side effect.
-3. Define a complete secrets and config contract up front.
-4. Pre-validate the environment, credentials, and connectivity.
-5. Define explicit dev-to-prod promotion gates.
-
-#### Step 1: Confirm User Intent (Do Not Assume)
-
-Ask targeted questions and restate the intent before coding:
-
-1. What business outcome should this workflow produce?
-2. What triggers are required (`manual`, `cron`, `queue`)?
-3. What are the expected inputs and outputs?
-4. What systems are read-only vs. write targets?
-5. What constitutes success vs. acceptable degradation?
-
-The agent should summarize the intent back to the user and get
-confirmation before proceeding.
-
-#### Step 2: Build a Dependency Map
-
-Enumerate all dependencies early:
-
-1. APIs/services (GitHub, Slack, NATS, cloud storage, etc.)
-2. Data stores (Postgres, Redis, object stores)
-3. Network routes and DNS targets
-4. Environment-specific behavior (`dev` vs. `prod`)
-5. Required trigger scheduling and runtime behavior
-
-If any dependency is uncertain, stop and ask. Do not proceed
-with guessed endpoints, guessed credentials, or placeholder
-resources unless explicitly requested for mock-only testing.
-
-#### Step 3: Define Secrets and Config Contracts Up Front
-
-Build two explicit contracts before implementation:
-
-1. **Secrets Contract** (required keys, where they come from,
-   which environment uses them, and how they are validated)
-2. **Config Contract** (workflow `config:` keys, expected types,
-   environment overrides, and target namespaces/contexts)
-
-Secrets handling policy:
-
-1. Current supported source: local workflow secrets
-   (`<workflow>/.secrets.yaml` or `<workflow>/.secrets/`)
-2. Future source: external secrets vault (**FUTURE**)
-3. Never use environment variables for workflow secrets
-4. Never print secret values in terminal output
-5. Validate key presence and format before live runs
-
-Minimum contract to confirm with user:
-
-1. Secret key names exactly as node code expects
-2. Real target endpoints (DB host, webhook URL, container/blob
-   base URL, queue URL/subject, etc.)
-3. Environment mapping (`dev` namespace/context/image and
-   `prod` namespace/context/image)
-4. Expected side effects per environment
-
-#### Step 4: Planning Loop With User (Round-Trip Until Stable)
-
-The agent should propose a concrete plan and iterate with the
-user until there are no open questions.
-
-Plan must include:
-
-1. Workflow changes to make
-2. Secrets/config values required per environment
-3. Pre-validation checks to run first
-4. Test sequence (unit/mock, pipeline, live dev)
-5. Promotion gate for prod deploy
-6. Rollback/cleanup plan (`tntc undeploy ... -y`)
-
-The plan should be repeated back in detailed form after each
-user clarification. Do not start implementation until the plan
-is explicitly confirmed.
-
-#### Step 5: Pre-Validate Before Implementation Work
-
-Run lightweight checks before coding/deploying:
-
-```bash
-# Validate cluster targets
-tntc cluster check --fix -n <dev-namespace>
-tntc cluster check --fix -n <prod-namespace>
-
-# Validate workflow and secrets contract
-tntc validate <workflow-dir>
-tntc secrets check <workflow-dir>
-
-# Confirm config points to expected image and envs
-cat .tentacular/config.yaml
-```
-
-Also pre-validate critical credentials/connectivity where
-possible (without exposing secret values), for example:
-
-1. GitHub token format and API reachability
-2. Database credentials vs. expected DB target
-3. Slack webhook format and safe test delivery target
-4. Storage URL/container existence and write permissions
-5. Queue URL/auth/subject validity for queue triggers
-
-If validation fails, fix inputs first; do not continue blindly.
-
-#### Step 6: Enforce Dev E2E Gate Before Prod
-
-Every new or updated workflow must include a full development
-environment run with real credentials/config before production:
-
-1. `tntc validate`
-2. `tntc test`
-3. `tntc test --pipeline`
-4. `tntc test --live --env dev`
-5. Review outputs/logs and confirm side effects
-6. Only then `tntc deploy --env prod` (with `--verify`)
-
-Using separate dev creds is fine and encouraged. The key
-requirement is that dev is a real environment with real
-integration behavior, not mock-only.
-
-#### Non-Negotiable Agent Rules
-
-1. Do not deploy to prod without a successful live dev run
-   unless the user explicitly overrides this decision.
-2. Do not use placeholder credentials for live testing.
-3. Do not proceed when secret keys/config targets are ambiguous.
-4. Always state resolved image, context, and namespace before
-   running live tests or deploy.
-5. Always clean up temporary deployments after live testing
-   unless `--keep` is intentionally requested.
-
-### Full E2E Cycle (Non-Interactive)
-
-```bash
-# 1. Validate spec
-tntc validate example-workflows/my-wf -o json
-
-# 2. Mock tests (no cluster needed)
-tntc test example-workflows/my-wf -o json
-
-# 3. Build container image
-tntc build example-workflows/my-wf -t tentacular-engine:my-wf
-
-# 4. Live test on dev (deploy -> run -> validate -> cleanup)
-tntc test --live --env dev example-workflows/my-wf -o json
-
-# 5. Deploy to target environment
-tntc deploy --env prod example-workflows/my-wf -o json
-
-# 6. Post-deploy run
-tntc run my-wf -n <namespace> -o json
-
-# 7. Cleanup when done
-tntc undeploy my-wf -n <namespace> -y
-```
-
-### Image Tag Cascade
-
-The CLI resolves the engine image in this order:
-
-1. `--image` flag (highest priority)
-2. Environment config `image` field (`--env`)
-3. `<workflow-dir>/.tentacular/base-image.txt` (written
-   by `tntc build`)
-4. `tentacular-engine:latest` (fallback)
-
-Repository default: configure `environments.<name>.image`
-to `ghcr.io/randybias/tentacular-engine:latest` so deploys
-do not rely on the unqualified fallback tag.
-
-`tntc build` writes the built tag to the workflow directory,
-not the current working directory. Both `deploy` and
-`test --live` read from the workflow directory automatically.
-
-### Build + Registry Interaction
-
-The config `registry` value is prepended to the `-t` tag only
-when the tag does not already contain a registry prefix (a `/`
-before the `:`). This prevents double-prefixing:
-
-```bash
-# Config has registry: reg.io
-tntc build -t my-image:v1          # builds reg.io/my-image:v1
-tntc build -t reg.io/my-image:v1   # builds reg.io/my-image:v1 (no double prefix)
-```
-
-When pushing to a remote registry for ARM64 clusters:
-
-```bash
-tntc build -t tentacular-engine:my-wf \
-  -r reg.io --push --platform linux/arm64
-```
-
-### Deploy with --env
-
-The `--env` flag resolves context, namespace, runtime-class,
-and image from the named environment in config. CLI flags
-override environment values:
-
-```bash
-# Use everything from prod environment config
-tntc deploy --env prod example-workflows/my-wf
-
-# Override namespace from environment
-tntc deploy --env prod -n custom-ns example-workflows/my-wf
-
-# Force deploy (skip live test gate)
-tntc deploy --env prod --force example-workflows/my-wf
-```
-
-### Fresh Deploy vs. Update
-
-On fresh deployments (all resources created, none updated),
-the CLI skips the rollout restart since Kubernetes already
-starts pods for new Deployments. On updates to existing
-resources, a rollout restart is triggered automatically.
-
-### JSON Output Behavior
-
-When `-o json` is active:
-
-- **stdout**: Only the structured JSON envelope
-- **stderr**: All progress messages (preflight checks,
-  manifest application, rollout status, cleanup)
-
-This lets agents parse stdout as JSON while still seeing
-progress in stderr. Parse the `status` field ("pass" or
-"fail") to determine success. On failure, check `hints`
-for remediation steps.
-
-### Common Gotchas for Agents
-
-1. **undeploy needs confirmation**: Always pass `-y`
-   in non-interactive scripts. Without it, the command
-   blocks waiting for stdin.
-
-2. **Namespace must exist**: `deploy` does not create
-   namespaces. Create them first with `kubectl create
-   namespace <name>`.
-
-3. **kubeconfig context**: When targeting multiple
-   clusters, use `--env` to switch contexts automatically.
-   Without `--env`, the CLI uses the current kubeconfig
-   context.
-
-4. **kind clusters**: Auto-detected by context name
-   prefix `kind-`. gVisor and imagePullPolicy are
-   adjusted automatically. After `tntc build`, images
-   are loaded into kind via `kind load docker-image`.
-
-5. **Secrets**: Local secrets come from
-   `<workflow-dir>/.secrets.yaml`. The CLI generates a
-   K8s Secret manifest from this file during deploy.
-   If `.secrets/` directory exists, it takes precedence
-   over `.secrets.yaml`.
-
-6. **Deploy gate**: When a `dev` environment is
-   configured, `deploy` auto-runs a live test first.
-   Use `--force` to skip. This only triggers when the
-   CLI detects a dev environment in config.
+Agents must plan before coding. The planning loop
+confirms user intent, authors the contract first,
+derives secrets and network intent, pre-validates
+the environment, and defines dev-to-prod promotion
+gates. Do not start implementation until the plan
+is explicitly confirmed by the user.
+
+For the full agent workflow guide including planning
+steps, E2E cycle, image tag cascade, deploy flags,
+and common gotchas, read
+[references/agent-workflow.md](references/agent-workflow.md).
 
 ## References
 
 For detailed documentation on specific topics:
 
+- [CLI Reference](references/cli.md)
+  -- full command table, global flags, namespace
+  resolution, config files, visualization reference
+- [Contract Model](references/contract.md)
+  -- contract structure, dependency protocols, auth
+  types, enforcement, drift detection, dynamic targets,
+  label-scoped ingress, NetworkPolicy overrides
+- [Agent Workflow Guide](references/agent-workflow.md)
+  -- planning steps, E2E cycle, image tag cascade,
+  deploy flags, common gotchas
 - [Workflow Specification](references/workflow-spec.md)
   -- complete workflow.yaml format, all fields, trigger
   types, validation rules

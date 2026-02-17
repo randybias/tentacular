@@ -1,0 +1,967 @@
+package spec
+
+import (
+	"strings"
+	"testing"
+)
+
+// --- Additional Contract Parsing Tests (Phase 1 Comprehensive Coverage) ---
+
+func TestParseContractEmptyDependencies(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies: {}
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	if len(wf.Contract.Dependencies) != 0 {
+		t.Errorf("expected empty dependencies map, got %d entries", len(wf.Contract.Dependencies))
+	}
+}
+
+func TestParseContractMultipleDependenciesDifferentProtocols(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+    postgres:
+      protocol: postgresql
+      host: postgres.svc
+      port: 5432
+      database: appdb
+      user: postgres
+      auth:
+        type: bearer-token
+        secret: postgres.password
+    nats-queue:
+      protocol: nats
+      host: nats.svc
+      port: 4222
+      subject: events.workflow
+      auth:
+        type: password
+        secret: nats.token
+    azure-storage:
+      protocol: blob
+      host: storage.blob.core.windows.net
+      port: 443
+      container: reports
+      auth:
+        type: bearer-token
+        secret: azure.sas_token
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if len(wf.Contract.Dependencies) != 4 {
+		t.Fatalf("expected 4 dependencies, got %d", len(wf.Contract.Dependencies))
+	}
+
+	// Verify each protocol
+	if wf.Contract.Dependencies["github"].Protocol != "https" {
+		t.Error("expected github to be https protocol")
+	}
+	if wf.Contract.Dependencies["postgres"].Protocol != "postgresql" {
+		t.Error("expected postgres to be postgresql protocol")
+	}
+	if wf.Contract.Dependencies["nats-queue"].Protocol != "nats" {
+		t.Error("expected nats-queue to be nats protocol")
+	}
+	if wf.Contract.Dependencies["azure-storage"].Protocol != "blob" {
+		t.Error("expected azure-storage to be blob protocol")
+	}
+}
+
+func TestParseContractNATSDependency(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    messaging:
+      protocol: nats
+      host: nats.svc.cluster.local
+      port: 4222
+      subject: events.workflow
+      auth:
+        type: bearer-token
+        secret: nats.token
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	nats := wf.Contract.Dependencies["messaging"]
+	if nats.Protocol != "nats" {
+		t.Errorf("expected protocol nats, got %s", nats.Protocol)
+	}
+	if nats.Subject != "events.workflow" {
+		t.Errorf("expected subject events.workflow, got %s", nats.Subject)
+	}
+}
+
+func TestParseContractBlobDependency(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    storage:
+      protocol: blob
+      host: storage.blob.core.windows.net
+      port: 443
+      container: reports
+      auth:
+        type: bearer-token
+        secret: azure.sas_token
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	blob := wf.Contract.Dependencies["storage"]
+	if blob.Protocol != "blob" {
+		t.Errorf("expected protocol blob, got %s", blob.Protocol)
+	}
+	if blob.Container != "reports" {
+		t.Errorf("expected container reports, got %s", blob.Container)
+	}
+}
+
+func TestParseContractExtensionFields(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    postgres:
+      protocol: postgresql
+      host: postgres.svc
+      port: 5432
+      database: appdb
+      user: postgres
+      auth:
+        type: password
+        secret: postgres.password
+      sslMode: require
+      connectionTimeout: 30s
+  x-provider-metadata:
+    region: us-west-2
+    tier: production
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+
+	// Check dependency extension fields
+	postgres := wf.Contract.Dependencies["postgres"]
+	if postgres.Extensions == nil {
+		t.Fatal("expected dependency extensions to be non-nil")
+	}
+	if postgres.Extensions["sslMode"] != "require" {
+		t.Error("expected sslMode extension field preserved in dependency")
+	}
+	if postgres.Extensions["connectionTimeout"] != "30s" {
+		t.Error("expected connectionTimeout extension field preserved in dependency")
+	}
+
+	// Check contract extension fields
+	if wf.Contract.Extensions == nil {
+		t.Fatal("expected contract extensions to be non-nil")
+	}
+}
+
+func TestParseContractNetworkPolicy(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: 10.0.0.0/8
+        ports:
+          - "8080/TCP"
+          - "8443/TCP"
+      - toCIDR: 172.16.0.0/12
+        ports:
+          - "9000/TCP"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract.NetworkPolicy == nil {
+		t.Fatal("expected networkPolicy to be non-nil")
+	}
+	if len(wf.Contract.NetworkPolicy.AdditionalEgress) != 2 {
+		t.Fatalf("expected 2 additionalEgress rules, got %d", len(wf.Contract.NetworkPolicy.AdditionalEgress))
+	}
+
+	rule1 := wf.Contract.NetworkPolicy.AdditionalEgress[0]
+	if rule1.ToCIDR != "10.0.0.0/8" {
+		t.Errorf("expected CIDR 10.0.0.0/8, got %s", rule1.ToCIDR)
+	}
+	if len(rule1.Ports) != 2 {
+		t.Errorf("expected 2 ports, got %d", len(rule1.Ports))
+	}
+}
+
+// --- Error Path Tests ---
+
+func TestParseContractMissingProtocol(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    api:
+      host: api.example.com
+      port: 443
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for missing protocol")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "protocol is required") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'protocol is required' error, got: %v", errs)
+	}
+}
+
+func TestParseContractHTTPSMissingHost(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      port: 443
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for missing host in https dependency")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "https requires host") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'https requires host' error, got: %v", errs)
+	}
+}
+
+func TestParseContractNATSMissingSubject(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    messaging:
+      protocol: nats
+      host: nats.svc
+      port: 4222
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for missing subject in nats dependency")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "nats requires subject") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'nats requires subject' error, got: %v", errs)
+	}
+}
+
+func TestParseContractBlobMissingContainer(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    storage:
+      protocol: blob
+      host: storage.blob.core.windows.net
+      port: 443
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for missing container in blob dependency")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "blob requires container") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'blob requires container' error, got: %v", errs)
+	}
+}
+
+func TestParseContractInvalidDependencyName(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    Invalid-Name:
+      protocol: https
+      host: api.example.com
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for invalid dependency name")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "name must match") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected name format error, got: %v", errs)
+	}
+}
+
+func TestParseContractAuthMissingSecret(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+      auth:
+        type: bearer-token
+        secret: ""
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for empty auth.secret")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "auth.secret is required") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'auth.secret is required' error, got: %v", errs)
+	}
+}
+
+func TestParseContractMultipleValidationErrors(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    postgres:
+      protocol: postgresql
+      host: postgres.svc
+      # Missing database and user
+    invalid-proto:
+      protocol: grpc
+      host: api.example.com
+`
+	_, errs := Parse([]byte(yaml))
+	// Unknown protocols now log warnings instead of errors, so expect only 2 errors (database, user)
+	if len(errs) < 2 {
+		t.Fatalf("expected at least 2 errors (database, user), got %d: %v", len(errs), errs)
+	}
+	// Verify we get the expected postgresql errors
+	foundDatabase := false
+	foundUser := false
+	for _, e := range errs {
+		if strings.Contains(e, "database") {
+			foundDatabase = true
+		}
+		if strings.Contains(e, "user") {
+			foundUser = true
+		}
+	}
+	if !foundDatabase || !foundUser {
+		t.Errorf("expected database and user errors, got: %v", errs)
+	}
+}
+
+func TestParseContractDependencyWithoutAuth(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    public-api:
+      protocol: https
+      host: api.example.com
+      port: 443
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors for dependency without auth: %v", errs)
+	}
+	dep := wf.Contract.Dependencies["public-api"]
+	if dep.Auth != nil {
+		t.Error("expected auth to be nil for public dependency")
+	}
+}
+
+// --- Group 1: CIDR Format Validation Tests ---
+
+func TestValidCIDRFormats(t *testing.T) {
+	testCases := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "IPv4 /8 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP"]
+`,
+		},
+		{
+			name: "IPv4 /12 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "172.16.0.0/12"
+`,
+		},
+		{
+			name: "IPv4 /24 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "192.168.1.0/24"
+`,
+		},
+		{
+			name: "IPv6 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "2001:db8::/32"
+`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, errs := Parse([]byte(tc.yaml))
+			if len(errs) > 0 {
+				t.Errorf("expected valid CIDR to pass validation, got errors: %v", errs)
+			}
+		})
+	}
+}
+
+func TestInvalidCIDRFormats(t *testing.T) {
+	testCases := []struct {
+		name        string
+		yaml        string
+		expectedErr string
+	}{
+		{
+			name: "Missing prefix length",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+		{
+			name: "Invalid prefix length",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/33"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+		{
+			name: "Not a CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "not-a-cidr"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+		{
+			name: "Invalid IP address",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "256.0.0.0/8"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, errs := Parse([]byte(tc.yaml))
+			if len(errs) == 0 {
+				t.Fatal("expected validation error for invalid CIDR")
+			}
+			found := false
+			for _, err := range errs {
+				if strings.Contains(err, tc.expectedErr) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected error containing %q, got: %v", tc.expectedErr, errs)
+			}
+		})
+	}
+}
+
+func TestCIDRInAdditionalEgress(t *testing.T) {
+	// Valid CIDR should pass validation
+	validYAML := `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP", "80/TCP"]
+      - toCIDR: "172.16.0.0/12"
+        ports: ["8080/TCP"]
+`
+	wf, errs := Parse([]byte(validYAML))
+	if len(errs) > 0 {
+		t.Fatalf("expected valid CIDR to pass, got errors: %v", errs)
+	}
+	if wf.Contract == nil || wf.Contract.NetworkPolicy == nil {
+		t.Fatal("expected networkPolicy to be parsed")
+	}
+	if len(wf.Contract.NetworkPolicy.AdditionalEgress) != 2 {
+		t.Errorf("expected 2 egress overrides, got %d", len(wf.Contract.NetworkPolicy.AdditionalEgress))
+	}
+
+	// Invalid CIDR should fail with helpful error
+	invalidYAML := `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "not-a-cidr"
+`
+	_, errs = Parse([]byte(invalidYAML))
+	if len(errs) == 0 {
+		t.Fatal("expected error for invalid CIDR")
+	}
+	found := false
+	for _, err := range errs {
+		if strings.Contains(err, "invalid CIDR format") && strings.Contains(err, "not-a-cidr") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected helpful error with CIDR value, got: %v", errs)
+	}
+}
+
+// --- Group 2: Reason Field Preservation Tests ---
+
+func TestReasonFieldRoundTrip(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP"]
+        reason: "Legacy API requires broader access"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract == nil || wf.Contract.NetworkPolicy == nil {
+		t.Fatal("expected networkPolicy to be parsed")
+	}
+	if len(wf.Contract.NetworkPolicy.AdditionalEgress) == 0 {
+		t.Fatal("expected additionalEgress rules")
+	}
+	rule := wf.Contract.NetworkPolicy.AdditionalEgress[0]
+	if rule.Reason != "Legacy API requires broader access" {
+		t.Errorf("expected reason to be preserved, got: %q", rule.Reason)
+	}
+}
+
+func TestReasonFieldOmittedWhenEmpty(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP"]
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	rule := wf.Contract.NetworkPolicy.AdditionalEgress[0]
+	if rule.Reason != "" {
+		t.Errorf("expected reason to be empty, got: %q", rule.Reason)
+	}
+}
+
+func TestReasonFieldMultipleRules(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        reason: "Internal network access"
+      - toCIDR: "172.16.0.0/12"
+        reason: "Legacy database cluster"
+      - toCIDR: "192.168.0.0/16"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	rules := wf.Contract.NetworkPolicy.AdditionalEgress
+	if len(rules) != 3 {
+		t.Fatalf("expected 3 rules, got %d", len(rules))
+	}
+	if rules[0].Reason != "Internal network access" {
+		t.Errorf("rule 0: expected reason, got %q", rules[0].Reason)
+	}
+	if rules[1].Reason != "Legacy database cluster" {
+		t.Errorf("rule 1: expected reason, got %q", rules[1].Reason)
+	}
+	if rules[2].Reason != "" {
+		t.Errorf("rule 2: expected empty reason, got %q", rules[2].Reason)
+	}
+}
+
+// --- Group 2: Dynamic Target Tests ---
+
+func TestDynamicTargetTypeFieldParsing(t *testing.T) {
+	yaml := `
+name: uptime-prober
+version: "1.0"
+triggers:
+  - type: cron
+    schedule: "*/5 * * * *"
+nodes:
+  check:
+    path: ./check.ts
+contract:
+  version: "1"
+  dependencies:
+    probe-targets:
+      type: dynamic-target
+      protocol: https
+      cidr: "0.0.0.0/0"
+      dynPorts:
+        - "443/TCP"
+        - "80/TCP"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("dynamic-target should parse without errors, got: %v", errs)
+	}
+	dep := wf.Contract.Dependencies["probe-targets"]
+	if dep.Type != "dynamic-target" {
+		t.Errorf("expected type=dynamic-target, got %s", dep.Type)
+	}
+	if dep.CIDR != "0.0.0.0/0" {
+		t.Errorf("expected cidr=0.0.0.0/0, got %s", dep.CIDR)
+	}
+	if len(dep.DynPorts) != 2 {
+		t.Errorf("expected 2 dynPorts, got %d", len(dep.DynPorts))
+	}
+}
+
+func TestDynamicTargetValidation(t *testing.T) {
+	// Construct contract directly to test ValidateContract() in isolation
+	// (Parse() treats ValidateContract errors as parse failures)
+	contract := &Contract{
+		Version: "1",
+		Dependencies: map[string]Dependency{
+			"probe-targets": {
+				Type:     "dynamic-target",
+				Protocol: "https",
+				// Missing CIDR and DynPorts — should produce errors
+			},
+		},
+	}
+	errs := ValidateContract(contract)
+	foundCIDRErr := false
+	foundPortsErr := false
+	for _, e := range errs {
+		if strings.Contains(e, "cidr") {
+			foundCIDRErr = true
+		}
+		if strings.Contains(e, "dynPorts") {
+			foundPortsErr = true
+		}
+	}
+	if !foundCIDRErr {
+		t.Error("expected validation error about missing cidr for dynamic-target")
+	}
+	if !foundPortsErr {
+		t.Error("expected validation error about missing dynPorts for dynamic-target")
+	}
+}

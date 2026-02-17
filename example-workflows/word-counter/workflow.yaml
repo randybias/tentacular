@@ -21,3 +21,7 @@ edges:
 
 config:
   timeout: 10s
+
+contract:
+  version: "1"
+  dependencies: {}

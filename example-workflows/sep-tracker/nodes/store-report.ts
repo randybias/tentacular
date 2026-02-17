@@ -76,25 +76,20 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
   const report = merged["render-html"];
   const delta = merged["diff-seps"];
 
-  const pgPassword = ctx.secrets?.postgres?.password;
-  if (!pgPassword) {
+  const postgres = ctx.dependency("postgres");
+  if (!postgres.secret) {
     ctx.log.warn("No postgres.password in secrets -- skipping (no credentials)");
     return { stored: false, snapshotId: 0, reportUrl: "" };
   }
 
-  const pgHost = ctx.config.pg_host as string;
-  const pgPort = ctx.config.pg_port as number;
-  const pgDatabase = ctx.config.pg_database as string;
-  const pgUser = ctx.config.pg_user as string;
-
-  ctx.log.info(`Connecting to Postgres at ${pgHost}:${pgPort}/${pgDatabase}`);
+  ctx.log.info(`Connecting to Postgres at ${postgres.host}:${postgres.port}/${postgres.database}`);
 
   const client = new Client({
-    hostname: pgHost,
-    port: pgPort,
-    database: pgDatabase,
-    user: pgUser,
-    password: pgPassword,
+    hostname: postgres.host,
+    port: postgres.port,
+    database: postgres.database,
+    user: postgres.user,
+    password: postgres.secret,
     tls: { enabled: false },
   });
 
@@ -121,7 +116,7 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
 
   // Upload HTML to Azure Blob Storage
   let reportUrl = "";
-  const sasToken = ctx.secrets?.azure?.sas_token;
+  const azureBlob = ctx.dependency("azure-blob");
   const blobBaseUrl = ctx.config.azure_blob_base_url as string;
   const totalChanges = delta
     ? delta.addedCount + delta.removedCount + delta.updatedCount
@@ -132,15 +127,20 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
     return { stored: true, snapshotId, reportUrl };
   }
 
-  if (sasToken && blobBaseUrl) {
+  if (azureBlob.secret && blobBaseUrl) {
     const blobName = `sep-report-${formatBlobTimestamp(snapshot.timestamp)}.html`;
-    const uploadUrl = `${blobBaseUrl}/${blobName}?${sasToken}`;
+    const uploadPath = `/${blobName}`;
     const publicUrl = `${blobBaseUrl}/${blobName}`;
 
     ctx.log.info(`Uploading report to Azure Blob Storage: ${blobName}`);
 
     try {
-      const uploadRes = await ctx.fetch("azure-blob", uploadUrl, {
+      // For SAS token auth, append token as query parameter
+      const sasToken = azureBlob.secret || "";
+      const separator = uploadPath.includes("?") ? "&" : "?";
+      const uploadPathWithSas = `${uploadPath}${separator}${sasToken}`;
+
+      const uploadRes = await azureBlob.fetch!(uploadPathWithSas, {
         method: "PUT",
         headers: {
           "Content-Type": "text/html; charset=utf-8",

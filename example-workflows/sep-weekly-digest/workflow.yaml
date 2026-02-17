@@ -1,0 +1,96 @@
+name: sep-weekly-digest
+version: "1.0"
+description: "Weekly SEP activity digest with LLM-powered analysis, trend tracking, and health scoring"
+
+deployment:
+  namespace: pd-sep-tracker
+
+triggers:
+  - type: manual
+  - type: cron
+    name: weekly-sunday
+    schedule: "0 20 * * 0"
+
+nodes:
+  fetch-seps:
+    path: ./nodes/fetch-seps.ts
+  store-snapshots:
+    path: ./nodes/store-snapshots.ts
+  analyze-activity:
+    path: ./nodes/analyze-activity.ts
+  generate-report:
+    path: ./nodes/generate-report.ts
+  render-html:
+    path: ./nodes/render-html.ts
+  publish-report:
+    path: ./nodes/publish-report.ts
+  notify:
+    path: ./nodes/notify.ts
+
+edges:
+  - from: fetch-seps
+    to: store-snapshots
+  - from: store-snapshots
+    to: analyze-activity
+  - from: fetch-seps
+    to: generate-report
+  - from: analyze-activity
+    to: generate-report
+  - from: generate-report
+    to: render-html
+  - from: analyze-activity
+    to: render-html
+  - from: render-html
+    to: publish-report
+  - from: publish-report
+    to: notify
+  - from: analyze-activity
+    to: notify
+
+config:
+  timeout: 180s
+  retries: 1
+  target_repo: "modelcontextprotocol/specification"
+  sep_label: "sep"
+  azure_blob_base_url: "https://mcpreports9276621.blob.core.windows.net/sep-reports"
+
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+    postgres:
+      protocol: postgresql
+      host: postgres-postgresql.postgres.svc.cluster.local
+      port: 5432
+      database: sep_analytics
+      user: postgres
+      auth:
+        type: password
+        secret: postgres.password
+    openai:
+      protocol: https
+      host: api.openai.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: openai.api_key
+    azure-blob:
+      protocol: https
+      host: mcpreports9276621.blob.core.windows.net
+      port: 443
+      auth:
+        type: sas-token
+        secret: azure.sas_token
+    slack-webhook:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url

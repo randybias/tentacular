@@ -3,6 +3,13 @@ namespace: default
 runtime_class: gvisor
 
 environments:
+  dev:
+    kubeconfig: ~/dev-secrets/kubeconfigs/nats-admin.kubeconfig
+    namespace: tentacular-dev
+    image: ghcr.io/randybias/tentacular-engine:latest
+    runtime_class: gvisor
   prod:
+    kubeconfig: ~/dev-secrets/kubeconfigs/nats-admin.kubeconfig
+    namespace: tentacular-prod
     image: ghcr.io/randybias/tentacular-engine:latest
     runtime_class: gvisor
