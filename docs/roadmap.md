@@ -134,7 +134,7 @@ Items verified as fixed in the current codebase. Kept for historical context.
 
 ### Dockerfile `--no-lock` on `deno cache`
 
-**Resolved Feb 2026.** The `deno cache` command in the generated Dockerfile now includes `--no-lock`, matching the `deno run` ENTRYPOINT. Node dependency caching via per-node `deno cache` was intentionally not implemented -- the engine image remains generic and code-free, with node dependencies downloaded at runtime into the writable `DENO_DIR=/tmp/deno-cache`.
+**Resolved Feb 2026.** The `deno cache` command in the generated Dockerfile now includes `--no-lock`, matching the `deno run` ENTRYPOINT. Engine dependencies are cached at build time to the distroless default `/deno-dir/` and served from the read-only image layer at runtime — no `ENV DENO_DIR` override is needed. Workflow node dependencies (e.g., JSR imports like `@db/postgres`) are not pre-cached and require network access at runtime.
 
 ### Initial Configuration (`tntc configure`)
 

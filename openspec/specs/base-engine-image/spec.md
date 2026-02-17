@@ -41,12 +41,12 @@ The generated Dockerfile SHALL pre-cache engine dependencies at build time via `
 - **WHEN** `GenerateDockerfile()` is called
 - **THEN** the Dockerfile SHALL contain a `RUN` instruction that caches `engine/main.ts` dependencies
 
-### Requirement: Dockerfile sets DENO_DIR for runtime caching
-The generated Dockerfile SHALL set `DENO_DIR` environment variable to enable runtime caching of third-party dependencies imported by workflow nodes.
+### Requirement: Dockerfile does NOT override DENO_DIR
+The generated Dockerfile SHALL NOT set the `DENO_DIR` environment variable. Engine dependencies are cached at build time to the distroless default `/deno-dir/` and served from that read-only image layer at runtime.
 
-#### Scenario: DENO_DIR environment variable
+#### Scenario: No DENO_DIR environment variable
 - **WHEN** `GenerateDockerfile()` is called
-- **THEN** the Dockerfile SHALL contain `ENV DENO_DIR=/tmp/deno-cache`
+- **THEN** the Dockerfile SHALL NOT contain `ENV DENO_DIR`
 
 ### Requirement: Dockerfile ENTRYPOINT uses default workflow path
 The generated Dockerfile ENTRYPOINT SHALL include `--workflow /app/workflow/workflow.yaml` as the default workflow path, matching the ConfigMap mount point used in Phase 2.

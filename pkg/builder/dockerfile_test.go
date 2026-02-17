@@ -73,9 +73,9 @@ func TestGenerateDockerfileNoLockOnCache(t *testing.T) {
 	}
 }
 
-func TestGenerateDockerfile_DenoDir(t *testing.T) {
+func TestGenerateDockerfile_NoDenoDirOverride(t *testing.T) {
 	df := GenerateDockerfile()
-	if !strings.Contains(df, "ENV DENO_DIR=/tmp/deno-cache") {
-		t.Error("expected ENV DENO_DIR=/tmp/deno-cache for runtime caching")
+	if strings.Contains(df, "ENV DENO_DIR") {
+		t.Error("expected no ENV DENO_DIR override — engine deps use distroless default /deno-dir/")
 	}
 }
