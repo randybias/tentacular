@@ -6,6 +6,31 @@ testing tentacular workflows. All commands support
 messages go to stderr and only the JSON envelope goes
 to stdout.
 
+## Tentacles: Where Production Workflows Live
+
+Production workflows (**tentacles**) are stored outside
+the tentacular repo in a dedicated local directory (e.g.,
+`~/workspace/tentacles/<workflow-name>/`). The repo's
+`example-workflows/` directory contains reference
+implementations only — never deploy directly from it.
+
+When creating a new workflow, always scaffold it in the
+tentacles directory. Copy from `example-workflows/` as
+a starting template if useful, but the working copy
+belongs in tentacles. Secrets (`.secrets.yaml`) are kept
+alongside the workflow and must never be committed to
+any repository.
+
+All `tntc` commands accept a path argument and work
+identically whether the workflow is inside or outside
+the repo:
+
+```bash
+tntc validate ~/workspace/tentacles/my-workflow
+tntc test ~/workspace/tentacles/my-workflow
+tntc deploy ~/workspace/tentacles/my-workflow --env prod
+```
+
 ## Develop a Plan in Advance for New or Updated Workflows
 
 Before writing or changing workflow code, the agent MUST run a

@@ -1,5 +1,45 @@
 # Tentacular
 
+## Tentacles: Production Workflow Best Practice
+
+Production workflows (called **tentacles**) MUST be stored
+outside the tentacular repository. The repo contains only
+the tool (CLI + engine), skill, and example workflows.
+Real workflows with secrets, credentials, and
+production-specific configuration belong in a separate
+local directory.
+
+**Recommended layout:**
+
+```
+~/workspace/tentacles/
+  ai-news-roundup/
+    workflow.yaml
+    .secrets.yaml        # NEVER committed to any repo
+    .secrets.yaml.example
+    nodes/
+    tests/
+  uptime-prober/
+    ...
+```
+
+**Why separate?**
+
+- The tentacular repo is public — secrets and production
+  configs must never end up there
+- Workflows are operational artifacts, not source code
+  for the tool itself
+- `example-workflows/` in the repo are reference
+  implementations only — copy them to your tentacles
+  directory to customize and deploy
+
+**When building a new workflow**, always create it in the
+tentacles directory, not in the repo. Use
+`example-workflows/` as templates if helpful, but the
+working copy lives in tentacles.
+
+---
+
 Tentacular is a *secure* workflow build and execution
 system designed for AI agents. It's purpose is to allow
 an AI agent (you) to easily build repeatable and durable
