@@ -77,6 +77,7 @@ async function main() {
   const ctx = createContext({
     secrets,
     config: spec.config as Record<string, unknown> ?? {},
+    contract: spec.contract,
   });
 
   // Create node runner
@@ -90,6 +91,7 @@ async function main() {
         secrets,
         config: spec.config as Record<string, unknown> ?? {},
         nodeId,
+        contract: spec.contract,
       });
 
       return fn(nodeCtx, input);
