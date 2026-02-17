@@ -234,8 +234,8 @@ func TestDeriveIngressRulesMultipleTriggerTypes(t *testing.T) {
 	}
 
 	rules := DeriveIngressRules(wf)
-	if len(rules) != 0 {
-		t.Errorf("expected no ingress for non-webhook triggers, got %d", len(rules))
+	if len(rules) != 1 {
+		t.Errorf("expected 1 ingress rule (namespace-local port 8080), got %d", len(rules))
 	}
 }
 

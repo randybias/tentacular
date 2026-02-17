@@ -199,8 +199,11 @@ func TestDeriveIngressRulesNoWebhook(t *testing.T) {
 	}
 
 	rules := DeriveIngressRules(wf)
-	if len(rules) != 0 {
-		t.Errorf("expected no ingress rules for non-webhook triggers, got %d", len(rules))
+	if len(rules) != 1 {
+		t.Errorf("expected 1 ingress rule (namespace-local port 8080), got %d", len(rules))
+	}
+	if len(rules) > 0 && rules[0].Port != 8080 {
+		t.Errorf("expected ingress port 8080, got %d", rules[0].Port)
 	}
 }
 

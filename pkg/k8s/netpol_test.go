@@ -104,9 +104,9 @@ func TestGenerateNetworkPolicySingleHTTPSDependency(t *testing.T) {
 		t.Error("expected namespace: default")
 	}
 
-	// Check no ingress rules (manual trigger)
-	if strings.Contains(manifest.Content, "ingress:") {
-		t.Error("expected no ingress rules for manual trigger")
+	// All workflows get namespace-local ingress on port 8080 (for runner pod / CronJob)
+	if !strings.Contains(manifest.Content, "ingress:") {
+		t.Error("expected ingress rules for namespace-local access on port 8080")
 	}
 }
 
@@ -254,9 +254,9 @@ func TestGenerateNetworkPolicyNonWebhookTriggerNoIngress(t *testing.T) {
 		t.Fatal("expected non-nil manifest")
 	}
 
-	// Should NOT have ingress rules
-	if strings.Contains(manifest.Content, "ingress:") {
-		t.Error("expected no ingress section for non-webhook triggers")
+	// All workflows get namespace-local ingress on port 8080
+	if !strings.Contains(manifest.Content, "ingress:") {
+		t.Error("expected ingress rules for namespace-local access on port 8080")
 	}
 }
 

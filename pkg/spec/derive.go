@@ -116,17 +116,11 @@ type IngressRule struct {
 // Webhook triggers enable ingress on port 8080.
 // Returns empty slice if no webhook triggers.
 func DeriveIngressRules(wf *Workflow) []IngressRule {
-	var rules []IngressRule
-
-	for _, trigger := range wf.Triggers {
-		if trigger.Type == "webhook" {
-			// Webhook triggers allow ingress on the service port
-			rules = append(rules, IngressRule{
-				Port:     8080,
-				Protocol: "TCP",
-			})
-			break // Only need one ingress rule for webhooks
-		}
+	// Every workflow needs namespace-local ingress on port 8080.
+	// The runner Job (tntc test --live) and CronJob triggers POST to the engine service.
+	// Webhook triggers also need this, but so does every other trigger type.
+	rules := []IngressRule{
+		{Port: 8080, Protocol: "TCP"},
 	}
 
 	return rules
