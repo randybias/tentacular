@@ -1,6 +1,10 @@
 package spec
 
-import "strings"
+import (
+	"sort"
+	"strconv"
+	"strings"
+)
 
 // DeriveSecrets returns the list of required secret keys from contract dependencies.
 // Returns empty slice if contract is nil or has no dependencies with auth.
@@ -9,12 +13,15 @@ func DeriveSecrets(c *Contract) []string {
 		return nil
 	}
 
+	seen := make(map[string]bool)
 	var secrets []string
 	for _, dep := range c.Dependencies {
-		if dep.Auth != nil && dep.Auth.Secret != "" {
+		if dep.Auth != nil && dep.Auth.Secret != "" && !seen[dep.Auth.Secret] {
 			secrets = append(secrets, dep.Auth.Secret)
+			seen[dep.Auth.Secret] = true
 		}
 	}
+	sort.Strings(secrets)
 	return secrets
 }
 
@@ -63,11 +70,38 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 	// Add additional egress overrides from networkPolicyOverride
 	if c.NetworkPolicyOverride != nil {
 		for _, override := range c.NetworkPolicyOverride.AdditionalEgress {
-			// Parse CIDR and ports
-			// For now, we just capture the override - actual NetworkPolicy rendering happens in pkg/k8s
-			_ = override
+			for _, portStr := range override.Ports {
+				port, proto := parsePortSpec(portStr)
+				if port > 0 {
+					rules = append(rules, EgressRule{
+						Host:     override.ToCIDR,
+						Port:     port,
+						Protocol: proto,
+					})
+				}
+			}
+			// If no ports specified, add a rule with port 0 (any)
+			if len(override.Ports) == 0 {
+				rules = append(rules, EgressRule{
+					Host:     override.ToCIDR,
+					Port:     0,
+					Protocol: "TCP",
+				})
+			}
 		}
 	}
+
+	// Sort dependency-derived rules for deterministic output (DNS rules stay first)
+	sort.Slice(rules[2:], func(i, j int) bool {
+		ri, rj := rules[2+i], rules[2+j]
+		if ri.Host != rj.Host {
+			return ri.Host < rj.Host
+		}
+		if ri.Port != rj.Port {
+			return ri.Port < rj.Port
+		}
+		return ri.Protocol < rj.Protocol
+	})
 
 	return rules
 }
@@ -130,4 +164,19 @@ func GetSecretKeyName(secretKey string) string {
 		return parts[1]
 	}
 	return ""
+}
+
+// parsePortSpec parses a port specification like "443/TCP" or "53/UDP".
+// Returns port number and protocol. Defaults to TCP if no protocol specified.
+func parsePortSpec(spec string) (int, string) {
+	parts := strings.SplitN(spec, "/", 2)
+	port, err := strconv.Atoi(parts[0])
+	if err != nil {
+		return 0, ""
+	}
+	proto := "TCP"
+	if len(parts) == 2 {
+		proto = strings.ToUpper(parts[1])
+	}
+	return port, proto
 }

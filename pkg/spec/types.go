@@ -60,6 +60,7 @@ func (c WorkflowConfig) ToMap() map[string]interface{} {
 
 // Contract defines external dependencies and their network requirements.
 type Contract struct {
+	Version               string                  `yaml:"version"`
 	Dependencies          map[string]Dependency   `yaml:"dependencies"`
 	NetworkPolicyOverride *NetworkPolicyOverrides `yaml:"networkPolicyOverride,omitempty"`
 	Extensions            map[string]interface{}  `yaml:",inline"`
@@ -81,6 +82,7 @@ type Dependency struct {
 
 // DependencyAuth specifies authentication for a dependency.
 type DependencyAuth struct {
+	Type   string `yaml:"type"`   // bearer-token, api-key, sas-token, password, webhook-url
 	Secret string `yaml:"secret"` // Must be in "service.key" format
 }
 

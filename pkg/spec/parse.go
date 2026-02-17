@@ -28,6 +28,14 @@ var validProtocols = map[string]bool{
 	"blob":       true,
 }
 
+var validAuthTypes = map[string]bool{
+	"bearer-token": true,
+	"api-key":      true,
+	"sas-token":    true,
+	"password":     true,
+	"webhook-url":  true,
+}
+
 var protocolDefaultPorts = map[string]int{
 	"https":      443,
 	"postgresql": 5432,
@@ -178,6 +186,13 @@ func checkCycles(wf *Workflow) []string {
 func validateContract(c *Contract) []string {
 	var errs []string
 
+	// Validate contract version
+	if c.Version == "" {
+		errs = append(errs, "contract.version is required")
+	} else if c.Version != "1" {
+		errs = append(errs, fmt.Sprintf("contract.version must be \"1\", got: %q", c.Version))
+	}
+
 	if c.Dependencies == nil {
 		c.Dependencies = make(map[string]Dependency)
 	}
@@ -241,6 +256,11 @@ func validateContract(c *Contract) []string {
 
 		// Auth validation
 		if dep.Auth != nil {
+			if dep.Auth.Type == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.type is required when auth is present", name))
+			} else if !validAuthTypes[dep.Auth.Type] {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: invalid auth.type %q (must be bearer-token, api-key, sas-token, password, or webhook-url)", name, dep.Auth.Type))
+			}
 			if dep.Auth.Secret == "" {
 				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))
 			} else if !secretKeyRe.MatchString(dep.Auth.Secret) {
