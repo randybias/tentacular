@@ -316,6 +316,11 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	// Prepend ConfigMap to manifest list
 	manifests = append([]builder.Manifest{configMap}, manifests...)
 
+	// Add NetworkPolicy if contract present
+	if netpol := k8s.GenerateNetworkPolicy(wf, namespace); netpol != nil {
+		manifests = append(manifests, *netpol)
+	}
+
 	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, namespace)
 
 	// Create K8s client (with optional context override)

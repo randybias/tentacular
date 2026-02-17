@@ -200,11 +200,12 @@ func (c *Client) LastApplyHadUpdates() bool {
 
 func (c *Client) findResource(group, version, kind string) (schema.GroupVersionResource, error) {
 	resourceMap := map[string]string{
-		"Deployment": "deployments",
-		"Service":    "services",
-		"ConfigMap":  "configmaps",
-		"Secret":     "secrets",
-		"CronJob":    "cronjobs",
+		"Deployment":    "deployments",
+		"Service":       "services",
+		"ConfigMap":     "configmaps",
+		"Secret":        "secrets",
+		"CronJob":       "cronjobs",
+		"NetworkPolicy": "networkpolicies",
 	}
 
 	resource, ok := resourceMap[kind]
