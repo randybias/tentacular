@@ -328,3 +328,11 @@ for remediation steps.
    behavior against contract declarations. Direct
    `ctx.fetch()` or `ctx.secrets` usage is flagged
    as a contract violation. Use `ctx.dependency()`.
+
+10. **OpenAI `max_completion_tokens` vs `max_tokens`**:
+    Newer OpenAI models (gpt-5 and later) require
+    `max_completion_tokens` in the request body. The
+    legacy `max_tokens` parameter returns a 400 error.
+    Always use `max_completion_tokens` for gpt-5+.
+    See [Node Development](node-development.md) for
+    the full pattern.
