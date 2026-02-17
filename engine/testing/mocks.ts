@@ -19,6 +19,10 @@ export interface MockContext extends Context {
   _logs: LogEntry[];
   /** All dependency accesses for drift detection */
   _dependencyAccesses: DependencyAccess[];
+  /** Direct ctx.fetch() calls (bypass tracking) */
+  _fetchCalls: { service: string; path: string }[];
+  /** Direct ctx.secrets property accesses (bypass tracking) */
+  _secretsAccesses: string[];
   /** Register a mock fetch response for a given service:path key */
   _setFetchResponse(service: string, path: string, response: Response): void;
   /** Register a mock dependency */
@@ -29,6 +33,8 @@ export interface MockContext extends Context {
 export function createMockContext(overrides?: Partial<Context>): MockContext {
   const logs: LogEntry[] = [];
   const dependencyAccesses: DependencyAccess[] = [];
+  const fetchCalls: { service: string; path: string }[] = [];
+  const secretsAccesses: string[] = [];
   const mockDependencies = new Map<string, DependencyConnection>();
 
   const logger: Logger = {
@@ -50,6 +56,9 @@ export function createMockContext(overrides?: Partial<Context>): MockContext {
 
   const ctx: MockContext = {
     fetch: async (service: string, path: string, _init?: RequestInit): Promise<Response> => {
+      // Record direct fetch call for bypass detection
+      fetchCalls.push({ service, path });
+
       const key = `${service}:${path}`;
       const mockResponse = fetchResponses.get(key);
       if (mockResponse) return mockResponse;
@@ -94,6 +103,8 @@ export function createMockContext(overrides?: Partial<Context>): MockContext {
     },
     _logs: logs,
     _dependencyAccesses: dependencyAccesses,
+    _fetchCalls: fetchCalls,
+    _secretsAccesses: secretsAccesses,
     _setFetchResponse(service: string, path: string, response: Response) {
       fetchResponses.set(`${service}:${path}`, response);
     },
@@ -107,10 +118,27 @@ export function createMockContext(overrides?: Partial<Context>): MockContext {
     if (overrides.config) ctx.config = overrides.config;
     if (overrides.secrets) ctx.secrets = overrides.secrets;
     if (overrides.log) ctx.log = overrides.log;
-    // fetch override replaces the mock fetch but keeps dependency tracking intact
-    if (overrides.fetch) ctx.fetch = overrides.fetch;
+    // fetch override wraps to preserve tracking
+    if (overrides.fetch) {
+      const originalOverrideFetch = overrides.fetch;
+      ctx.fetch = async (service: string, path: string, init?: RequestInit) => {
+        fetchCalls.push({ service, path });
+        return originalOverrideFetch(service, path, init);
+      };
+    }
     // dependency() is never overridden — drift detection tracking must be preserved
   }
+
+  // Wrap secrets in a recording Proxy for bypass detection
+  const rawSecrets = ctx.secrets;
+  ctx.secrets = new Proxy(rawSecrets, {
+    get(target, prop: string) {
+      if (typeof prop === "string") {
+        secretsAccesses.push(prop);
+      }
+      return target[prop];
+    },
+  });
 
   return ctx;
 }
