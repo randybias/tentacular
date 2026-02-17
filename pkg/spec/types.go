@@ -60,8 +60,9 @@ func (c WorkflowConfig) ToMap() map[string]interface{} {
 
 // Contract defines external dependencies and their network requirements.
 type Contract struct {
-	Dependencies         map[string]Dependency   `yaml:"dependencies"`
+	Dependencies          map[string]Dependency   `yaml:"dependencies"`
 	NetworkPolicyOverride *NetworkPolicyOverrides `yaml:"networkPolicyOverride,omitempty"`
+	Extensions            map[string]interface{}  `yaml:",inline"`
 }
 
 // Dependency declares a single external service dependency.
@@ -69,12 +70,13 @@ type Dependency struct {
 	Protocol string          `yaml:"protocol"`
 	Auth     *DependencyAuth `yaml:"auth,omitempty"`
 	// Protocol-specific fields
-	Host      string `yaml:"host,omitempty"`      // https, postgresql, nats, blob
-	Port      int    `yaml:"port,omitempty"`      // https, postgresql, nats
-	Database  string `yaml:"database,omitempty"`  // postgresql
-	User      string `yaml:"user,omitempty"`      // postgresql
-	Subject   string `yaml:"subject,omitempty"`   // nats
-	Container string `yaml:"container,omitempty"` // blob
+	Host       string                 `yaml:"host,omitempty"`      // https, postgresql, nats, blob
+	Port       int                    `yaml:"port,omitempty"`      // https, postgresql, nats
+	Database   string                 `yaml:"database,omitempty"`  // postgresql
+	User       string                 `yaml:"user,omitempty"`      // postgresql
+	Subject    string                 `yaml:"subject,omitempty"`   // nats
+	Container  string                 `yaml:"container,omitempty"` // blob
+	Extensions map[string]interface{} `yaml:",inline"`
 }
 
 // DependencyAuth specifies authentication for a dependency.
