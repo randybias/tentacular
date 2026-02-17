@@ -10,6 +10,7 @@ type Workflow struct {
 	Edges       []Edge              `yaml:"edges"`
 	Config      WorkflowConfig      `yaml:"config"`
 	Deployment  DeploymentConfig    `yaml:"deployment,omitempty"`
+	Contract    *Contract           `yaml:"contract,omitempty"`
 }
 
 // DeploymentConfig holds deployment-specific settings embedded in workflow.yaml.
@@ -55,4 +56,39 @@ func (c WorkflowConfig) ToMap() map[string]interface{} {
 		m["retries"] = c.Retries
 	}
 	return m
+}
+
+// Contract defines external dependencies and their network requirements.
+type Contract struct {
+	Dependencies         map[string]Dependency   `yaml:"dependencies"`
+	NetworkPolicyOverride *NetworkPolicyOverrides `yaml:"networkPolicyOverride,omitempty"`
+}
+
+// Dependency declares a single external service dependency.
+type Dependency struct {
+	Protocol string          `yaml:"protocol"`
+	Auth     *DependencyAuth `yaml:"auth,omitempty"`
+	// Protocol-specific fields
+	Host      string `yaml:"host,omitempty"`      // https, postgresql, nats, blob
+	Port      int    `yaml:"port,omitempty"`      // https, postgresql, nats
+	Database  string `yaml:"database,omitempty"`  // postgresql
+	User      string `yaml:"user,omitempty"`      // postgresql
+	Subject   string `yaml:"subject,omitempty"`   // nats
+	Container string `yaml:"container,omitempty"` // blob
+}
+
+// DependencyAuth specifies authentication for a dependency.
+type DependencyAuth struct {
+	Secret string `yaml:"secret"` // Must be in "service.key" format
+}
+
+// NetworkPolicyOverrides allows manual egress CIDR overrides.
+type NetworkPolicyOverrides struct {
+	AdditionalEgress []EgressOverride `yaml:"additionalEgress,omitempty"`
+}
+
+// EgressOverride adds a CIDR-based egress rule.
+type EgressOverride struct {
+	ToCIDR string   `yaml:"toCIDR"`
+	Ports  []string `yaml:"ports,omitempty"`
 }

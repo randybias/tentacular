@@ -8,9 +8,10 @@ import (
 )
 
 var (
-	kebabRe  = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
-	identRe  = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
-	semverRe = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
+	kebabRe      = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+	identRe      = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+	semverRe     = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
+	secretKeyRe  = regexp.MustCompile(`^[a-z][a-z0-9_-]*\.[a-z][a-z0-9_-]*$`)
 )
 
 var validTriggerTypes = map[string]bool{
@@ -18,6 +19,19 @@ var validTriggerTypes = map[string]bool{
 	"cron":    true,
 	"webhook": true,
 	"queue":   true,
+}
+
+var validProtocols = map[string]bool{
+	"https":      true,
+	"postgresql": true,
+	"nats":       true,
+	"blob":       true,
+}
+
+var protocolDefaultPorts = map[string]int{
+	"https":      443,
+	"postgresql": 5432,
+	"nats":       4222,
 }
 
 // Parse parses and validates a workflow YAML spec.
@@ -103,6 +117,13 @@ func Parse(data []byte) (*Workflow, []string) {
 		errs = append(errs, cycleErrs...)
 	}
 
+	// Contract validation (optional section)
+	if wf.Contract != nil {
+		if contractErrs := validateContract(wf.Contract); len(contractErrs) > 0 {
+			errs = append(errs, contractErrs...)
+		}
+	}
+
 	if len(errs) > 0 {
 		return nil, errs
 	}
@@ -150,5 +171,83 @@ func checkCycles(wf *Workflow) []string {
 			dfs(name)
 		}
 	}
+	return errs
+}
+
+// validateContract validates contract section including dependencies and network policy overrides.
+func validateContract(c *Contract) []string {
+	var errs []string
+
+	if c.Dependencies == nil {
+		c.Dependencies = make(map[string]Dependency)
+	}
+
+	// Check for duplicate dependency names (map keys are unique by definition, but validate anyway)
+	depNames := make(map[string]bool)
+	for name := range c.Dependencies {
+		if depNames[name] {
+			errs = append(errs, fmt.Sprintf("contract: duplicate dependency name %q", name))
+		}
+		depNames[name] = true
+	}
+
+	// Validate each dependency
+	for name, dep := range c.Dependencies {
+		if !identRe.MatchString(name) {
+			errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: name must match [a-z][a-z0-9_-]*", name))
+		}
+
+		// Protocol validation
+		if dep.Protocol == "" {
+			errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: protocol is required", name))
+			continue
+		}
+		if !validProtocols[dep.Protocol] {
+			errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: invalid protocol %q (must be https, postgresql, nats, or blob)", name, dep.Protocol))
+			continue
+		}
+
+		// Protocol-specific field validation
+		switch dep.Protocol {
+		case "https":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: https requires host", name))
+			}
+		case "postgresql":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: postgresql requires host", name))
+			}
+			if dep.Database == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: postgresql requires database", name))
+			}
+			if dep.User == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: postgresql requires user", name))
+			}
+		case "nats":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: nats requires host", name))
+			}
+			if dep.Subject == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: nats requires subject", name))
+			}
+		case "blob":
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: blob requires host", name))
+			}
+			if dep.Container == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: blob requires container", name))
+			}
+		}
+
+		// Auth validation
+		if dep.Auth != nil {
+			if dep.Auth.Secret == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))
+			} else if !secretKeyRe.MatchString(dep.Auth.Secret) {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret must be in \"service.key\" format, got: %q", name, dep.Auth.Secret))
+			}
+		}
+	}
+
 	return errs
 }

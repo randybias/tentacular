@@ -417,3 +417,210 @@ edges: []
 		t.Errorf("expected empty deployment namespace when no deployment section, got %q", wf.Deployment.Namespace)
 	}
 }
+
+func TestParseContractHTTPSDependency(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        secret: github.token
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	if len(wf.Contract.Dependencies) != 1 {
+		t.Fatalf("expected 1 dependency, got %d", len(wf.Contract.Dependencies))
+	}
+	github := wf.Contract.Dependencies["github"]
+	if github.Protocol != "https" {
+		t.Errorf("expected protocol https, got %s", github.Protocol)
+	}
+	if github.Host != "api.github.com" {
+		t.Errorf("expected host api.github.com, got %s", github.Host)
+	}
+	if github.Port != 443 {
+		t.Errorf("expected port 443, got %d", github.Port)
+	}
+	if github.Auth == nil || github.Auth.Secret != "github.token" {
+		t.Errorf("expected auth.secret github.token")
+	}
+}
+
+func TestParseContractPostgresDependency(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  dependencies:
+    postgres:
+      protocol: postgresql
+      host: postgres.svc.cluster.local
+      port: 5432
+      database: appdb
+      user: postgres
+      auth:
+        secret: postgres.password
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	pg := wf.Contract.Dependencies["postgres"]
+	if pg.Protocol != "postgresql" {
+		t.Errorf("expected protocol postgresql, got %s", pg.Protocol)
+	}
+	if pg.Database != "appdb" {
+		t.Errorf("expected database appdb, got %s", pg.Database)
+	}
+	if pg.User != "postgres" {
+		t.Errorf("expected user postgres, got %s", pg.User)
+	}
+}
+
+func TestParseContractInvalidProtocol(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  dependencies:
+    api:
+      protocol: grpc
+      host: api.example.com
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for invalid protocol")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "invalid protocol") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected invalid protocol error, got: %v", errs)
+	}
+}
+
+func TestParseContractInvalidAuthSecret(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+      auth:
+        secret: invalid_format
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for invalid auth secret format")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "service.key") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected service.key format error, got: %v", errs)
+	}
+}
+
+func TestParseContractMissingRequiredFields(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  dependencies:
+    postgres:
+      protocol: postgresql
+      host: postgres.svc
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected errors for missing postgresql fields")
+	}
+	// Should error on missing database and user
+	foundDatabase := false
+	foundUser := false
+	for _, e := range errs {
+		if strings.Contains(e, "database") {
+			foundDatabase = true
+		}
+		if strings.Contains(e, "user") {
+			foundUser = true
+		}
+	}
+	if !foundDatabase {
+		t.Error("expected error for missing database")
+	}
+	if !foundUser {
+		t.Error("expected error for missing user")
+	}
+}
+
+func TestParseContractOptional(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract != nil {
+		t.Error("expected contract to be nil when not present")
+	}
+}
