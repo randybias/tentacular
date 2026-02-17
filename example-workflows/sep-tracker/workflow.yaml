@@ -73,3 +73,10 @@ contract:
       auth:
         type: sas-token
         secret: azure.sas_token
+    slack-webhook:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url
