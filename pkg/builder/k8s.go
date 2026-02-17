@@ -165,6 +165,8 @@ metadata:
     %s
 spec:
   replicas: 1
+  strategy:
+    type: Recreate
   selector:
     matchLabels:
       app.kubernetes.io/name: %s

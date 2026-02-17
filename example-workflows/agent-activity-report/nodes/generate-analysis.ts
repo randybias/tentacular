@@ -119,7 +119,7 @@ export default async function run(ctx: Context, input: unknown): Promise<LLMAnal
     return fallbackAnalysis(metrics);
   }
 
-  ctx.log.info("Generating comparative analysis via OpenAI gpt-4o");
+  ctx.log.info("Generating comparative analysis via OpenAI gpt-5.2");
 
   const response = await openai.fetch!("/v1/chat/completions", {
     method: "POST",
@@ -128,13 +128,13 @@ export default async function run(ctx: Context, input: unknown): Promise<LLMAnal
       "Authorization": `Bearer ${openai.secret}`,
     },
     body: JSON.stringify({
-      model: "gpt-4o",
+      model: "gpt-5.2",
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: buildUserPrompt(metrics) },
       ],
-      max_tokens: 4096,
+      max_completion_tokens: 4096,
     }),
   });
 

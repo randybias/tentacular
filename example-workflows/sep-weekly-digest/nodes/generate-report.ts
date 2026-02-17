@@ -192,7 +192,7 @@ export default async function run(ctx: Context, input: unknown): Promise<LLMRepo
     return fallbackReport(metrics);
   }
 
-  ctx.log.info("Generating LLM report via OpenAI GPT-5.3");
+  ctx.log.info("Generating LLM report via OpenAI GPT-5.2");
 
   const response = await openai.fetch!("/v1/chat/completions", {
     method: "POST",
@@ -201,12 +201,13 @@ export default async function run(ctx: Context, input: unknown): Promise<LLMRepo
       "Authorization": `Bearer ${openai.secret}`,
     },
     body: JSON.stringify({
-      model: "gpt-5.3",
+      model: "gpt-5.2",
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: buildAnalysisPrompt(seps, metrics) },
       ],
-      max_tokens: 4096,
+      max_completion_tokens: 4096,
     }),
   });
 

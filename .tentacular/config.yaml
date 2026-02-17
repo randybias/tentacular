@@ -1,15 +1,15 @@
 registry: ghcr.io/randybias
 namespace: default
-runtime_class: ""
+runtime_class: gvisor
 
 environments:
   dev:
     context: Default
     namespace: tentacular-dev
     image: ghcr.io/randybias/tentacular-engine:latest
-    runtime_class: ""
+    runtime_class: gvisor
   prod:
     context: Default
     namespace: tentacular-prod
     image: ghcr.io/randybias/tentacular-engine:latest
-    runtime_class: ""
+    runtime_class: gvisor
