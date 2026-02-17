@@ -71,6 +71,36 @@ function createFetch(
 }
 
 /**
+ * Auth handler registry - maps auth types to their injection logic.
+ * Returns modified path (for query param auth like SAS tokens).
+ */
+type AuthHandler = (secret: string, headers: Headers, path: string) => string;
+
+const authHandlers: Record<string, AuthHandler> = {
+  "bearer-token": (secret, headers, path) => {
+    headers.set("Authorization", `Bearer ${secret}`);
+    return path;
+  },
+  "api-key": (secret, headers, path) => {
+    headers.set("X-API-Key", secret);
+    return path;
+  },
+  "sas-token": (secret, _headers, path) => {
+    // SAS token appended as query param
+    const separator = path.includes("?") ? "&" : "?";
+    return `${path}${separator}${secret}`;
+  },
+  "password": (_secret, _headers, path) => {
+    // Password auth handled via DependencyConnection.secret, not headers
+    return path;
+  },
+  "webhook-url": (_secret, _headers, path) => {
+    // Webhook URL is the secret itself, not injected into headers
+    return path;
+  },
+};
+
+/**
  * Create a dependency accessor that resolves contract dependencies with connection metadata.
  */
 function createDependencyAccessor(
@@ -127,16 +157,11 @@ function createDependencyAccessor(
       conn.fetch = async (path: string, init?: RequestInit): Promise<Response> => {
         const headers = new Headers(init?.headers);
 
-        // Auto-inject auth based on authType
-        if (secret) {
-          if (authType === "bearer-token") {
-            headers.set("Authorization", `Bearer ${secret}`);
-          } else if (authType === "api-key") {
-            headers.set("X-API-Key", secret);
-          } else if (authType === "sas-token") {
-            // SAS token appended as query param
-            const separator = path.includes("?") ? "&" : "?";
-            path = `${path}${separator}${secret}`;
+        // Auto-inject auth using registry pattern
+        if (secret && authType) {
+          const handler = authHandlers[authType];
+          if (handler) {
+            path = handler(secret, headers, path);
           }
         }
 

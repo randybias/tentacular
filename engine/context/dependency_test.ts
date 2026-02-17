@@ -10,6 +10,7 @@ Deno.test("dependency() returns connection metadata for HTTPS dependency", () =>
         host: "api.github.com",
         port: 443,
         auth: {
+          type: "bearer-token",
           secret: "github.token",
         },
       },
@@ -59,6 +60,7 @@ Deno.test("dependency() returns PostgreSQL connection metadata", () => {
         database: "appdb",
         user: "postgres",
         auth: {
+          type: "password",
           secret: "postgres.password",
         },
       },
@@ -116,6 +118,7 @@ Deno.test("dependency().fetch() auto-injects bearer token", async () => {
         host: "api.github.com",
         port: 443,
         auth: {
+          type: "bearer-token",
           secret: "github.token",
         },
       },
@@ -159,6 +162,7 @@ Deno.test("dependency().fetch() auto-injects API key", async () => {
         protocol: "https",
         host: "api.example.com",
         auth: {
+          type: "api-key",
           secret: "external.api_key",
         },
       },
@@ -197,6 +201,7 @@ Deno.test("dependency().fetch() appends SAS token as query param", async () => {
         protocol: "https",
         host: "storage.blob.core.windows.net",
         auth: {
+          type: "sas-token",
           secret: "azure.sas_token",
         },
       },
@@ -235,6 +240,7 @@ Deno.test("dependency() handles missing secrets gracefully", () => {
         protocol: "https",
         host: "api.github.com",
         auth: {
+          type: "bearer-token",
           secret: "github.token",
         },
       },
