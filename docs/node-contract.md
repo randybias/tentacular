@@ -6,7 +6,10 @@ Every node is a TypeScript file with a single default export:
 import type { Context } from "tentacular";
 
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
-  const resp = await ctx.fetch("github", "/user/repos");
+  const gh = ctx.dependency("github-api");
+  const resp = await gh.fetch!("/user/repos", {
+    headers: { "Authorization": `Bearer ${gh.secret}` },
+  });
   ctx.log.info("Fetched repos");
   return { repos: await resp.json() };
 }
@@ -16,17 +19,23 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 
 | Member | Type | Description |
 |--------|------|-------------|
-| `ctx.fetch(service, path, init?)` | `Promise<Response>` | HTTP request to `https://api.<service>.com<path>` with automatic auth injection from secrets |
+| `ctx.dependency(name)` | `(string) => DependencyConnection` | **Primary API.** Returns connection metadata and resolved secret for a declared contract dependency. HTTPS deps include `fetch(path, init?)` URL builder (no auth injection). |
 | `ctx.log` | `Logger` | Structured logging (`info`, `warn`, `error`, `debug`) prefixed with `[nodeId]` |
-| `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml |
-| `ctx.secrets` | `Record<string, Record<string, string>>` | Secrets keyed by service name |
+| `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml. Business-logic only. |
+| `ctx.fetch(service, path, init?)` | `Promise<Response>` | **Legacy.** Flagged as contract violation when contract is present. Use `ctx.dependency()` instead. |
+| `ctx.secrets` | `Record<string, Record<string, string>>` | **Legacy.** Flagged as contract violation when contract is present. Use `ctx.dependency().secret` instead. |
 
-## Auth Injection
+## Auth Pattern
 
-`ctx.fetch` automatically adds authorization headers based on matching secrets:
+`dep.fetch()` builds the URL but does not inject auth. Nodes handle auth explicitly using `dep.secret` and `dep.authType`:
 
-- `secrets[service].token` → `Authorization: Bearer <token>`
-- `secrets[service].api_key` → `X-API-Key: <api_key>`
+```typescript
+const gh = ctx.dependency("github-api");
+// gh.authType is any string (e.g., "bearer-token", "api-key", "hmac-sha256")
+const resp = await gh.fetch!("/repos/owner/repo", {
+  headers: { "Authorization": `Bearer ${gh.secret}` },
+});
+```
 
 ## Testing Nodes
 
@@ -43,6 +52,6 @@ Run with `tntc test` (all nodes) or `tntc test my-workflow/node-name` (single no
 
 ## Mock Context
 
-The engine provides a mock context for testing (`engine/testing/mocks.ts`). The mock `ctx.fetch` returns `{ mock: true, service, path }` — test fixtures must match this format.
+The engine provides a mock context for testing (`engine/testing/mocks.ts`). Mock `ctx.dependency()` returns metadata with mock secret values and records access for drift detection. HTTPS mock deps return `{ mock: true, dependency, path }` from `fetch()`.
 
 See [architecture.md](architecture.md) for the full context system design including the module loader and import map.

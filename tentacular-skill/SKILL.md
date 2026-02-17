@@ -74,7 +74,7 @@ a default-exported async function.
 | `init` | `tntc init <name>` | | Scaffold a new workflow directory with workflow.yaml, example node, test fixture, .secrets.yaml.example |
 | `validate` | `tntc validate [dir]` | | Parse and validate workflow.yaml (name, version, triggers, nodes, edges, DAG acyclicity, contract structure, derived artifacts) |
 | `dev` | `tntc dev [dir]` | `-p` port (default 8080) | Start Deno engine locally with hot-reload (`--watch`). POST /run triggers execution |
-| `test` | `tntc test [dir][/<node>]` | `--pipeline`, `--live`, `--env`, `--keep`, `--timeout` | Run node-level tests from fixtures, full pipeline test with `--pipeline`, or live cluster test with `--live` |
+| `test` | `tntc test [dir][/<node>]` | `--pipeline`, `--live`, `--env`, `--keep`, `--timeout`, `--warn` | Run node-level tests from fixtures, full pipeline test with `--pipeline`, or live cluster test with `--live`. `--warn` downgrades contract violations to warnings. |
 | `build` | `tntc build [dir]` | `-t` tag, `-r` registry, `--push`, `--platform` | Generate Dockerfile (distroless Deno base), build container image via `docker build` |
 | `deploy` | `tntc deploy [dir]` | `-n` namespace, `--env`, `--image`, `--runtime-class`, `--force`, `--verify` | Generate K8s manifests and apply to cluster. `--env` targets a named environment (context, namespace, image). Auto-gates on live test if dev env configured; `--force` skips. Namespace resolves: CLI > env > workflow.yaml > config > default |
 | `configure` | `tntc configure` | `--registry`, `--namespace`, `--runtime-class`, `--project` | Set default config (user-level or project-level) |
@@ -86,7 +86,7 @@ a default-exported async function.
 | `list` | `tntc list` | `-n` namespace, `-o` json | List all deployed workflows with version, status, and age |
 | `undeploy` | `tntc undeploy <name>` | `-n` namespace, `--yes`/`-y` | Remove a deployed workflow (Service, Deployment, Secret, CronJobs). Use `-y` to skip confirmation in scripts. Note: ConfigMap `<name>-code` is not deleted. |
 | `cluster check` | `tntc cluster check` | `--fix`, `-n` namespace | Preflight validation of cluster readiness; `--fix` auto-remediates |
-| `visualize` | `tntc visualize [dir]` | `--rich` | Generate Mermaid diagram of the workflow DAG. `--rich` adds dependency graph, derived secrets, and network intent |
+| `visualize` | `tntc visualize [dir]` | `--rich`, `--write` | Generate Mermaid diagram of the workflow DAG. `--rich` adds dependency graph, derived secrets, and network intent. `--write` writes `workflow-diagram.md` and `contract-summary.md` to the workflow directory. |
 
 Global flags: `-n`/`--namespace` (default "default"),
 `-r`/`--registry`, `-o`/`--output` (text\|json).
@@ -153,7 +153,7 @@ export default async function run(
 
 | Member | Type | Description |
 |--------|------|-------------|
-| `ctx.dependency(name)` | `(string) => DependencyConnection` | **Primary API** for external services. Returns connection metadata (host, port, protocol, authType, protocol-specific fields) and resolved secret value. HTTPS deps also get a `fetch()` convenience method. Throws if the dependency is not declared in the contract. |
+| `ctx.dependency(name)` | `(string) => DependencyConnection` | **Primary API** for external services. Returns connection metadata (host, port, protocol, authType, protocol-specific fields) and resolved secret value. HTTPS deps also get a `fetch(path, init?)` convenience method that builds the URL (no auth injection -- nodes handle auth explicitly). Throws if the dependency is not declared in the contract. |
 | `ctx.log` | `Logger` | Structured logging with `info`, `warn`, `error`, `debug` methods. All output prefixed with `[nodeId]`. |
 | `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml. Use for business-logic parameters only (e.g., `target_repo`). |
 | `ctx.fetch(service, path, init?)` | `(string, string, RequestInit?) => Promise<Response>` | **Legacy.** HTTP request with auto URL construction. Flagged as contract violation when a contract is present. Use `ctx.dependency()` instead. |
@@ -174,23 +174,55 @@ export default async function run(
   const pg = ctx.dependency("postgres");
   // pg.protocol -- "postgresql"
   // pg.host, pg.port, pg.database, pg.user
-  // pg.authType -- "password"
+  // pg.authType -- "password" (any string)
   // pg.secret -- resolved password value
 
   const gh = ctx.dependency("github-api");
   // gh.protocol -- "https"
   // gh.host, gh.port
-  // gh.authType -- "bearer-token"
+  // gh.authType -- "bearer-token" (any string)
   // gh.secret -- resolved bearer token
-  // gh.fetch(path, init?) -- convenience method
-  //   with auto auth injection
+  // gh.fetch(path, init?) -- URL builder (no auth injection)
 
-  // HTTPS deps have a fetch() shortcut:
-  const resp = await gh.fetch!("/repos/org/repo");
+  // HTTPS deps have a fetch() shortcut that builds the URL.
+  // Auth must be handled explicitly by the node:
+  const resp = await gh.fetch!("/repos/org/repo", {
+    headers: { "Authorization": `Bearer ${gh.secret}` },
+  });
 
   ctx.log.info("connecting to dependencies");
   return { result: "done" };
 }
+```
+
+**Auth is explicit.** `dep.fetch()` builds the URL
+(`https://<host>:<port><path>`) but does not inject
+auth headers. Nodes must set auth headers themselves
+using `dep.secret` and `dep.authType`. This keeps the
+engine simple and supports any auth mechanism:
+
+```typescript
+// Bearer token (e.g., GitHub API)
+const gh = ctx.dependency("github-api");
+await gh.fetch!("/repos/org/repo", {
+  headers: { "Authorization": `Bearer ${gh.secret}` },
+});
+
+// API key header
+const svc = ctx.dependency("my-service");
+await svc.fetch!("/endpoint", {
+  headers: { "X-API-Key": svc.secret! },
+});
+
+// Custom auth (e.g., HMAC signature)
+const api = ctx.dependency("webhook-target");
+// api.authType -- "hmac-sha256"
+const sig = computeHmac(api.secret!, body);
+await api.fetch!("/hook", {
+  method: "POST",
+  headers: { "X-Signature": sig },
+  body,
+});
 ```
 
 In mock context (during `tntc test`), `ctx.dependency()`
@@ -203,6 +235,22 @@ in workflow.yaml should contain only business-logic
 parameters (e.g., `target_repo`, `sep_label`).
 Connection metadata (host, port, database, user) and
 secret references belong in `contract.dependencies`.
+
+**Migration from auto-injection:** If your nodes
+previously relied on `dep.fetch()` auto-injecting auth
+headers, update them to set headers explicitly:
+
+```typescript
+// Before (auto-injection -- no longer supported):
+const gh = ctx.dependency("github-api");
+const res = await gh.fetch!("/repos/test");
+
+// After (explicit auth):
+const gh = ctx.dependency("github-api");
+const res = await gh.fetch!("/repos/test", {
+  headers: { "Authorization": `Bearer ${gh.secret}` },
+});
+```
 
 ## Trigger Types
 
@@ -333,9 +381,13 @@ contract:
 
 ### Dependency Protocols
 
-Supported protocols in v1: `https`, `postgresql`,
-`nats`, `blob`. Each protocol has default ports and
-specific metadata fields:
+The `protocol` field accepts any string. Known
+protocols (`https`, `postgresql`, `nats`, `blob`)
+get field validation and default ports. Unknown
+protocols are accepted with a warning, enabling
+custom protocol types without parser changes.
+
+Known protocols and their metadata fields:
 
 - **https**: host, port (default 443), auth
 - **postgresql**: host, port (default 5432),
@@ -346,10 +398,13 @@ specific metadata fields:
   container
 
 Auth types are declared explicitly via `auth.type`
-in the contract. Supported values: `bearer-token`,
-`api-key`, `sas-token`, `password`. The `authType`
-field on `DependencyConnection` reflects this
-declared value.
+in the contract. The value is any string identifying
+the auth mechanism (e.g., `bearer-token`, `api-key`,
+`sas-token`, `password`, `hmac-sha256`). There is no
+closed vocabulary -- use whatever describes your auth
+scheme. The `authType` field on `DependencyConnection`
+reflects this declared value. Nodes use `dep.authType`
+and `dep.secret` to handle auth explicitly.
 
 ### Minimal Contract (No Dependencies)
 
@@ -382,9 +437,19 @@ contract:
 ### Contract Enforcement
 
 Contract enforcement is **strict** by default. All
-workflows are held to the same standard. Environment
-config can override to `audit` mode (warnings instead
-of errors) for development:
+workflows are held to the same standard.
+
+In strict mode, `tntc test` fails on any contract
+drift. Use `--warn` to downgrade violations to
+warnings without failing the test:
+
+```bash
+tntc test                     # strict: violations fail
+tntc test --warn              # audit: violations warn
+```
+
+Environment config can also set audit mode globally
+for a development environment:
 
 ```yaml
 # In .tentacular/config.yaml
@@ -393,8 +458,44 @@ environments:
     enforcement: audit
 ```
 
-In strict mode, `tntc test` fails on any contract
-drift. In audit mode, drift is reported as warnings.
+### Drift Detection
+
+`tntc test` runs runtime-tracing drift detection by
+comparing actual code behavior against contract
+declarations. The mock context records all access
+patterns during test execution.
+
+**Violation types:**
+
+| Type | Meaning | Suggestion |
+|------|---------|------------|
+| `direct-fetch` | Code uses `ctx.fetch()` instead of `ctx.dependency().fetch()` | Migrate to `ctx.dependency()` |
+| `direct-secrets` | Code reads `ctx.secrets` directly | Use `ctx.dependency().secret` |
+| `undeclared-dependency` | Code calls `ctx.dependency(name)` for a dep not in the contract | Add to `contract.dependencies` |
+| `dead-declaration` | Contract declares a dep that code never accesses | Remove from contract or add usage |
+
+**Drift report output:**
+
+```
+=== Contract Drift Report ===
+
+VIOLATIONS:
+  [direct-fetch] Direct ctx.fetch("github", "/repos/test") bypasses contract
+     Suggestion: Use ctx.dependency("github").fetch("/repos/test") instead
+  [dead-declaration] Dependency "unused-api" declared in contract but never accessed
+     Suggestion: Remove "unused-api" from contract.dependencies or ensure the node uses it
+
+SUMMARY:
+  Dependencies accessed: 2
+  Direct fetch() calls: 1
+  Direct secrets access: 0
+  Dead declarations: 1
+  Undeclared dependencies: 0
+  Has violations: YES
+```
+
+With `-o json`, the drift report is included in the
+test output envelope as a structured `drift` field.
 
 ### Extensibility
 
@@ -458,7 +559,7 @@ structured JSON output (with `-o json`) for automation.
 
 ```
 tntc validate -o json               # 1. Validate spec + contract
-tntc visualize --rich -o json       # 2. Review contract artifacts
+tntc visualize --rich --write       # 2. Persist contract artifacts
 tntc test -o json                   # 3. Mock tests + drift detection
 tntc test --live --env dev -o json  # 4. Live test against dev
 tntc deploy -o json                 # 5. Deploy (auto-gates on live)
@@ -529,9 +630,9 @@ agent MUST run a contract review loop:
 
 1. `tntc validate` -- confirm contract parses cleanly
    and derived artifacts are correct.
-2. `tntc visualize --rich` -- generate rich diagram
-   showing DAG, dependencies, secrets, and network
-   intent.
+2. `tntc visualize --rich --write` -- generate and
+   persist rich diagram and contract summary to the
+   workflow directory.
 3. Review with user -- present the diagram and derived
    artifacts. Confirm:
    - Dependency targets (hosts, ports, protocols)
@@ -544,12 +645,12 @@ agent MUST run a contract review loop:
 
 - [ ] Contract section present in workflow.yaml
 - [ ] `tntc validate` passes (contract + spec)
-- [ ] `tntc visualize --rich` reviewed with user
+- [ ] `tntc visualize --rich --write` reviewed with user
 - [ ] Dependency hosts and ports confirmed
 - [ ] Secret refs match `.secrets.yaml` keys
 - [ ] Derived NetworkPolicy matches expected access
 - [ ] `tntc test` passes with zero drift
-- [ ] Rich visualization artifacts committed to repo
+- [ ] `workflow-diagram.md` and `contract-summary.md` committed to repo
 
 Agents MUST fail closed when contract or diagram
 artifacts are missing or stale. Do not proceed to
@@ -818,8 +919,8 @@ integration behavior, not mock-only.
 # 1. Validate spec + contract
 tntc validate example-workflows/my-wf -o json
 
-# 2. Review contract artifacts with user
-tntc visualize --rich example-workflows/my-wf
+# 2. Persist and review contract artifacts with user
+tntc visualize --rich --write example-workflows/my-wf
 
 # 3. Mock tests + drift detection (no cluster needed)
 tntc test example-workflows/my-wf -o json
@@ -994,9 +1095,28 @@ Rich output includes:
 - **Network intent summary**: derived egress and
   ingress rules from contract + triggers
 
-Rich visualization artifacts are written co-resident
-with the workflow directory for PR review. Output is
-deterministic and stable for diffs.
+Rich visualization output is deterministic and stable
+for diffs.
+
+### Write Mode
+
+```bash
+tntc visualize --rich --write example-workflows/sep-tracker
+```
+
+The `--write` flag writes artifacts to the workflow
+directory instead of printing to stdout:
+
+- **`workflow-diagram.md`** -- Mermaid diagram content
+  (with code fence markers), ready for rendering
+- **`contract-summary.md`** -- Derived secrets
+  inventory, egress rules, and ingress rules as
+  markdown tables
+
+These files are co-resident with the workflow for
+PR review. Output is deterministic and stable for
+diffs. Agents MUST use `--write` during the pre-build
+review gate to persist artifacts for commit.
 
 ### Example: sep-tracker Workflow Diagram
 

@@ -20,6 +20,7 @@ Test fixtures are JSON files stored at `tests/fixtures/<nodename>.json` within t
 | `input` | any | Yes | The value passed as the `input` parameter to the node function |
 | `config` | `Record<string, unknown>` | No | Passed to `createMockContext()` as `ctx.config` (default: `{}`) |
 | `secrets` | `Record<string, Record<string, string>>` | No | Passed to `createMockContext()` as `ctx.secrets` (default: `{}`) |
+| `contract` | `{ dependencies: {...} }` | No | Contract spec for `ctx.dependency()` resolution. When omitted, the test runner auto-loads from `workflow.yaml`. |
 | `expected` | any | No | If present, the node's return value is compared against this (JSON deep equality) |
 
 When `expected` is omitted, the test passes as long as the node executes without throwing an error.
@@ -78,6 +79,51 @@ The test runner for each node:
 
 The CLI exits with code 1 if any test fails.
 
+### Drift Detection
+
+After running node tests, `tntc test` performs contract
+drift detection. The mock context records all access
+patterns during test execution and compares them against
+the contract declaration.
+
+**Violation types:**
+
+| Type | Meaning |
+|------|---------|
+| `direct-fetch` | Code uses `ctx.fetch()` instead of `ctx.dependency().fetch()` |
+| `direct-secrets` | Code reads `ctx.secrets` directly instead of `ctx.dependency().secret` |
+| `undeclared-dependency` | Code calls `ctx.dependency(name)` for a dep not in the contract |
+| `dead-declaration` | Contract declares a dep that code never accesses |
+
+In strict mode (default), any violation fails the test.
+Use `--warn` to downgrade violations to warnings:
+
+```bash
+tntc test                     # strict: violations fail
+tntc test --warn              # audit: violations warn only
+```
+
+The drift report is appended after test results:
+
+```
+=== Contract Drift Report ===
+
+VIOLATIONS:
+  [direct-fetch] Direct ctx.fetch("github", "/repos/test") bypasses contract
+     Suggestion: Use ctx.dependency("github").fetch("/repos/test") instead
+
+SUMMARY:
+  Dependencies accessed: 2
+  Direct fetch() calls: 1
+  Direct secrets access: 0
+  Dead declarations: 0
+  Undeclared dependencies: 0
+  Has violations: YES
+```
+
+With `-o json`, the drift report is included in the
+test output envelope.
+
 ## Pipeline Testing
 
 Run the full DAG end-to-end:
@@ -111,10 +157,11 @@ The mock context provides:
 
 | Feature | Behavior |
 |---------|----------|
-| `ctx.fetch(service, path)` | Returns `{ mock: true, service, path }` as JSON by default |
+| `ctx.dependency(name)` | Returns mock `DependencyConnection` with contract metadata and mock secret values. Records access for drift detection. HTTPS deps get a mock `fetch()` that returns `{ mock: true, dependency, path }`. |
+| `ctx.fetch(service, path)` | **Legacy.** Returns `{ mock: true, service, path }` as JSON by default. Flagged as contract violation when contract is present. |
 | `ctx.log.*` | Captures all log calls to `ctx._logs` array |
 | `ctx.config` | Empty object `{}` |
-| `ctx.secrets` | Empty object `{}` |
+| `ctx.secrets` | **Legacy.** Empty object `{}`. Direct access flagged as contract violation when contract is present. |
 
 ### Overrides
 
@@ -261,18 +308,20 @@ Nodes that depend on external services (APIs, databases, etc.) should handle mis
 
 ### Pattern
 
-Check for required secrets or config before making external calls. When credentials are absent, return a safe default or skip the external call:
+Check for required credentials before making external calls. When credentials are absent, return a safe default or skip the external call:
 
 ```typescript
 export default async function run(ctx: Context, input: unknown): Promise<unknown> {
-  const token = ctx.secrets.github?.token;
-  if (!token) {
-    ctx.log.warn("no github token, returning empty result");
+  const gh = ctx.dependency("github-api");
+  if (!gh.secret) {
+    ctx.log.warn("no github credentials, returning empty result");
     return { issues: [], count: 0, source: "mock" };
   }
 
   // Real logic with external calls
-  const res = await ctx.fetch("github", "/repos/owner/repo/issues");
+  const res = await gh.fetch!("/repos/owner/repo/issues", {
+    headers: { "Authorization": `Bearer ${gh.secret}` },
+  });
   const issues = await res.json();
   return { issues, count: issues.length, source: "live" };
 }
@@ -280,13 +329,22 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 
 ### Testing with and without credentials
 
-Use separate fixtures to test both paths:
+Use separate fixtures to test both paths. When using `ctx.dependency()`, the fixture must include a `contract` block so the mock context can resolve dependencies:
 
 `tests/fixtures/fetch-issues.json` (no secrets -- tests graceful degradation):
 
 ```json
 {
   "input": {},
+  "contract": {
+    "dependencies": {
+      "github-api": {
+        "protocol": "https",
+        "host": "api.github.com",
+        "auth": { "type": "bearer-token", "secret": "github.token" }
+      }
+    }
+  },
   "expected": { "issues": [], "count": 0, "source": "mock" }
 }
 ```
@@ -296,6 +354,15 @@ Use separate fixtures to test both paths:
 ```json
 {
   "input": {},
+  "contract": {
+    "dependencies": {
+      "github-api": {
+        "protocol": "https",
+        "host": "api.github.com",
+        "auth": { "type": "bearer-token", "secret": "github.token" }
+      }
+    }
+  },
   "secrets": { "github": { "token": "test-token" } },
   "expected": null
 }
@@ -414,6 +481,7 @@ When the live test fails:
 | `--env` | `dev` | Named environment to test against (must be defined in config) |
 | `--keep` | false | Do not clean up the deployed workflow after testing |
 | `--timeout` | `120s` | Maximum time to wait for deployment readiness |
+| `--warn` | false | Downgrade contract violations to warnings (audit mode) |
 | `-o json` | text | Emit structured JSON output |
 
 ### Combining Mock and Live Tests
