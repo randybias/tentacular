@@ -31,6 +31,7 @@ func NewDeployCmd() *cobra.Command {
 	cmd.Flags().Bool("force", false, "Skip pre-deploy live test")
 	cmd.Flags().Bool("skip-live-test", false, "Skip pre-deploy live test (alias for --force)")
 	cmd.Flags().Bool("verify", false, "Run workflow once after deploy to verify")
+	cmd.Flags().Bool("warn", false, "Audit mode: contract violations produce warnings instead of failures")
 	return cmd
 }
 
@@ -117,6 +118,27 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	wf, errs := spec.Parse(data)
 	if len(errs) > 0 {
 		return fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
+	}
+
+	// Contract preflight gate: validate contract before deploy
+	warnMode, _ := cmd.Flags().GetBool("warn")
+	if wf.Contract != nil {
+		contractErrs := spec.ValidateContract(wf.Contract)
+		if len(contractErrs) > 0 {
+			if warnMode {
+				fmt.Fprintf(os.Stderr, "⚠️  WARNING: Contract validation failed with %d error(s):\n", len(contractErrs))
+				for _, e := range contractErrs {
+					fmt.Fprintf(os.Stderr, "  - %s\n", e)
+				}
+				fmt.Fprintf(os.Stderr, "Proceeding with deploy in audit mode (use strict mode in production)\n\n")
+			} else {
+				fmt.Fprintf(os.Stderr, "❌ Contract validation failed with %d error(s):\n", len(contractErrs))
+				for _, e := range contractErrs {
+					fmt.Fprintf(os.Stderr, "  - %s\n", e)
+				}
+				return fmt.Errorf("deploy aborted: contract validation failed (use --warn for audit mode)")
+			}
+		}
 	}
 
 	// Namespace cascade: CLI -n > --env > workflow.yaml > config > default
@@ -279,6 +301,14 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	wf, errs := spec.Parse(data)
 	if len(errs) > 0 {
 		return nil, fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
+	}
+
+	// Contract preflight gate: validate contract before deploy (strict mode for internal calls)
+	if wf.Contract != nil {
+		contractErrs := spec.ValidateContract(wf.Contract)
+		if len(contractErrs) > 0 {
+			return nil, fmt.Errorf("deploy aborted: contract validation failed with %d error(s)", len(contractErrs))
+		}
 	}
 
 	namespace := opts.Namespace
