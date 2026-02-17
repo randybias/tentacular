@@ -3,6 +3,7 @@ package spec
 import (
 	"fmt"
 	"log"
+	"net"
 	"regexp"
 
 	"gopkg.in/yaml.v3"
@@ -215,6 +216,37 @@ func ValidateContract(c *Contract) []string {
 			log.Printf("Warning: contract.dependencies[%q]: unknown protocol %q (known protocols: https, postgresql, nats, blob)", name, dep.Protocol)
 		}
 
+		// Dynamic-target dependencies have their own validation
+		if dep.Type == "dynamic-target" {
+			if dep.CIDR == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: dynamic-target requires cidr", name))
+			} else if !isValidCIDR(dep.CIDR) {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: invalid CIDR format %q", name, dep.CIDR))
+			}
+			if len(dep.DynPorts) == 0 {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: dynamic-target requires dynPorts", name))
+			} else {
+				for j, portSpec := range dep.DynPorts {
+					port, _ := parsePortSpec(portSpec)
+					if port <= 0 {
+						errs = append(errs, fmt.Sprintf("contract.dependencies[%q].dynPorts[%d]: invalid port spec %q", name, j, portSpec))
+					}
+				}
+			}
+			// Skip protocol-specific field validation for dynamic-target
+			if dep.Auth != nil {
+				if dep.Auth.Type == "" {
+					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.type is required when auth is present", name))
+				}
+				if dep.Auth.Secret == "" {
+					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))
+				} else if !secretKeyRe.MatchString(dep.Auth.Secret) {
+					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret must be in \"service.key\" format, got: %q", name, dep.Auth.Secret))
+				}
+			}
+			continue
+		}
+
 		// Protocol-specific field validation
 		switch dep.Protocol {
 		case "https":
@@ -260,5 +292,28 @@ func ValidateContract(c *Contract) []string {
 		}
 	}
 
+	// Validate networkPolicy CIDR overrides
+	if c.NetworkPolicy != nil {
+		for i, override := range c.NetworkPolicy.AdditionalEgress {
+			if override.ToCIDR == "" {
+				errs = append(errs, fmt.Sprintf("contract.networkPolicy.additionalEgress[%d]: toCIDR is required", i))
+			} else if !isValidCIDR(override.ToCIDR) {
+				errs = append(errs, fmt.Sprintf("contract.networkPolicy.additionalEgress[%d]: invalid CIDR format %q", i, override.ToCIDR))
+			}
+			for j, portSpec := range override.Ports {
+				port, _ := parsePortSpec(portSpec)
+				if port <= 0 {
+					errs = append(errs, fmt.Sprintf("contract.networkPolicy.additionalEgress[%d].ports[%d]: invalid port spec %q", i, j, portSpec))
+				}
+			}
+		}
+	}
+
 	return errs
+}
+
+// isValidCIDR validates CIDR notation.
+func isValidCIDR(s string) bool {
+	_, _, err := net.ParseCIDR(s)
+	return err == nil
 }

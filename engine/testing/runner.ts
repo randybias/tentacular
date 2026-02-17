@@ -18,7 +18,6 @@ import { loadAllNodes, loadNode } from "../loader.ts";
 import { createMockContext, type MockContext } from "./mocks.ts";
 import { loadFixture, findFixtures } from "./fixtures.ts";
 import type { NodeRunner } from "../executor/types.ts";
-import { createContext } from "../context/mod.ts";
 import { detectDrift, formatDriftReport } from "./drift.ts";
 
 const flags = parseFlags(Deno.args, {
@@ -203,16 +202,22 @@ async function runPipelineTest() {
     const graph = compile(spec);
     const nodeFunctions = await loadAllNodes(spec.nodes, workflowDir);
 
-    const ctx = createContext({
-      secrets: {},
+    const ctx = createMockContext({
       config: spec.config as Record<string, unknown> ?? {},
+      secrets: {},
+      contract: spec.contract,
     });
 
     const runner: NodeRunner = {
       async run(nodeId: string, _ctx: Context, input: unknown): Promise<unknown> {
         const fn = nodeFunctions.get(nodeId);
         if (!fn) throw new Error(`Node "${nodeId}" not loaded`);
-        const nodeCtx = createMockContext();
+        const nodeCtx = createMockContext({
+          config: spec.config as Record<string, unknown> ?? {},
+          secrets: {},
+          contract: spec.contract,
+        });
+        testContexts.push(nodeCtx);
         return fn(nodeCtx, input);
       },
     };

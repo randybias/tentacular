@@ -24,10 +24,6 @@ edges:
 config:
   timeout: 60s
   retries: 1
-  pg_host: "172.27.18.1"
-  pg_port: 30432
-  pg_database: "appdb"
-  pg_user: "postgres"
 
 contract:
   version: "1"

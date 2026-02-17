@@ -3,16 +3,20 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 // EnvironmentConfig holds per-environment overrides.
 type EnvironmentConfig struct {
+	Kubeconfig      string                 `yaml:"kubeconfig,omitempty"`
 	Context         string                 `yaml:"context,omitempty"`
 	Namespace       string                 `yaml:"namespace,omitempty"`
 	Image           string                 `yaml:"image,omitempty"`
 	RuntimeClass    string                 `yaml:"runtime_class,omitempty"`
 	ConfigOverrides map[string]interface{} `yaml:"config_overrides,omitempty"`
 	SecretsSource   string                 `yaml:"secrets_source,omitempty"`
+	Enforcement     string                 `yaml:"enforcement,omitempty"` // "strict" (default) or "audit"
 }
 
 // ResolveEnvironment loads the merged config and returns the named environment.
@@ -46,7 +50,23 @@ func (c *TentacularConfig) LoadEnvironment(name string) (*EnvironmentConfig, err
 	if !ok {
 		return nil, fmt.Errorf("environment %q not found in config", name)
 	}
+	// Expand ~ in kubeconfig path
+	if env.Kubeconfig != "" {
+		env.Kubeconfig = expandHome(env.Kubeconfig)
+	}
 	return &env, nil
+}
+
+// expandHome replaces a leading ~ with the user's home directory.
+func expandHome(path string) string {
+	if strings.HasPrefix(path, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return path
+		}
+		return filepath.Join(home, path[2:])
+	}
+	return path
 }
 
 // ApplyConfigOverrides merges environment overrides into workflow config.

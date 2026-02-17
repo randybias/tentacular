@@ -48,9 +48,10 @@ contract:
       auth:
         type: webhook-url
         secret: slack.webhook_url
-  networkPolicyOverride:
-    additionalEgress:
-      - toCIDR: "0.0.0.0/0"
-        ports:
-          - "443/TCP"
-          - "80/TCP"
+    probe-targets:
+      type: dynamic-target
+      protocol: https
+      cidr: "0.0.0.0/0"
+      dynPorts:
+        - "443/TCP"
+        - "80/TCP"

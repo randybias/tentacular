@@ -41,6 +41,7 @@ type InternalDeployOptions struct {
 	Image           string
 	RuntimeClass    string
 	ImagePullPolicy string
+	Kubeconfig      string    // explicit kubeconfig file path
 	Context         string    // kubeconfig context override
 	StatusOut       io.Writer // writer for progress messages (nil defaults to os.Stdout)
 }
@@ -90,12 +91,14 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Resolve --env: environment config provides context, namespace, runtime-class defaults.
 	// CLI flags still override environment values.
 	var envContext string
+	var envKubeconfig string
 	if envName != "" {
 		env, envErr := cfg.LoadEnvironment(envName)
 		if envErr != nil {
 			return fmt.Errorf("loading environment %q: %w", envName, envErr)
 		}
 		envContext = env.Context
+		envKubeconfig = env.Kubeconfig
 		if !cmd.Flags().Changed("namespace") && env.Namespace != "" {
 			namespace = env.Namespace
 		}
@@ -178,6 +181,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 				Namespace:    devEnv.Namespace,
 				Image:        imageTag,
 				RuntimeClass: devEnv.RuntimeClass,
+				Kubeconfig:   devEnv.Kubeconfig,
 				Context:      devEnv.Context,
 				StatusOut:    w,
 			}
@@ -219,6 +223,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		Namespace:    namespace,
 		Image:        imageTag,
 		RuntimeClass: runtimeClass,
+		Kubeconfig:   envKubeconfig,
 		Context:      envContext,
 		StatusOut:    w,
 	}
@@ -353,9 +358,11 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 
 	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, namespace)
 
-	// Create K8s client (with optional context override)
+	// Create K8s client (with optional kubeconfig file and/or context override)
 	var client *k8s.Client
-	if opts.Context != "" {
+	if opts.Kubeconfig != "" {
+		client, err = k8s.NewClientFromConfig(opts.Kubeconfig, opts.Context)
+	} else if opts.Context != "" {
 		client, err = k8s.NewClientWithContext(opts.Context)
 	} else {
 		client, err = k8s.NewClient()

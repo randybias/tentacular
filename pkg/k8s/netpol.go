@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/randybias/tentacular/pkg/builder"
@@ -44,12 +45,24 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string) *builder.Manifes
 	if len(ingressRules) > 0 {
 		ingressYAML = "  ingress:\n"
 		for _, rule := range ingressRules {
-			ingressYAML += fmt.Sprintf(`  - from:
-    - podSelector: {}
-    ports:
-    - protocol: %s
-      port: %d
-`, rule.Protocol, rule.Port)
+			ingressYAML += "  - from:\n"
+			if rule.FromLabels != nil {
+				ingressYAML += "    - podSelector:\n"
+				ingressYAML += "        matchLabels:\n"
+				// Sort label keys for deterministic output
+				labelKeys := make([]string, 0, len(rule.FromLabels))
+				for k := range rule.FromLabels {
+					labelKeys = append(labelKeys, k)
+				}
+				sort.Strings(labelKeys)
+				for _, k := range labelKeys {
+					ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromLabels[k])
+				}
+			} else {
+				ingressYAML += "    - podSelector: {}\n"
+			}
+			ingressYAML += fmt.Sprintf("    ports:\n    - protocol: %s\n      port: %d\n",
+				rule.Protocol, rule.Port)
 		}
 	}
 

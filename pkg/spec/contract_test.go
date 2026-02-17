@@ -223,7 +223,7 @@ contract:
 	}
 }
 
-func TestParseContractNetworkPolicyOverride(t *testing.T) {
+func TestParseContractNetworkPolicy(t *testing.T) {
 	yaml := `
 name: test-wf
 version: "1.0"
@@ -240,7 +240,7 @@ contract:
       protocol: https
       host: api.github.com
       port: 443
-  networkPolicyOverride:
+  networkPolicy:
     additionalEgress:
       - toCIDR: 10.0.0.0/8
         ports:
@@ -254,14 +254,14 @@ contract:
 	if len(errs) > 0 {
 		t.Fatalf("unexpected errors: %v", errs)
 	}
-	if wf.Contract.NetworkPolicyOverride == nil {
-		t.Fatal("expected networkPolicyOverride to be non-nil")
+	if wf.Contract.NetworkPolicy == nil {
+		t.Fatal("expected networkPolicy to be non-nil")
 	}
-	if len(wf.Contract.NetworkPolicyOverride.AdditionalEgress) != 2 {
-		t.Fatalf("expected 2 additionalEgress rules, got %d", len(wf.Contract.NetworkPolicyOverride.AdditionalEgress))
+	if len(wf.Contract.NetworkPolicy.AdditionalEgress) != 2 {
+		t.Fatalf("expected 2 additionalEgress rules, got %d", len(wf.Contract.NetworkPolicy.AdditionalEgress))
 	}
 
-	rule1 := wf.Contract.NetworkPolicyOverride.AdditionalEgress[0]
+	rule1 := wf.Contract.NetworkPolicy.AdditionalEgress[0]
 	if rule1.ToCIDR != "10.0.0.0/8" {
 		t.Errorf("expected CIDR 10.0.0.0/8, got %s", rule1.ToCIDR)
 	}
@@ -536,5 +536,432 @@ contract:
 	dep := wf.Contract.Dependencies["public-api"]
 	if dep.Auth != nil {
 		t.Error("expected auth to be nil for public dependency")
+	}
+}
+
+// --- Group 1: CIDR Format Validation Tests ---
+
+func TestValidCIDRFormats(t *testing.T) {
+	testCases := []struct {
+		name string
+		yaml string
+	}{
+		{
+			name: "IPv4 /8 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP"]
+`,
+		},
+		{
+			name: "IPv4 /12 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "172.16.0.0/12"
+`,
+		},
+		{
+			name: "IPv4 /24 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "192.168.1.0/24"
+`,
+		},
+		{
+			name: "IPv6 CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "2001:db8::/32"
+`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, errs := Parse([]byte(tc.yaml))
+			if len(errs) > 0 {
+				t.Errorf("expected valid CIDR to pass validation, got errors: %v", errs)
+			}
+		})
+	}
+}
+
+func TestInvalidCIDRFormats(t *testing.T) {
+	testCases := []struct {
+		name        string
+		yaml        string
+		expectedErr string
+	}{
+		{
+			name: "Missing prefix length",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+		{
+			name: "Invalid prefix length",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/33"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+		{
+			name: "Not a CIDR",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "not-a-cidr"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+		{
+			name: "Invalid IP address",
+			yaml: `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "256.0.0.0/8"
+`,
+			expectedErr: "invalid CIDR format",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, errs := Parse([]byte(tc.yaml))
+			if len(errs) == 0 {
+				t.Fatal("expected validation error for invalid CIDR")
+			}
+			found := false
+			for _, err := range errs {
+				if strings.Contains(err, tc.expectedErr) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("expected error containing %q, got: %v", tc.expectedErr, errs)
+			}
+		})
+	}
+}
+
+func TestCIDRInAdditionalEgress(t *testing.T) {
+	// Valid CIDR should pass validation
+	validYAML := `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP", "80/TCP"]
+      - toCIDR: "172.16.0.0/12"
+        ports: ["8080/TCP"]
+`
+	wf, errs := Parse([]byte(validYAML))
+	if len(errs) > 0 {
+		t.Fatalf("expected valid CIDR to pass, got errors: %v", errs)
+	}
+	if wf.Contract == nil || wf.Contract.NetworkPolicy == nil {
+		t.Fatal("expected networkPolicy to be parsed")
+	}
+	if len(wf.Contract.NetworkPolicy.AdditionalEgress) != 2 {
+		t.Errorf("expected 2 egress overrides, got %d", len(wf.Contract.NetworkPolicy.AdditionalEgress))
+	}
+
+	// Invalid CIDR should fail with helpful error
+	invalidYAML := `
+name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "not-a-cidr"
+`
+	_, errs = Parse([]byte(invalidYAML))
+	if len(errs) == 0 {
+		t.Fatal("expected error for invalid CIDR")
+	}
+	found := false
+	for _, err := range errs {
+		if strings.Contains(err, "invalid CIDR format") && strings.Contains(err, "not-a-cidr") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected helpful error with CIDR value, got: %v", errs)
+	}
+}
+
+// --- Group 2: Reason Field Preservation Tests ---
+
+func TestReasonFieldRoundTrip(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP"]
+        reason: "Legacy API requires broader access"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract == nil || wf.Contract.NetworkPolicy == nil {
+		t.Fatal("expected networkPolicy to be parsed")
+	}
+	if len(wf.Contract.NetworkPolicy.AdditionalEgress) == 0 {
+		t.Fatal("expected additionalEgress rules")
+	}
+	rule := wf.Contract.NetworkPolicy.AdditionalEgress[0]
+	if rule.Reason != "Legacy API requires broader access" {
+		t.Errorf("expected reason to be preserved, got: %q", rule.Reason)
+	}
+}
+
+func TestReasonFieldOmittedWhenEmpty(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        ports: ["443/TCP"]
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	rule := wf.Contract.NetworkPolicy.AdditionalEgress[0]
+	if rule.Reason != "" {
+		t.Errorf("expected reason to be empty, got: %q", rule.Reason)
+	}
+}
+
+func TestReasonFieldMultipleRules(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  a:
+    path: ./a.ts
+contract:
+  version: "1"
+  networkPolicy:
+    additionalEgress:
+      - toCIDR: "10.0.0.0/8"
+        reason: "Internal network access"
+      - toCIDR: "172.16.0.0/12"
+        reason: "Legacy database cluster"
+      - toCIDR: "192.168.0.0/16"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	rules := wf.Contract.NetworkPolicy.AdditionalEgress
+	if len(rules) != 3 {
+		t.Fatalf("expected 3 rules, got %d", len(rules))
+	}
+	if rules[0].Reason != "Internal network access" {
+		t.Errorf("rule 0: expected reason, got %q", rules[0].Reason)
+	}
+	if rules[1].Reason != "Legacy database cluster" {
+		t.Errorf("rule 1: expected reason, got %q", rules[1].Reason)
+	}
+	if rules[2].Reason != "" {
+		t.Errorf("rule 2: expected empty reason, got %q", rules[2].Reason)
+	}
+}
+
+// --- Group 2: Dynamic Target Tests ---
+
+func TestDynamicTargetTypeFieldParsing(t *testing.T) {
+	yaml := `
+name: uptime-prober
+version: "1.0"
+triggers:
+  - type: cron
+    schedule: "*/5 * * * *"
+nodes:
+  check:
+    path: ./check.ts
+contract:
+  version: "1"
+  dependencies:
+    probe-targets:
+      type: dynamic-target
+      protocol: https
+      cidr: "0.0.0.0/0"
+      dynPorts:
+        - "443/TCP"
+        - "80/TCP"
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("dynamic-target should parse without errors, got: %v", errs)
+	}
+	dep := wf.Contract.Dependencies["probe-targets"]
+	if dep.Type != "dynamic-target" {
+		t.Errorf("expected type=dynamic-target, got %s", dep.Type)
+	}
+	if dep.CIDR != "0.0.0.0/0" {
+		t.Errorf("expected cidr=0.0.0.0/0, got %s", dep.CIDR)
+	}
+	if len(dep.DynPorts) != 2 {
+		t.Errorf("expected 2 dynPorts, got %d", len(dep.DynPorts))
+	}
+}
+
+func TestDynamicTargetValidation(t *testing.T) {
+	// Construct contract directly to test ValidateContract() in isolation
+	// (Parse() treats ValidateContract errors as parse failures)
+	contract := &Contract{
+		Version: "1",
+		Dependencies: map[string]Dependency{
+			"probe-targets": {
+				Type:     "dynamic-target",
+				Protocol: "https",
+				// Missing CIDR and DynPorts — should produce errors
+			},
+		},
+	}
+	errs := ValidateContract(contract)
+	foundCIDRErr := false
+	foundPortsErr := false
+	for _, e := range errs {
+		if strings.Contains(e, "cidr") {
+			foundCIDRErr = true
+		}
+		if strings.Contains(e, "dynPorts") {
+			foundPortsErr = true
+		}
+	}
+	if !foundCIDRErr {
+		t.Error("expected validation error about missing cidr for dynamic-target")
+	}
+	if !foundPortsErr {
+		t.Error("expected validation error about missing dynPorts for dynamic-target")
 	}
 }

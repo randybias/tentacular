@@ -60,16 +60,19 @@ func (c WorkflowConfig) ToMap() map[string]interface{} {
 
 // Contract defines external dependencies and their network requirements.
 type Contract struct {
-	Version               string                  `yaml:"version"`
-	Dependencies          map[string]Dependency   `yaml:"dependencies"`
-	NetworkPolicyOverride *NetworkPolicyOverrides `yaml:"networkPolicyOverride,omitempty"`
-	Extensions            map[string]interface{}  `yaml:",inline"`
+	Version       string                 `yaml:"version"`
+	Dependencies  map[string]Dependency  `yaml:"dependencies"`
+	NetworkPolicy *NetworkPolicyConfig   `yaml:"networkPolicy,omitempty"`
+	Extensions    map[string]interface{} `yaml:",inline"`
 }
 
 // Dependency declares a single external service dependency.
 type Dependency struct {
 	Protocol string          `yaml:"protocol"`
+	Type     string          `yaml:"type,omitempty"`     // "dynamic-target" for wildcard deps
 	Auth     *DependencyAuth `yaml:"auth,omitempty"`
+	CIDR     string          `yaml:"cidr,omitempty"`     // required when type=dynamic-target
+	DynPorts []string        `yaml:"dynPorts,omitempty"` // required when type=dynamic-target, e.g. ["443/TCP"]
 	// Protocol-specific fields
 	Host       string                 `yaml:"host,omitempty"`      // https, postgresql, nats, blob
 	Port       int                    `yaml:"port,omitempty"`      // https, postgresql, nats
@@ -86,8 +89,8 @@ type DependencyAuth struct {
 	Secret string `yaml:"secret"` // Must be in "service.key" format
 }
 
-// NetworkPolicyOverrides allows manual egress CIDR overrides.
-type NetworkPolicyOverrides struct {
+// NetworkPolicyConfig allows manual egress CIDR configuration.
+type NetworkPolicyConfig struct {
 	AdditionalEgress []EgressOverride `yaml:"additionalEgress,omitempty"`
 }
 
@@ -95,4 +98,5 @@ type NetworkPolicyOverrides struct {
 type EgressOverride struct {
 	ToCIDR string   `yaml:"toCIDR"`
 	Ports  []string `yaml:"ports,omitempty"`
+	Reason string   `yaml:"reason,omitempty"` // human-readable justification
 }

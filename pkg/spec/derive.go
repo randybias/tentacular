@@ -50,6 +50,21 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 
 	// Add dependency-derived egress
 	for _, dep := range c.Dependencies {
+		// Dynamic-target dependencies use CIDR + DynPorts instead of Host + Port
+		if dep.Type == "dynamic-target" {
+			for _, portStr := range dep.DynPorts {
+				port, proto := parsePortSpec(portStr)
+				if port > 0 {
+					rules = append(rules, EgressRule{
+						Host:     dep.CIDR,
+						Port:     port,
+						Protocol: proto,
+					})
+				}
+			}
+			continue
+		}
+
 		port := dep.Port
 		if port == 0 {
 			// Apply default port if not specified
@@ -67,9 +82,9 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 		}
 	}
 
-	// Add additional egress overrides from networkPolicyOverride
-	if c.NetworkPolicyOverride != nil {
-		for _, override := range c.NetworkPolicyOverride.AdditionalEgress {
+	// Add additional egress overrides from networkPolicy
+	if c.NetworkPolicy != nil {
+		for _, override := range c.NetworkPolicy.AdditionalEgress {
 			for _, portStr := range override.Ports {
 				port, proto := parsePortSpec(portStr)
 				if port > 0 {
@@ -108,19 +123,40 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 
 // IngressRule represents a single ingress network policy rule.
 type IngressRule struct {
-	Port     int
-	Protocol string // "TCP"
+	Port       int
+	Protocol   string // "TCP"
+	FromLabels map[string]string // if non-nil, restrict to matching pods
 }
 
 // DeriveIngressRules returns ingress rules derived from workflow triggers.
-// Webhook triggers enable ingress on port 8080.
-// Returns empty slice if no webhook triggers.
+// Returns label-scoped ingress for internal triggers (CronJob/runner) and open ingress for webhooks.
 func DeriveIngressRules(wf *Workflow) []IngressRule {
-	// Every workflow needs namespace-local ingress on port 8080.
-	// The runner Job (tntc test --live) and CronJob triggers POST to the engine service.
-	// Webhook triggers also need this, but so does every other trigger type.
-	rules := []IngressRule{
-		{Port: 8080, Protocol: "TCP"},
+	var rules []IngressRule
+
+	// Check if workflow has webhook triggers
+	hasWebhook := false
+	for _, trigger := range wf.Triggers {
+		if trigger.Type == "webhook" {
+			hasWebhook = true
+			break
+		}
+	}
+
+	if hasWebhook {
+		// Webhook triggers need open ingress from any pod in namespace for external traffic
+		rules = append(rules, IngressRule{
+			Port:       8080,
+			Protocol:   "TCP",
+			FromLabels: nil, // nil = podSelector: {} (any pod in namespace)
+		})
+	} else {
+		// Non-webhook workflows only need label-scoped ingress for internal triggers
+		// The runner Job (tntc test --live) and CronJob triggers POST to the engine service
+		rules = append(rules, IngressRule{
+			Port:       8080,
+			Protocol:   "TCP",
+			FromLabels: map[string]string{"tentacular.dev/role": "trigger"},
+		})
 	}
 
 	return rules

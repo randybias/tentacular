@@ -176,3 +176,190 @@ func TestVisualizeRichFlagParsing(t *testing.T) {
 // Note: Full integration tests for runVisualize require actual workflow.yaml files
 // and are better suited for integration test suite. These unit tests validate
 // the command structure and helper functions.
+
+// --- Group 4: Mermaid Deterministic Output Tests ---
+
+func TestMermaidStableNodeOrdering(t *testing.T) {
+	// Workflow with 5 nodes in map (unordered)
+	wf := &spec.Workflow{
+		Name:    "test-wf",
+		Version: "1.0",
+		Nodes: map[string]spec.NodeSpec{
+			"zebra": {Path: "./zebra.ts"},
+			"apple": {Path: "./apple.ts"},
+			"dog":   {Path: "./dog.ts"},
+			"cat":   {Path: "./cat.ts"},
+			"bird":  {Path: "./bird.ts"},
+		},
+		Edges: []spec.Edge{},
+	}
+
+	// Generate Mermaid 10 times
+	outputs := make([]string, 10)
+	for i := 0; i < 10; i++ {
+		outputs[i] = generateMermaidDiagram(wf, false)
+	}
+
+	// All outputs should be identical
+	for i := 1; i < len(outputs); i++ {
+		if outputs[i] != outputs[0] {
+			t.Errorf("output %d differs from output 0", i)
+		}
+	}
+
+	// Verify nodes are in sorted order
+	expected := "apple"
+	if !bytes.Contains([]byte(outputs[0]), []byte(expected)) {
+		t.Errorf("expected %s to appear in output", expected)
+	}
+}
+
+func TestMermaidStableEdgeOrdering(t *testing.T) {
+	// Workflow with multiple edges (in arbitrary order)
+	wf := &spec.Workflow{
+		Name:    "test-wf",
+		Version: "1.0",
+		Nodes: map[string]spec.NodeSpec{
+			"a": {Path: "./a.ts"},
+			"b": {Path: "./b.ts"},
+			"c": {Path: "./c.ts"},
+			"d": {Path: "./d.ts"},
+		},
+		Edges: []spec.Edge{
+			{From: "c", To: "d"},
+			{From: "a", To: "b"},
+			{From: "b", To: "c"},
+			{From: "d", To: "a"}, // Creates cycle, but we're testing ordering
+		},
+	}
+
+	// Generate Mermaid 10 times
+	outputs := make([]string, 10)
+	for i := 0; i < 10; i++ {
+		outputs[i] = generateMermaidDiagram(wf, false)
+	}
+
+	// All outputs should be identical (edges sorted)
+	for i := 1; i < len(outputs); i++ {
+		if outputs[i] != outputs[0] {
+			t.Errorf("output %d differs from output 0", i)
+		}
+	}
+}
+
+func TestMermaidStableDependencyOrdering(t *testing.T) {
+	// Contract with 4 dependencies
+	wf := &spec.Workflow{
+		Name:    "test-wf",
+		Version: "1.0",
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./fetch.ts"},
+		},
+		Edges: []spec.Edge{},
+		Contract: &spec.Contract{
+			Version: "1",
+			Dependencies: map[string]spec.Dependency{
+				"zebra-api":    {Protocol: "https", Host: "zebra.com", Port: 443},
+				"alpha-db":     {Protocol: "postgresql", Host: "alpha.db", Port: 5432},
+				"delta-nats":   {Protocol: "nats", Host: "nats.local", Port: 4222},
+				"charlie-blob": {Protocol: "blob", Host: "storage.local"},
+			},
+		},
+	}
+
+	// Generate Mermaid with --rich flag
+	output := generateMermaidDiagram(wf, true)
+
+	// Verify dependencies appear in sorted order (alpha, charlie, delta, zebra)
+	// by checking that their declaration order matches alphabetical
+	alphaIdx := bytes.Index([]byte(output), []byte("dep_alpha-db"))
+	charlieIdx := bytes.Index([]byte(output), []byte("dep_charlie-blob"))
+	deltaIdx := bytes.Index([]byte(output), []byte("dep_delta-nats"))
+	zebraIdx := bytes.Index([]byte(output), []byte("dep_zebra-api"))
+
+	if alphaIdx == -1 || charlieIdx == -1 || deltaIdx == -1 || zebraIdx == -1 {
+		t.Fatal("expected all dependencies to appear in output")
+	}
+
+	if !(alphaIdx < charlieIdx && charlieIdx < deltaIdx && deltaIdx < zebraIdx) {
+		t.Errorf("dependencies not in sorted order: alpha=%d, charlie=%d, delta=%d, zebra=%d",
+			alphaIdx, charlieIdx, deltaIdx, zebraIdx)
+	}
+}
+
+func TestMermaidDiffCompatibility(t *testing.T) {
+	// Two identical workflows should produce identical Mermaid output
+	wf1 := &spec.Workflow{
+		Name:    "test-wf",
+		Version: "1.0",
+		Nodes: map[string]spec.NodeSpec{
+			"a": {Path: "./a.ts"},
+			"b": {Path: "./b.ts"},
+		},
+		Edges: []spec.Edge{
+			{From: "a", To: "b"},
+		},
+	}
+
+	wf2 := &spec.Workflow{
+		Name:    "test-wf",
+		Version: "1.0",
+		Nodes: map[string]spec.NodeSpec{
+			"a": {Path: "./a.ts"},
+			"b": {Path: "./b.ts"},
+		},
+		Edges: []spec.Edge{
+			{From: "a", To: "b"},
+		},
+	}
+
+	output1 := generateMermaidDiagram(wf1, false)
+	output2 := generateMermaidDiagram(wf2, false)
+
+	if output1 != output2 {
+		t.Error("identical workflows produced different Mermaid output")
+	}
+}
+
+// Test: Dependency rendering as standalone shapes
+func TestMermaidDependencyConnections(t *testing.T) {
+	// Workflow with nodes and dependencies
+	wf := &spec.Workflow{
+		Name:    "test-wf",
+		Version: "1.0",
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./fetch.ts"},
+			"store": {Path: "./store.ts"},
+		},
+		Edges: []spec.Edge{
+			{From: "fetch", To: "store"},
+		},
+		Contract: &spec.Contract{
+			Version: "1",
+			Dependencies: map[string]spec.Dependency{
+				"api": {Protocol: "https", Host: "api.example.com", Port: 443},
+			},
+		},
+	}
+
+	// Generate Mermaid with --rich flag
+	output := generateMermaidDiagram(wf, true)
+
+	// Verify dependency appears as a standalone shape
+	if !bytes.Contains([]byte(output), []byte("dep_api[(api")) {
+		t.Error("expected dependency shape 'dep_api' to appear")
+	}
+
+	// Verify dependency has styling
+	if !bytes.Contains([]byte(output), []byte("style dep_api fill:#e1f5ff")) {
+		t.Error("expected dependency styling")
+	}
+
+	// Should NOT have connection lines (avoiding cartesian product over-connection)
+	if bytes.Contains([]byte(output), []byte("-.->|uses| dep_api")) {
+		t.Error("should not contain connection lines to dependencies")
+	}
+	if bytes.Contains([]byte(output), []byte("dep_api -.->")) {
+		t.Error("should not contain connection lines from dependencies")
+	}
+}

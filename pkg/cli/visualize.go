@@ -98,9 +98,14 @@ func generateMermaidDiagram(wf *spec.Workflow, rich bool) string {
 		fmt.Fprintf(&buf, "    %s[%s]\n", name, name)
 	}
 
-	// Render workflow edges
+	// Render workflow edges (sorted for deterministic output)
+	edges := make([]string, 0, len(wf.Edges))
 	for _, edge := range wf.Edges {
-		fmt.Fprintf(&buf, "    %s --> %s\n", edge.From, edge.To)
+		edges = append(edges, fmt.Sprintf("    %s --> %s\n", edge.From, edge.To))
+	}
+	sort.Strings(edges)
+	for _, edge := range edges {
+		buf.WriteString(edge)
 	}
 
 	// Render dependencies if --rich flag is set
@@ -115,17 +120,11 @@ func generateMermaidDiagram(wf *spec.Workflow, rich bool) string {
 		}
 		sort.Strings(depNames)
 
+		// Render dependencies as standalone shapes (no connection lines to avoid over-connecting)
 		for _, name := range depNames {
 			dep := wf.Contract.Dependencies[name]
 			fmt.Fprintf(&buf, "    dep_%s[(%s<br/>%s:%d)]\n", name, name, dep.Host, getPortWithDefault(dep))
 			fmt.Fprintf(&buf, "    style dep_%s fill:#e1f5ff,stroke:#0066cc,stroke-width:2px\n", name)
-		}
-
-		// Connect nodes to their dependencies
-		buf.WriteString("\n")
-		buf.WriteString("    %% Dependency connections\n")
-		for _, depName := range depNames {
-			fmt.Fprintf(&buf, "    dep_%s -.->|external| %s\n", depName, depName)
 		}
 	}
 

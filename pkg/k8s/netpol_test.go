@@ -445,7 +445,7 @@ func TestGenerateNetworkPolicyAdditionalEgressOverride(t *testing.T) {
 			Dependencies: map[string]spec.Dependency{
 				"api": {Protocol: "https", Host: "api.example.com", Port: 443},
 			},
-			NetworkPolicyOverride: &spec.NetworkPolicyOverrides{
+			NetworkPolicy: &spec.NetworkPolicyConfig{
 				AdditionalEgress: []spec.EgressOverride{
 					{ToCIDR: "10.0.0.0/8", Ports: []string{"8080/TCP"}},
 					{ToCIDR: "172.16.0.0/12"}, // no ports = any
@@ -564,7 +564,7 @@ contract:
       auth:
         type: webhook-url
         secret: slack.webhook_url
-  networkPolicyOverride:
+  networkPolicy:
     additionalEgress:
       - toCIDR: "10.100.0.0/16"
         ports:

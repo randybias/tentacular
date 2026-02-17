@@ -308,6 +308,9 @@ spec:
   jobTemplate:
     spec:
       template:
+        metadata:
+          labels:
+            tentacular.dev/role: trigger
         spec:
           restartPolicy: OnFailure
           containers:
