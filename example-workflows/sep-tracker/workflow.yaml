@@ -46,8 +46,26 @@ config:
   retries: 1
   target_repo: "modelcontextprotocol/specification"
   sep_label: "sep"
-  pg_host: "postgres-postgresql.postgres.svc.cluster.local"
-  pg_port: 5432
-  pg_database: "appdb"
-  pg_user: "postgres"
-  azure_blob_base_url: "https://mcpreports9276621.blob.core.windows.net/sep-reports"
+
+contract:
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        secret: github.token
+    postgres:
+      protocol: postgresql
+      host: postgres-postgresql.postgres.svc.cluster.local
+      port: 5432
+      database: appdb
+      user: postgres
+      auth:
+        secret: postgres.password
+    azure-blob:
+      protocol: https
+      host: mcpreports9276621.blob.core.windows.net
+      port: 443
+      auth:
+        secret: azure.sas_token
