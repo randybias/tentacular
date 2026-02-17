@@ -1,0 +1,17 @@
+{
+  "input": {
+    "executiveSummary": "Today saw major advances in agentic AI for operations.",
+    "topLinks": [
+      {"title": "AI Agents for Ops", "url": "https://example.com/1", "source": "TechCrunch", "reason": "Relevant to AIOps"}
+    ],
+    "model": "gpt-5.2",
+    "articleCount": 10
+  },
+  "config": {
+    "cluster_id": "agensys2"
+  },
+  "expected": {
+    "delivered": false,
+    "status": 0
+  }
+}

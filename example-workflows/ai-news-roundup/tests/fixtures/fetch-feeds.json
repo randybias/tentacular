@@ -1,0 +1,12 @@
+{
+  "input": null,
+  "config": {
+    "sources": [
+      {"name": "Test Source", "url": "https://example.com/feed", "type": "rss"}
+    ]
+  },
+  "expected": {
+    "articles": []
+  },
+  "expectedMatch": "partial"
+}

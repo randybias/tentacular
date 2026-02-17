@@ -1,0 +1,73 @@
+name: ai-news-roundup
+version: "1.0"
+description: "Daily AI and agentic news roundup — fetch, filter, summarize via LLM, post to Slack"
+
+triggers:
+  - type: manual
+  - type: cron
+    name: daily-roundup
+    schedule: "0 7 * * *"
+
+nodes:
+  fetch-feeds:
+    path: ./nodes/fetch-feeds.ts
+  filter-24h:
+    path: ./nodes/filter-24h.ts
+  summarize-llm:
+    path: ./nodes/summarize-llm.ts
+  notify-slack:
+    path: ./nodes/notify-slack.ts
+
+edges:
+  - from: fetch-feeds
+    to: filter-24h
+  - from: filter-24h
+    to: summarize-llm
+  - from: summarize-llm
+    to: notify-slack
+
+config:
+  timeout: 120s
+  retries: 1
+  cluster_id: "agensys2"
+  openai_model: "gpt-5.2"
+  sources:
+    - name: TechCrunch AI
+      url: https://techcrunch.com/category/artificial-intelligence/feed/
+      type: rss
+    - name: The Verge AI
+      url: https://www.theverge.com/rss/ai-artificial-intelligence/index.xml
+      type: rss
+    - name: Ars Technica
+      url: https://feeds.arstechnica.com/arstechnica/technology-lab
+      type: rss
+    - name: VentureBeat AI
+      url: https://venturebeat.com/category/ai/feed/
+      type: rss
+    - name: Hacker News
+      url: https://hn.algolia.com/api/v1/search_by_date?tags=story&query=AI+agents+AIOps
+      type: json
+
+contract:
+  version: "1"
+  dependencies:
+    openai-api:
+      protocol: https
+      host: api.openai.com
+      port: 443
+      auth:
+        type: bearer
+        secret: openai.api_key
+    slack:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url
+    news-sources:
+      type: dynamic-target
+      protocol: https
+      cidr: "0.0.0.0/0"
+      dynPorts:
+        - "443/TCP"

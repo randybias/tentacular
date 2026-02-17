@@ -1,0 +1,16 @@
+{
+  "input": {
+    "articles": [
+      {"title": "AI Agents for Ops", "url": "https://example.com/1", "source": "TechCrunch AI", "publishedAt": "2026-02-17T10:00:00Z", "snippet": "New agentic framework"},
+      {"title": "Old News", "url": "https://example.com/2", "source": "Ars Technica", "publishedAt": "2025-01-01T00:00:00Z", "snippet": "Ancient article"},
+      {"title": "AI Agents for Ops", "url": "https://example.com/1", "source": "TechCrunch AI", "publishedAt": "2026-02-17T10:00:00Z", "snippet": "Duplicate"}
+    ]
+  },
+  "expected": {
+    "articles": [
+      {"title": "AI Agents for Ops", "url": "https://example.com/1", "source": "TechCrunch AI", "publishedAt": "2026-02-17T10:00:00Z", "snippet": "New agentic framework"}
+    ],
+    "totalBefore": 3,
+    "totalAfter": 1
+  }
+}

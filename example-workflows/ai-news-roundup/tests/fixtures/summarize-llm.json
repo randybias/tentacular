@@ -1,0 +1,18 @@
+{
+  "input": {
+    "articles": [
+      {"title": "AI Agents for Ops", "url": "https://example.com/1", "source": "TechCrunch AI", "publishedAt": "2026-02-17T10:00:00Z", "snippet": "New agentic framework"}
+    ],
+    "totalBefore": 5,
+    "totalAfter": 1
+  },
+  "config": {
+    "openai_model": "gpt-5.2"
+  },
+  "expected": {
+    "executiveSummary": "Unable to generate summary: missing API key",
+    "topLinks": [],
+    "model": "gpt-5.2",
+    "articleCount": 1
+  }
+}
