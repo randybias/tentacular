@@ -45,7 +45,7 @@ export default async function run(ctx: Context, input: unknown): Promise<NotifyO
   const storeResult = merged["store-report"];
   const delta = merged["diff-seps"];
 
-  const slack = ctx.dependency("slack");
+  const slack = ctx.dependency("slack-webhook");
   if (!slack.secret) {
     ctx.log.warn("No slack webhook_url in secrets, skipping notification");
     return { delivered: false, status: 0 };
