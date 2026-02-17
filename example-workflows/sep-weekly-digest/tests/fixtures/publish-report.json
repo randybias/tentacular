@@ -1,0 +1,13 @@
+{
+  "input": {
+    "render-html": {
+      "html": "<html><body>Test digest report</body></html>",
+      "title": "SEP Weekly Digest - 2026-02-15T20:00:00Z",
+      "summary": "1 active SEP, health score: 50"
+    }
+  },
+  "expected": {
+    "uploaded": false,
+    "reportUrl": ""
+  }
+}

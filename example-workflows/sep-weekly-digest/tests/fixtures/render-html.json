@@ -1,0 +1,26 @@
+{
+  "input": {
+    "generate-report": {
+      "analysis": "The SEP ecosystem shows moderate activity with 1 active proposal.",
+      "recommendations": ["Monitor SEP-001 for updates"],
+      "healthScore": 50,
+      "sections": [
+        {
+          "title": "Overview",
+          "content": "1 active SEP proposal under review."
+        }
+      ]
+    },
+    "analyze-activity": {
+      "highVelocity": [],
+      "inactive": [],
+      "newThisWeek": [],
+      "closedThisWeek": [],
+      "stateTransitions": [],
+      "totalActive": 1,
+      "totalInactive": 0,
+      "velocityScore": 100,
+      "weekOverWeek": []
+    }
+  }
+}

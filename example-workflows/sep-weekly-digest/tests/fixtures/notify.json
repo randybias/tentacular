@@ -1,0 +1,23 @@
+{
+  "input": {
+    "publish-report": {
+      "uploaded": false,
+      "reportUrl": ""
+    },
+    "analyze-activity": {
+      "highVelocity": [],
+      "inactive": [],
+      "newThisWeek": [],
+      "closedThisWeek": [],
+      "stateTransitions": [],
+      "totalActive": 1,
+      "totalInactive": 0,
+      "velocityScore": 100,
+      "weekOverWeek": []
+    }
+  },
+  "expected": {
+    "delivered": false,
+    "status": 0
+  }
+}
