@@ -31,7 +31,8 @@ export default async function run(ctx: Context, input: unknown): Promise<{ deliv
 
   const color = data.alert ? "#e74c3c" : "#2ecc71";
   const icon = data.alert ? ":red_circle:" : ":large_green_circle:";
-  const title = data.alert ? "Uptime Alert" : "Uptime OK";
+  const clusterId = (ctx.config as Record<string, unknown>).cluster_id ?? "unknown";
+  const title = data.alert ? `Uptime Alert [${clusterId}]` : `Uptime OK [${clusterId}]`;
 
   const blocks: Record<string, unknown>[] = [
     {
@@ -76,7 +77,7 @@ export default async function run(ctx: Context, input: unknown): Promise<{ deliv
   blocks.push({
     type: "context",
     elements: [
-      { type: "mrkdwn", text: `tentacular/uptime-prober v1.0 | ${ts} PT` },
+      { type: "mrkdwn", text: `tentacular/uptime-prober v1.0 | cluster: ${clusterId} | ${ts} PT` },
     ],
   });
 

@@ -2,9 +2,6 @@ name: uptime-prober
 version: "1.0"
 description: "Probe HTTP endpoints on a cron schedule, alert when any are down"
 
-deployment:
-  namespace: pd-uptime-prober
-
 triggers:
   - type: manual
   - type: cron
@@ -32,10 +29,9 @@ edges:
 config:
   timeout: 60s
   retries: 1
+  cluster_id: "agensys2"
   endpoints:
-    - https://example.com
     - https://www.google.com
-    - https://www.anthropic.com
     - https://thisdomaindoesnotexist.invalid
 
 contract:
