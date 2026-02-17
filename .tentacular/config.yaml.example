@@ -13,17 +13,29 @@ namespace: default
 runtime_class: gvisor
 
 # Named environments for tntc deploy --env and tntc test --live --env
+#
+# Cluster access: use EITHER kubeconfig OR context (not both).
+#   kubeconfig: path to a standalone kubeconfig file (~ is expanded)
+#   context:    context name within your default kubeconfig (~/.kube/config or $KUBECONFIG)
+# If neither is set, the default kubeconfig and current context are used.
 environments:
+  # Example: dedicated kubeconfig file (recommended for multi-cluster setups)
   dev:
-    kubeconfig: ~/dev-secrets/my-cluster.kubeconfig  # explicit kubeconfig file path
-    context: kind-tentacular-dev    # kubeconfig context name (optional with kubeconfig)
+    kubeconfig: ~/dev-secrets/kubeconfigs/my-cluster.kubeconfig
     namespace: dev-workflows
     runtime_class: ""               # no gVisor in kind
     # image: ghcr.io/randybias/tentacular-engine:latest  # optional; defaults to base-image.txt
 
+  # Example: context within default kubeconfig (simpler single-cluster setups)
+  staging:
+    context: staging-cluster        # context name in ~/.kube/config
+    namespace: staging-workflows
+    runtime_class: gvisor
+
+  # Example: kubeconfig with explicit context (multi-context kubeconfig files)
   prod:
-    kubeconfig: ~/dev-secrets/prod.kubeconfig  # explicit kubeconfig file path
-    # context: Default              # optional context within the kubeconfig
+    kubeconfig: ~/dev-secrets/kubeconfigs/prod.kubeconfig
+    context: prod-admin             # select a specific context within the file
     namespace: tentacular
     runtime_class: gvisor
     image: ghcr.io/randybias/tentacular-engine:latest

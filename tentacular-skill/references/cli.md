@@ -73,6 +73,38 @@ Without an explicit environment `image`, deploy/test-live may
 fall back to `<workflow-dir>/.tentacular/base-image.txt` or
 the internal default `tentacular-engine:latest`.
 
+### Cluster Access per Environment
+
+Each environment can specify cluster access using **either**
+`kubeconfig` or `context` (or both):
+
+| Field | Description |
+|-------|-------------|
+| `kubeconfig` | Path to a standalone kubeconfig file. `~` is expanded to home directory. |
+| `context` | Context name. With `kubeconfig`: selects a context within that file. Without: selects a context in the default kubeconfig (`~/.kube/config` or `$KUBECONFIG`). |
+
+If neither is set, the default kubeconfig and current context
+are used.
+
+```yaml
+environments:
+  # Dedicated kubeconfig file (recommended for multi-cluster)
+  dev:
+    kubeconfig: ~/dev-secrets/kubeconfigs/dev.kubeconfig
+    namespace: tentacular-dev
+
+  # Context in default kubeconfig (simpler single-cluster)
+  staging:
+    context: staging-cluster
+    namespace: staging-workflows
+
+  # Both: specific context within a specific kubeconfig file
+  prod:
+    kubeconfig: ~/dev-secrets/kubeconfigs/prod.kubeconfig
+    context: prod-admin
+    namespace: tentacular-prod
+```
+
 ## Visualization Reference
 
 `tntc visualize` generates workflow diagrams. The
