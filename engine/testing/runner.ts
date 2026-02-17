@@ -15,14 +15,16 @@ import type { WorkflowSpec, Context } from "../types.ts";
 import { compile } from "../compiler/mod.ts";
 import { SimpleExecutor } from "../executor/simple.ts";
 import { loadAllNodes, loadNode } from "../loader.ts";
-import { createMockContext } from "./mocks.ts";
+import { createMockContext, type MockContext } from "./mocks.ts";
 import { loadFixture, findFixtures } from "./fixtures.ts";
 import type { NodeRunner } from "../executor/types.ts";
 import { createContext } from "../context/mod.ts";
+import { detectDrift, formatDriftReport } from "./drift.ts";
 
 const flags = parseFlags(Deno.args, {
-  string: ["workflow", "node"],
-  boolean: ["pipeline"],
+  string: ["workflow", "node", "o"],
+  boolean: ["pipeline", "warn"],
+  alias: { o: "output" },
 });
 
 const workflowPath = flags.workflow;
@@ -45,6 +47,8 @@ interface TestResult {
 }
 
 const results: TestResult[] = [];
+// Track all contexts for aggregated drift detection
+const testContexts: MockContext[] = [];
 
 if (flags.node) {
   // Run tests for a specific node
@@ -59,27 +63,70 @@ if (flags.node) {
   }
 }
 
-// Print results
-console.log("\n─── Test Results ───");
-let allPassed = true;
-for (const r of results) {
-  const icon = r.passed ? "✓" : "✗";
-  const time = `(${r.durationMs}ms)`;
-  console.log(`  ${icon} ${r.name} ${time}`);
-  if (!r.passed) {
-    allPassed = false;
-    if (r.error) console.log(`    ${r.error}`);
+// Analyze drift
+const driftReport = aggregateContextsAndDetectDrift();
+
+// Output results
+const jsonOutput = flags.output === "json" || flags.o === "json";
+if (jsonOutput) {
+  console.log(JSON.stringify({
+    testResults: results,
+    drift: driftReport,
+  }, null, 2));
+} else {
+  // Print test results
+  console.log("\n─── Test Results ───");
+  let allPassed = true;
+  for (const r of results) {
+    const icon = r.passed ? "✓" : "✗";
+    const time = `(${r.durationMs}ms)`;
+    console.log(`  ${icon} ${r.name} ${time}`);
+    if (!r.passed) {
+      allPassed = false;
+      if (r.error) console.log(`    ${r.error}`);
+    }
+  }
+
+  const passCount = results.filter((r) => r.passed).length;
+  console.log(`\n${passCount}/${results.length} tests passed`);
+
+  // Print drift report
+  if (spec.contract) {
+    console.log("\n" + formatDriftReport(driftReport));
+    if (driftReport.summary.hasViolations) {
+      const severity = flags.warn ? "⚠️  AUDIT MODE" : "❌ STRICT MODE";
+      console.log(`\n${severity}: Contract violations detected`);
+      if (flags.warn) {
+        console.log("Violations logged as warnings (use strict mode in CI)");
+      }
+    }
+  }
+
+  // Exit with failure only in strict mode
+  const shouldFail = !allPassed || (driftReport.summary.hasViolations && !flags.warn);
+  if (shouldFail) {
+    Deno.exit(1);
   }
 }
 
-const passCount = results.filter((r) => r.passed).length;
-console.log(`\n${passCount}/${results.length} tests passed`);
-
-if (!allPassed) {
-  Deno.exit(1);
-}
-
 // ---
+
+function aggregateContextsAndDetectDrift() {
+  // Merge all test contexts into a single aggregate for drift detection
+  const aggregateCtx = createMockContext({ contract: spec.contract });
+
+  for (const ctx of testContexts) {
+    // Merge dependency accesses
+    aggregateCtx._dependencyAccesses.push(...ctx._dependencyAccesses);
+    // Merge direct fetch calls
+    aggregateCtx._fetchCalls.push(...ctx._fetchCalls);
+    // Merge secrets accesses
+    aggregateCtx._secretsAccesses.push(...ctx._secretsAccesses);
+  }
+
+  // Use the proper drift detection module
+  return detectDrift(aggregateCtx, spec.contract);
+}
 
 async function runNodeTests(nodeName: string) {
   const nodeSpec = spec.nodes[nodeName];
@@ -113,8 +160,12 @@ async function runNodeTests(nodeName: string) {
       const ctx = createMockContext({
         config: fixture.config ?? {},
         secrets: fixture.secrets ?? {},
+        contract: spec.contract,
       });
       const output = await fn(ctx, fixture.input);
+
+      // Collect context for drift detection
+      testContexts.push(ctx);
 
       if (fixture.expected !== undefined) {
         const outputStr = JSON.stringify(output);

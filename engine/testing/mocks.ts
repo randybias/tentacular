@@ -29,13 +29,20 @@ export interface MockContext extends Context {
   _setDependency(name: string, dep: DependencyConnection): void;
 }
 
+interface CreateMockContextOptions {
+  config?: Record<string, unknown>;
+  secrets?: Record<string, Record<string, string>>;
+  contract?: { version: string; dependencies: Record<string, unknown> };
+}
+
 /** Create a mock Context for testing nodes in isolation */
-export function createMockContext(overrides?: Partial<Context>): MockContext {
+export function createMockContext(options?: CreateMockContextOptions): MockContext {
   const logs: LogEntry[] = [];
   const dependencyAccesses: DependencyAccess[] = [];
   const fetchCalls: { service: string; path: string }[] = [];
   const secretsAccesses: string[] = [];
   const mockDependencies = new Map<string, DependencyConnection>();
+  const contractSpec = options?.contract;
 
   const logger: Logger = {
     info(msg: string, ...args: unknown[]) {
@@ -78,18 +85,85 @@ export function createMockContext(overrides?: Partial<Context>): MockContext {
         dependencyAccesses.push(access);
       }
 
-      // Return registered mock or create default mock
+      // Check if contract declares this dependency (for strict enforcement)
+      if (contractSpec && !contractSpec.dependencies[name]) {
+        throw new Error(
+          `Dependency "${name}" not declared in contract. Add it to workflow.yaml contract.dependencies.`
+        );
+      }
+
+      // Return registered mock or resolve from contract
       const mockDep = mockDependencies.get(name);
       if (mockDep) {
         return mockDep;
       }
 
-      // Default mock dependency
+      // Resolve from contract if available
+      if (contractSpec && contractSpec.dependencies[name]) {
+        const depSpec = contractSpec.dependencies[name] as {
+          protocol: string;
+          host: string;
+          port?: number;
+          auth?: { type: string; secret: string };
+          database?: string;
+          user?: string;
+          subject?: string;
+          container?: string;
+        };
+
+        // Apply default ports based on protocol
+        const defaultPorts: Record<string, number> = {
+          https: 443,
+          http: 80,
+          postgresql: 5432,
+          nats: 4222,
+          blob: 443,
+        };
+        const port = depSpec.port ?? defaultPorts[depSpec.protocol] ?? 443;
+
+        // Resolve secret value from dot-notation key path
+        // e.g. "github.token" → options.secrets["github"]["token"]
+        let resolvedSecret: string | undefined;
+        if (depSpec.auth?.secret && options?.secrets) {
+          const parts = depSpec.auth.secret.split(".");
+          if (parts.length === 2 && parts[0] && parts[1]) {
+            resolvedSecret = options.secrets[parts[0]]?.[parts[1]];
+          }
+        }
+
+        // Build dependency connection from contract spec
+        const isHttpLike = depSpec.protocol === "https" || depSpec.protocol === "http";
+        const contractDep: DependencyConnection = {
+          protocol: depSpec.protocol,
+          host: depSpec.host,
+          port,
+          authType: depSpec.auth?.type,
+          secret: resolvedSecret,
+          database: depSpec.database,
+          user: depSpec.user,
+          subject: depSpec.subject,
+          container: depSpec.container,
+        };
+
+        // Add fetch convenience method for HTTP-like dependencies
+        if (isHttpLike) {
+          contractDep.fetch = async (path: string, _init?: RequestInit): Promise<Response> => {
+            access!.fetches.push(path);
+            return new Response(JSON.stringify({ mock: true, dependency: name, path }), {
+              headers: { "content-type": "application/json" },
+            });
+          };
+        }
+
+        return contractDep;
+      }
+
+      // Fallback to default mock if no contract
       const defaultMock: DependencyConnection = {
         protocol: "https",
         host: `mock-${name}.example.com`,
         port: 443,
-        authType: "bearer-token",
+        authType: "test-auth",
         secret: undefined,
         fetch: async (path: string, _init?: RequestInit): Promise<Response> => {
           access!.fetches.push(path);
@@ -113,20 +187,10 @@ export function createMockContext(overrides?: Partial<Context>): MockContext {
     },
   };
 
-  // Apply overrides without clobbering dependency tracking wrapper or internal fields
-  if (overrides) {
-    if (overrides.config) ctx.config = overrides.config;
-    if (overrides.secrets) ctx.secrets = overrides.secrets;
-    if (overrides.log) ctx.log = overrides.log;
-    // fetch override wraps to preserve tracking
-    if (overrides.fetch) {
-      const originalOverrideFetch = overrides.fetch;
-      ctx.fetch = async (service: string, path: string, init?: RequestInit) => {
-        fetchCalls.push({ service, path });
-        return originalOverrideFetch(service, path, init);
-      };
-    }
-    // dependency() is never overridden — drift detection tracking must be preserved
+  // Apply options
+  if (options) {
+    if (options.config) ctx.config = options.config;
+    if (options.secrets) ctx.secrets = options.secrets;
   }
 
   // Wrap secrets in a recording Proxy for bypass detection
