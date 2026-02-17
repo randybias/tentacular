@@ -10,7 +10,7 @@ Complete reference for the Tentacular `workflow.yaml` format.
 | `version` | string | Yes | Semver format: `MAJOR.MINOR` (e.g., `"1.0"`, `"2.3"`). Regex: `^[0-9]+\.[0-9]+$` |
 | `description` | string | No | Human-readable description |
 | `triggers` | array | Yes | At least one trigger. Defines how the workflow is invoked. |
-| `contract` | object | Yes | Contract declaration. Must include `version` and `dependencies`. See [SKILL.md Contract Model](../SKILL.md#contract-model). |
+| `contract` | object | Yes | Contract declaration. Must include `version` and `dependencies`. See [Contract Reference](contract.md). |
 | `nodes` | map | Yes | At least one node. Keys are node names matching `^[a-z][a-z0-9_-]*$`. |
 | `edges` | array | Yes | Data flow edges between nodes. Can be empty `[]` for single-node workflows. |
 | `config` | object | No | Workflow-level configuration (timeout, retries). Business-logic only -- connection metadata belongs in `contract.dependencies`. |

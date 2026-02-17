@@ -48,9 +48,9 @@ NetworkPolicy SHALL be derived from dependency hosts/ports (egress) and trigger 
 - **WHEN** a workflow has a `webhook` trigger
 - **THEN** derived ingress policy SHALL allow traffic on the webhook trigger port
 
-#### Scenario: No ingress for non-webhook triggers
+#### Scenario: Label-scoped ingress for non-webhook triggers
 - **WHEN** a workflow has only `cron`, `manual`, or `queue` triggers
-- **THEN** derived ingress policy SHALL deny all ingress
+- **THEN** derived ingress policy SHALL allow only pods with label `tentacular.dev/role: trigger` on port 8080
 
 ### Requirement: Optional network policy overrides
 The contract SHALL support optional `networkPolicy.additionalEgress` for edge cases not derivable from dependencies.
@@ -75,6 +75,14 @@ Version 1 of the contract schema SHALL support a defined set of protocols with p
 - **WHEN** a dependency omits `port`
 - **THEN** parser SHALL apply the protocol's default port value
 
+### Requirement: Dynamic-target dependency type
+Dependencies with runtime-determined targets SHALL declare `type: "dynamic-target"` with explicit CIDR and port constraints.
+
+#### Scenario: Dynamic-target dependency declared
+- **WHEN** a dependency declares `type: "dynamic-target"`
+- **THEN** `cidr` and `dynPorts` fields SHALL be required
+- **AND** host/port validation SHALL be skipped
+
 ### Requirement: Explicit host declarations (no wildcards)
 Dependency host values SHALL be explicit hostnames. Wildcard patterns are rejected in v1.
 
@@ -85,9 +93,9 @@ Dependency host values SHALL be explicit hostnames. Wildcard patterns are reject
 ### Requirement: Auth type declarations
 Each dependency auth block SHALL declare a `type` field indicating how auth is applied. The `authType` is exposed to nodes via `ctx.dependency()`.
 
-#### Scenario: Supported auth types
+#### Scenario: Auth type field is open-ended
 - **GIVEN** contract version "1"
-- **THEN** the supported auth types SHALL be: `bearer-token`, `api-key`, `sas-token`, `password`, `webhook-url`
+- **THEN** common auth type examples include: `bearer-token`, `api-key`, `sas-token`, `password`, `webhook-url`. The set is open; any string is accepted.
 
 ### Requirement: Extensibility namespace
 The contract SHALL support `x-*` extension fields for provider-specific metadata without breaking core schema validation.

@@ -62,9 +62,8 @@ contract:
   # Optional: override derived policy for edge cases
   # networkPolicy:
   #   additionalEgress:
-  #     - cidr: 10.0.0.0/8
-  #       port: 8080
-  #       protocol: TCP
+  #     - toCIDR: 10.0.0.0/8
+  #       ports: ["8080/TCP"]
   #       reason: "internal service mesh"
 ```
 
@@ -92,17 +91,7 @@ const pg = ctx.dependency("postgres");
 // pg.authType is "password" (from contract auth.type)
 ```
 
-For HTTPS dependencies, the returned `DependencyConnection` includes a convenience `fetch(path, init?)` method that auto-injects auth headers based on `authType`:
-
-```typescript
-const gh = ctx.dependency("github-api");
-// gh.authType is "bearer-token" -> fetch auto-sets Authorization: Bearer <secret>
-const resp = await gh.fetch("/repos/org/repo/issues");
-
-const blob = ctx.dependency("azure-blob");
-// blob.authType is "sas-token" -> fetch auto-appends SAS token to URL query
-const resp2 = await blob.fetch("/container/report.html", { method: "PUT", body: html });
-```
+For HTTPS dependencies, the returned `DependencyConnection` includes a convenience `fetch(path, init?)` method that builds the full URL from the dependency's host and port. It does not inject any auth headers automatically. Nodes are responsible for setting auth headers explicitly using `dep.secret` and `dep.authType`.
 
 `DependencyConnection` fields:
 - `protocol`: string — the dependency protocol (https, postgresql, nats, blob)
@@ -111,7 +100,7 @@ const resp2 = await blob.fetch("/container/report.html", { method: "PUT", body: 
 - `secret`: string — the resolved secret value (eagerly resolved at call time)
 - `authType`: string — the auth type from contract (bearer-token, api-key, sas-token, password, webhook-url)
 - Protocol-specific fields: `database`, `user` (postgresql); `subject` (nats); `container` (blob)
-- `fetch(path, init?)`: async method (HTTPS deps only) — makes HTTP request with auto-injected auth
+- `fetch(path, init?)`: async method (HTTPS deps only) — URL builder for HTTPS deps (no auth injection)
 
 This replaces the current pattern where nodes manually assemble connection strings from `ctx.config` + `ctx.secrets`. Nodes become simpler and contract-aware by default.
 
@@ -135,7 +124,7 @@ Rationale: no fragile TypeScript static analysis. Runtime tracing is accurate an
 - **Default-deny egress**: implicit for hardened pod. All egress denied except declared dependencies.
 - **Egress allow rules**: one per dependency (host/port/protocol from contract).
 - **DNS egress**: mandatory UDP/TCP 53 to kube-dns whenever default-deny is active.
-- **Ingress**: derived from trigger type. Webhook trigger → allow ingress on trigger port. Cron/manual/queue → deny all ingress.
+- **Ingress**: derived from trigger type. Webhook trigger → allow ingress on trigger port. Cron/manual/queue → label-scoped ingress (only `tentacular.dev/role: trigger` pods on port 8080).
 - **Optional overrides**: `contract.networkPolicy.additionalEgress` for edge cases (e.g., internal service mesh CIDR blocks).
 
 Rationale: policy is fully derivable. No hand-authoring required for the common case.

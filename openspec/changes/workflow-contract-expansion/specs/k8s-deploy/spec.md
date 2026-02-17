@@ -14,9 +14,9 @@ Generated policy SHALL enforce deny-by-default semantics for both ingress and eg
 - **WHEN** a workflow has a contract with dependencies
 - **THEN** generated policy SHALL deny all egress not matching a dependency-derived allow rule
 
-#### Scenario: Ingress deny-by-default for non-webhook
+#### Scenario: Label-scoped ingress for non-webhook
 - **WHEN** a workflow has no webhook trigger
-- **THEN** generated policy SHALL deny all ingress
+- **THEN** generated policy SHALL allow ingress only from pods matching label `tentacular.dev/role: trigger` on port 8080
 
 ### Requirement: Mandatory DNS egress
 Generated policy SHALL always include DNS egress rules for cluster DNS resolution.
@@ -46,6 +46,13 @@ When `contract.networkPolicy.additionalEgress` entries exist, they SHALL be merg
 #### Scenario: CIDR-based additional egress
 - **WHEN** an additional egress entry specifies a CIDR block and port
 - **THEN** generated policy SHALL include that CIDR/port as an additional egress allow rule
+
+### Requirement: Dynamic-target CIDR egress
+When a dependency has `type: "dynamic-target"`, the generated egress SHALL use the declared CIDR and port constraints.
+
+#### Scenario: Dynamic-target CIDR egress rule
+- **WHEN** a dependency has `type: "dynamic-target"` with `cidr` and `dynPorts`
+- **THEN** generated egress SHALL use ipBlock with the declared CIDR and port constraints
 
 ### Requirement: Contract-aware deployment validation gate
 Deploy SHALL fail when strict enforcement is active and contract validation fails.

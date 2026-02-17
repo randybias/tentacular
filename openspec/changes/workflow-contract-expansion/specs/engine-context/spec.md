@@ -12,17 +12,10 @@ The Context interface SHALL provide a `dependency(name)` method that returns con
 - **WHEN** a node calls `ctx.dependency("github-api")`
 - **THEN** the returned object SHALL contain `host`, `port`, `protocol: "https"`, `authType: "bearer-token"`, `secret` (resolved auth token), and a `fetch(path, init?)` convenience method
 
-#### Scenario: HTTPS dependency fetch with auto-injected auth
-- **WHEN** a node calls `dep.fetch("/repos/org/repo")` on an HTTPS dependency with `authType: "bearer-token"`
-- **THEN** the fetch SHALL auto-inject `Authorization: Bearer <secret>` header and make the request to `https://<host>:<port><path>`
-
-#### Scenario: HTTPS dependency fetch with api-key auth
-- **WHEN** a node calls `dep.fetch("/endpoint")` on an HTTPS dependency with `authType: "api-key"`
-- **THEN** the fetch SHALL auto-inject `X-API-Key: <secret>` header
-
-#### Scenario: HTTPS dependency fetch with sas-token auth
-- **WHEN** a node calls `dep.fetch("/container/blob")` on an HTTPS dependency with `authType: "sas-token"`
-- **THEN** the fetch SHALL auto-append the SAS token as a URL query parameter
+#### Scenario: HTTPS dependency fetch builds URL without auth injection
+- **WHEN** a node calls `dep.fetch("/path")` on an HTTPS dependency
+- **THEN** the fetch SHALL build the URL as `https://<host>:<port>/path` without injecting any auth headers
+- **AND** the node SHALL use `dep.secret` and `dep.authType` to set auth explicitly
 
 #### Scenario: Undeclared dependency access
 - **WHEN** a node calls `ctx.dependency("unknown-service")`
