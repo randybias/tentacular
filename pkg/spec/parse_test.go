@@ -506,7 +506,7 @@ contract:
 	}
 }
 
-func TestParseContractInvalidProtocol(t *testing.T) {
+func TestParseContractUnknownProtocol(t *testing.T) {
 	yaml := `
 name: test-wf
 version: "1.0"
@@ -517,23 +517,23 @@ nodes:
     path: ./nodes/fetch.ts
 edges: []
 contract:
+  version: "1"
   dependencies:
     api:
       protocol: grpc
       host: api.example.com
 `
-	_, errs := Parse([]byte(yaml))
-	if len(errs) == 0 {
-		t.Fatal("expected error for invalid protocol")
+	wf, errs := Parse([]byte(yaml))
+	// Unknown protocols now log warnings but don't block parsing
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
 	}
-	found := false
-	for _, e := range errs {
-		if strings.Contains(e, "invalid protocol") {
-			found = true
-		}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
 	}
-	if !found {
-		t.Errorf("expected invalid protocol error, got: %v", errs)
+	dep := wf.Contract.Dependencies["api"]
+	if dep.Protocol != "grpc" {
+		t.Errorf("expected protocol grpc to be preserved, got %s", dep.Protocol)
 	}
 }
 
@@ -626,5 +626,200 @@ edges: []
 	}
 	if wf.Contract != nil {
 		t.Error("expected contract to be nil when not present")
+	}
+}
+
+// Test: Open auth model - unknown auth types are accepted
+func TestParseContractUnknownAuthType(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+      auth:
+        type: hmac-sha256
+        secret: api.hmac_key
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors for unknown auth type: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	dep := wf.Contract.Dependencies["api"]
+	if dep.Auth == nil || dep.Auth.Type != "hmac-sha256" {
+		t.Errorf("expected auth type hmac-sha256, got %v", dep.Auth)
+	}
+}
+
+// Test: Custom OAuth auth type
+func TestParseContractCustomOAuthType(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    oauth-api:
+      protocol: https
+      host: oauth.example.com
+      auth:
+        type: custom-oauth2
+        secret: oauth.credentials
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors for custom auth type: %v", errs)
+	}
+	dep := wf.Contract.Dependencies["oauth-api"]
+	if dep.Auth == nil || dep.Auth.Type != "custom-oauth2" {
+		t.Errorf("expected auth type custom-oauth2, got %v", dep.Auth)
+	}
+}
+
+// Test: Multiple custom auth types in same workflow
+func TestParseContractMultipleCustomAuthTypes(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    hmac-api:
+      protocol: https
+      host: api1.example.com
+      auth:
+        type: hmac-sha256
+        secret: api1.key
+    oauth-api:
+      protocol: https
+      host: api2.example.com
+      auth:
+        type: oauth2-client-credentials
+        secret: oauth.client_secret
+    basic-api:
+      protocol: https
+      host: api3.example.com
+      auth:
+        type: basic-auth
+        secret: basic.password
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	if len(wf.Contract.Dependencies) != 3 {
+		t.Fatalf("expected 3 dependencies, got %d", len(wf.Contract.Dependencies))
+	}
+
+	// Verify all auth types are preserved
+	hmac := wf.Contract.Dependencies["hmac-api"]
+	if hmac.Auth == nil || hmac.Auth.Type != "hmac-sha256" {
+		t.Errorf("expected hmac-sha256 auth type, got %v", hmac.Auth)
+	}
+
+	oauth := wf.Contract.Dependencies["oauth-api"]
+	if oauth.Auth == nil || oauth.Auth.Type != "oauth2-client-credentials" {
+		t.Errorf("expected oauth2-client-credentials auth type, got %v", oauth.Auth)
+	}
+
+	basic := wf.Contract.Dependencies["basic-api"]
+	if basic.Auth == nil || basic.Auth.Type != "basic-auth" {
+		t.Errorf("expected basic-auth auth type, got %v", basic.Auth)
+	}
+}
+
+// Test: Empty auth type is rejected
+func TestParseContractEmptyAuthType(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    api:
+      protocol: https
+      host: api.example.com
+      auth:
+        type: ""
+        secret: api.token
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for empty auth type")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "auth.type is required") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'auth.type is required' error, got: %v", errs)
+	}
+}
+
+// Test: Unknown protocol skips protocol-specific field validation
+func TestParseContractUnknownProtocolSkipsFieldValidation(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    grpc-api:
+      protocol: grpc
+      host: grpc.example.com
+      # Missing grpc-specific fields, but should not error
+`
+	wf, errs := Parse([]byte(yaml))
+	// Unknown protocol should warn but not error, even with missing fields
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors for unknown protocol: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	dep := wf.Contract.Dependencies["grpc-api"]
+	if dep.Protocol != "grpc" {
+		t.Errorf("expected protocol grpc, got %s", dep.Protocol)
 	}
 }

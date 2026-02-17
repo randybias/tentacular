@@ -110,7 +110,7 @@ Deno.test("dependency() throws when no contract", () => {
   );
 });
 
-Deno.test("dependency().fetch() auto-injects bearer token", async () => {
+Deno.test("dependency().fetch() builds correct URL without auth headers", async () => {
   const contract: ContractSpec = {
     dependencies: {
       "github-api": {
@@ -134,7 +134,7 @@ Deno.test("dependency().fetch() auto-injects bearer token", async () => {
   const ctx = createContext({ contract, secrets });
   const dep = ctx.dependency("github-api");
 
-  // Mock globalThis.fetch to verify headers
+  // Mock globalThis.fetch to verify URL and lack of auth headers
   const originalFetch = globalThis.fetch;
   let capturedHeaders: Headers | undefined;
   let capturedUrl: string | undefined;
@@ -149,13 +149,13 @@ Deno.test("dependency().fetch() auto-injects bearer token", async () => {
     await dep.fetch!("/repos/test/repo");
 
     assertEquals(capturedUrl, "https://api.github.com:443/repos/test/repo");
-    assertEquals(capturedHeaders?.get("Authorization"), "Bearer ghp_test123");
+    assertEquals(capturedHeaders?.get("Authorization"), null); // No auto-injection
   } finally {
     globalThis.fetch = originalFetch;
   }
 });
 
-Deno.test("dependency().fetch() auto-injects API key", async () => {
+Deno.test("dependency().secret is available for explicit auth", () => {
   const contract: ContractSpec = {
     dependencies: {
       "external-api": {
@@ -178,59 +178,35 @@ Deno.test("dependency().fetch() auto-injects API key", async () => {
   const ctx = createContext({ contract, secrets });
   const dep = ctx.dependency("external-api");
 
-  const originalFetch = globalThis.fetch;
-  let capturedHeaders: Headers | undefined;
-
-  globalThis.fetch = async (_input: string | URL | Request, init?: RequestInit) => {
-    capturedHeaders = new Headers(init?.headers);
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
-  };
-
-  try {
-    await dep.fetch!("/endpoint");
-    assertEquals(capturedHeaders?.get("X-API-Key"), "key_12345");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assertEquals(dep.secret, "key_12345");
+  assertEquals(dep.authType, "api-key");
 });
 
-Deno.test("dependency().fetch() appends SAS token as query param", async () => {
+Deno.test("dependency() accepts any auth type", () => {
   const contract: ContractSpec = {
     dependencies: {
-      "azure-blob": {
+      "custom-service": {
         protocol: "https",
-        host: "storage.blob.core.windows.net",
+        host: "api.custom.com",
         auth: {
-          type: "sas-token",
-          secret: "azure.sas_token",
+          type: "custom-oauth2-flow",
+          secret: "custom.token",
         },
       },
     },
   };
 
   const secrets = {
-    azure: {
-      sas_token: "sv=2023&sig=abc123",
+    custom: {
+      token: "custom_secret",
     },
   };
 
   const ctx = createContext({ contract, secrets });
-  const dep = ctx.dependency("azure-blob");
+  const dep = ctx.dependency("custom-service");
 
-  const originalFetch = globalThis.fetch;
-  let capturedUrl: string | undefined;
-
-  globalThis.fetch = async (input: string | URL | Request) => {
-    capturedUrl = typeof input === "string" ? input : input.toString();
-    return new Response(JSON.stringify({ ok: true }), { status: 200 });
-  };
-
-  try {
-    await dep.fetch!("/container/blob");
-    assertEquals(capturedUrl, "https://storage.blob.core.windows.net:443/container/blob?sv=2023&sig=abc123");
-  } finally {
-    globalThis.fetch = originalFetch;
-  }
+  assertEquals(dep.authType, "custom-oauth2-flow");
+  assertEquals(dep.secret, "custom_secret");
 });
 
 Deno.test("dependency() handles missing secrets gracefully", () => {

@@ -9,6 +9,28 @@ export interface WorkflowSpec {
   nodes: Record<string, NodeSpec>;
   edges: Edge[];
   config?: WorkflowConfig;
+  contract?: ContractSpec;
+}
+
+/** Contract specification for external dependencies */
+export interface ContractSpec {
+  version: string;
+  dependencies: Record<string, DependencySpec>;
+}
+
+export interface DependencySpec {
+  protocol: string;
+  host: string;
+  port?: number;
+  auth?: {
+    type: string;
+    secret: string;
+  };
+  // Protocol-specific fields
+  database?: string;
+  user?: string;
+  subject?: string;
+  container?: string;
 }
 
 export interface Trigger {
@@ -99,10 +121,10 @@ export interface Logger {
 
 /** Dependency connection metadata resolved from contract */
 export interface DependencyConnection {
-  protocol: "https" | "postgresql" | "nats" | "blob";
+  protocol: string;
   host: string;
   port: number;
-  authType?: "bearer-token" | "api-key" | "sas-token" | "password";
+  authType?: string;
   secret?: string;
   // Protocol-specific fields
   database?: string; // postgresql

@@ -11,11 +11,11 @@ export interface ContractSpec {
 }
 
 export interface DependencySpec {
-  protocol: "https" | "postgresql" | "nats" | "blob";
+  protocol: string;
   host: string;
   port?: number;
   auth?: {
-    type: "bearer-token" | "api-key" | "sas-token" | "password" | "webhook-url";
+    type: string;
     secret: string; // "service.key" format
   };
   // Protocol-specific fields

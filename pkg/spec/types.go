@@ -82,7 +82,7 @@ type Dependency struct {
 
 // DependencyAuth specifies authentication for a dependency.
 type DependencyAuth struct {
-	Type   string `yaml:"type"`   // bearer-token, api-key, sas-token, password, webhook-url
+	Type   string `yaml:"type"`   // any string identifying the auth mechanism
 	Secret string `yaml:"secret"` // Must be in "service.key" format
 }
 

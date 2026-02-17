@@ -2,6 +2,7 @@ package spec
 
 import (
 	"fmt"
+	"log"
 	"regexp"
 
 	"gopkg.in/yaml.v3"
@@ -26,14 +27,6 @@ var validProtocols = map[string]bool{
 	"postgresql": true,
 	"nats":       true,
 	"blob":       true,
-}
-
-var validAuthTypes = map[string]bool{
-	"bearer-token": true,
-	"api-key":      true,
-	"sas-token":    true,
-	"password":     true,
-	"webhook-url":  true,
 }
 
 var protocolDefaultPorts = map[string]int{
@@ -127,7 +120,7 @@ func Parse(data []byte) (*Workflow, []string) {
 
 	// Contract validation (optional section)
 	if wf.Contract != nil {
-		if contractErrs := validateContract(wf.Contract); len(contractErrs) > 0 {
+		if contractErrs := ValidateContract(wf.Contract); len(contractErrs) > 0 {
 			errs = append(errs, contractErrs...)
 		}
 	}
@@ -182,8 +175,9 @@ func checkCycles(wf *Workflow) []string {
 	return errs
 }
 
-// validateContract validates contract section including dependencies and network policy overrides.
-func validateContract(c *Contract) []string {
+// ValidateContract validates contract section including dependencies and network policy overrides.
+// Exported for use in deploy preflight checks.
+func ValidateContract(c *Contract) []string {
 	var errs []string
 
 	// Validate contract version
@@ -218,8 +212,7 @@ func validateContract(c *Contract) []string {
 			continue
 		}
 		if !validProtocols[dep.Protocol] {
-			errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: invalid protocol %q (must be https, postgresql, nats, or blob)", name, dep.Protocol))
-			continue
+			log.Printf("Warning: contract.dependencies[%q]: unknown protocol %q (known protocols: https, postgresql, nats, blob)", name, dep.Protocol)
 		}
 
 		// Protocol-specific field validation
@@ -258,8 +251,6 @@ func validateContract(c *Contract) []string {
 		if dep.Auth != nil {
 			if dep.Auth.Type == "" {
 				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.type is required when auth is present", name))
-			} else if !validAuthTypes[dep.Auth.Type] {
-				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: invalid auth.type %q (must be bearer-token, api-key, sas-token, password, or webhook-url)", name, dep.Auth.Type))
 			}
 			if dep.Auth.Secret == "" {
 				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))

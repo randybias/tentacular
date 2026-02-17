@@ -135,7 +135,12 @@ export default async function run(ctx: Context, input: unknown): Promise<StoreRe
     ctx.log.info(`Uploading report to Azure Blob Storage: ${blobName}`);
 
     try {
-      const uploadRes = await azureBlob.fetch!(uploadPath, {
+      // For SAS token auth, append token as query parameter
+      const sasToken = azureBlob.secret || "";
+      const separator = uploadPath.includes("?") ? "&" : "?";
+      const uploadPathWithSas = `${uploadPath}${separator}${sasToken}`;
+
+      const uploadRes = await azureBlob.fetch!(uploadPathWithSas, {
         method: "PUT",
         headers: {
           "Content-Type": "text/html; charset=utf-8",

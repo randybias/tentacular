@@ -123,6 +123,7 @@ Write a concise daily health report (3-5 bullet points). Flag any concerning tre
     headers: {
       "Content-Type": "application/json",
       "anthropic-version": "2023-06-01",
+      "x-api-key": anthropic.secret || "",
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",

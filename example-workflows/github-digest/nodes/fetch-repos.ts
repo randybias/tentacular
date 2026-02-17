@@ -18,7 +18,9 @@ export default async function run(ctx: Context, _input: unknown): Promise<{ repo
   ctx.log.info("Fetching GitHub repositories");
 
   const github = ctx.dependency("github");
-  const response = await github.fetch!("/users/denoland/repos?sort=stars&per_page=5");
+  const response = await github.fetch!("/users/denoland/repos?sort=stars&per_page=5", {
+    headers: { "Authorization": `Bearer ${github.secret}` },
+  });
   const data = await response.json();
 
   const repos: RepoData[] = Array.isArray(data)

@@ -491,8 +491,23 @@ contract:
       host: api.example.com
 `
 	_, errs := Parse([]byte(yaml))
-	if len(errs) < 3 {
-		t.Fatalf("expected at least 3 errors (database, user, invalid protocol), got %d: %v", len(errs), errs)
+	// Unknown protocols now log warnings instead of errors, so expect only 2 errors (database, user)
+	if len(errs) < 2 {
+		t.Fatalf("expected at least 2 errors (database, user), got %d: %v", len(errs), errs)
+	}
+	// Verify we get the expected postgresql errors
+	foundDatabase := false
+	foundUser := false
+	for _, e := range errs {
+		if strings.Contains(e, "database") {
+			foundDatabase = true
+		}
+		if strings.Contains(e, "user") {
+			foundUser = true
+		}
+	}
+	if !foundDatabase || !foundUser {
+		t.Errorf("expected database and user errors, got: %v", errs)
 	}
 }
 

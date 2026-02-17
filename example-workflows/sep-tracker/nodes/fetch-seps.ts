@@ -59,7 +59,9 @@ export default async function run(ctx: Context, input: unknown): Promise<SepSnap
   ctx.log.info(`Fetching PRs from ${repo}`);
 
   const github = ctx.dependency("github");
-  const res = await github.fetch!(`/repos/${repo}/pulls?state=open&per_page=100`);
+  const res = await github.fetch!(`/repos/${repo}/pulls?state=open&per_page=100`, {
+    headers: { "Authorization": `Bearer ${github.secret}` },
+  });
   if (!res.ok) {
     throw new Error(`GitHub API returned ${res.status} ${res.statusText}`);
   }
