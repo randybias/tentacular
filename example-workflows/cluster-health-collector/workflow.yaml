@@ -28,3 +28,16 @@ config:
   pg_port: 30432
   pg_database: "appdb"
   pg_user: "postgres"
+
+contract:
+  version: "1"
+  dependencies:
+    postgres:
+      protocol: postgresql
+      host: postgres-postgresql.postgres.svc.cluster.local
+      port: 5432
+      database: appdb
+      user: postgres
+      auth:
+        type: password
+        secret: postgres.password

@@ -104,8 +104,8 @@ ${problemSample ? `Recent problem pods:\n${problemSample}` : "No problem pods in
 
 Write a concise daily health report (3-5 bullet points). Flag any concerning trends. If everything looks healthy, say so briefly. Be specific with numbers. Do not use markdown headers.`;
 
-  const apiKey = ctx.secrets?.anthropic?.api_key;
-  if (!apiKey) {
+  const anthropic = ctx.dependency("anthropic");
+  if (!anthropic.secret) {
     ctx.log.warn("No anthropic.api_key in secrets — falling back to stats-only summary");
     const fallback = [
       `Period: ${history.periodStart} to ${history.periodEnd} (${history.snapshotCount} snapshots)`,
@@ -118,12 +118,11 @@ Write a concise daily health report (3-5 bullet points). Flag any concerning tre
 
   ctx.log.info("Analyzing trends with Claude");
 
-  const response = await ctx.fetch("anthropic", "https://api.anthropic.com/v1/messages", {
+  const response = await anthropic.fetch!("/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "anthropic-version": "2023-06-01",
-      "x-api-key": apiKey,
     },
     body: JSON.stringify({
       model: "claude-haiku-4-5-20251001",

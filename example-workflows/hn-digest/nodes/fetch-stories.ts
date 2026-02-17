@@ -13,7 +13,8 @@ interface Story {
 export default async function run(ctx: Context, _input: unknown): Promise<{ stories: Story[] }> {
   ctx.log.info("Fetching top stories from Hacker News");
 
-  const topRes = await ctx.fetch("hn", "https://hacker-news.firebaseio.com/v0/topstories.json");
+  const hn = ctx.dependency("hn");
+  const topRes = await hn.fetch!("/v0/topstories.json");
   const topIds: number[] = await topRes.json();
   if (!Array.isArray(topIds)) return { stories: [] };
 
@@ -22,7 +23,7 @@ export default async function run(ctx: Context, _input: unknown): Promise<{ stor
   const stories: Story[] = [];
 
   for (const id of storyIds) {
-    const res = await ctx.fetch("hn", `https://hacker-news.firebaseio.com/v0/item/${id}.json`);
+    const res = await hn.fetch!(`/v0/item/${id}.json`);
     const item = await res.json();
     stories.push({
       id: item.id,

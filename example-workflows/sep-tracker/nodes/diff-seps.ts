@@ -62,23 +62,19 @@ function compareSeps(prev: Sep, curr: Sep): string[] | null {
 export default async function run(ctx: Context, input: unknown): Promise<SepDelta> {
   const snapshot = input as SepSnapshot;
 
-  const pgHost = ctx.config.pg_host as string;
-  const pgPort = ctx.config.pg_port as number;
-  const pgDatabase = ctx.config.pg_database as string;
-  const pgUser = ctx.config.pg_user as string;
-  const pgPassword = ctx.secrets?.postgres?.password;
+  const pg = ctx.dependency("postgres");
 
   let previousSeps: Sep[] | null = null;
   let previousTimestamp: string | null = null;
 
-  if (pgPassword) {
-    ctx.log.info(`Connecting to Postgres at ${pgHost}:${pgPort}/${pgDatabase}`);
+  if (pg.secret) {
+    ctx.log.info(`Connecting to Postgres at ${pg.host}:${pg.port}/${pg.database}`);
     const client = new Client({
-      hostname: pgHost,
-      port: pgPort,
-      database: pgDatabase,
-      user: pgUser,
-      password: pgPassword,
+      hostname: pg.host,
+      port: pg.port,
+      database: pg.database,
+      user: pg.user,
+      password: pg.secret,
       tls: { enabled: false },
     });
 
@@ -114,7 +110,7 @@ export default async function run(ctx: Context, input: unknown): Promise<SepDelt
       await client.end();
     }
   } else {
-    ctx.log.warn("No postgres.password in secrets, skipping previous snapshot lookup");
+    ctx.log.warn("No postgres credentials, skipping previous snapshot lookup");
   }
 
   const isFirstRun = previousSeps === null;

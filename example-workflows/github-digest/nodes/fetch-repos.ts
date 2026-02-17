@@ -17,7 +17,8 @@ interface RepoData {
 export default async function run(ctx: Context, _input: unknown): Promise<{ repos: RepoData[] }> {
   ctx.log.info("Fetching GitHub repositories");
 
-  const response = await ctx.fetch("github", "/users/denoland/repos?sort=stars&per_page=5");
+  const github = ctx.dependency("github");
+  const response = await github.fetch!("/users/denoland/repos?sort=stars&per_page=5");
   const data = await response.json();
 
   const repos: RepoData[] = Array.isArray(data)

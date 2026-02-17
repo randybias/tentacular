@@ -429,12 +429,14 @@ nodes:
     path: ./nodes/fetch.ts
 edges: []
 contract:
+  version: "1"
   dependencies:
     github:
       protocol: https
       host: api.github.com
       port: 443
       auth:
+        type: bearer-token
         secret: github.token
 `
 	wf, errs := Parse([]byte(yaml))
@@ -473,6 +475,7 @@ nodes:
     path: ./nodes/fetch.ts
 edges: []
 contract:
+  version: "1"
   dependencies:
     postgres:
       protocol: postgresql
@@ -481,6 +484,7 @@ contract:
       database: appdb
       user: postgres
       auth:
+        type: password
         secret: postgres.password
 `
 	wf, errs := Parse([]byte(yaml))

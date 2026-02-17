@@ -33,7 +33,8 @@ export default async function run(ctx: Context, input: unknown): Promise<Analyze
 PRs:
 ${prList}`;
 
-  const response = await ctx.fetch("anthropic", "https://api.anthropic.com/v1/messages", {
+  const anthropic = ctx.dependency("anthropic");
+  const response = await anthropic.fetch!("/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

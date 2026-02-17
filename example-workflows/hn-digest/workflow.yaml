@@ -21,3 +21,11 @@ edges:
 
 config:
   timeout: 30s
+
+contract:
+  version: "1"
+  dependencies:
+    hn:
+      protocol: https
+      host: hacker-news.firebaseio.com
+      port: 443

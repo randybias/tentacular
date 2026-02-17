@@ -21,9 +21,9 @@ constrained sandbox, without a tool chain or other
 ancillary systems. Only what is needed is deployed into a
 production runtime ([gVisor](https://gvisor.dev/)). In addition, each
 workflow's networking and other access requirements are
-specified in the workflow definition, which allows runtime
-configuration of network policies to lockdown the
-workflow's production access (WORK IN PROGRESS).
+declared in the workflow contract, which drives automatic
+generation of Kubernetes NetworkPolicy to lockdown the
+workflow's production network access.
 
 In tentacular, every node in the DAG is created at build
 time by (you) the coding agent, tested end to end in a
@@ -59,9 +59,9 @@ It is composed of two key components;
 - **Deno/TypeScript Engine** (`engine/`) -- executes
   workflows as DAGs. Compiles workflow.yaml into
   topologically sorted stages, loads TypeScript node
-  modules, runs them with a Context providing fetch,
-  logging, config, and secrets. Exposes HTTP triggers
-  (`POST /run`, `GET /health`).
+  modules, runs them with a Context providing dependency
+  resolution, fetch, logging, config, and secrets.
+  Exposes HTTP triggers (`POST /run`, `GET /health`).
 
 Workflows live in a directory containing a `workflow.yaml`
 and a `nodes/` directory of TypeScript files. Each node is
@@ -72,7 +72,7 @@ a default-exported async function.
 | Command | Usage | Key Flags | Description |
 |---------|-------|-----------|-------------|
 | `init` | `tntc init <name>` | | Scaffold a new workflow directory with workflow.yaml, example node, test fixture, .secrets.yaml.example |
-| `validate` | `tntc validate [dir]` | | Parse and validate workflow.yaml (name, version, triggers, nodes, edges, DAG acyclicity) |
+| `validate` | `tntc validate [dir]` | | Parse and validate workflow.yaml (name, version, triggers, nodes, edges, DAG acyclicity, contract structure, derived artifacts) |
 | `dev` | `tntc dev [dir]` | `-p` port (default 8080) | Start Deno engine locally with hot-reload (`--watch`). POST /run triggers execution |
 | `test` | `tntc test [dir][/<node>]` | `--pipeline`, `--live`, `--env`, `--keep`, `--timeout` | Run node-level tests from fixtures, full pipeline test with `--pipeline`, or live cluster test with `--live` |
 | `build` | `tntc build [dir]` | `-t` tag, `-r` registry, `--push`, `--platform` | Generate Dockerfile (distroless Deno base), build container image via `docker build` |
@@ -86,7 +86,7 @@ a default-exported async function.
 | `list` | `tntc list` | `-n` namespace, `-o` json | List all deployed workflows with version, status, and age |
 | `undeploy` | `tntc undeploy <name>` | `-n` namespace, `--yes`/`-y` | Remove a deployed workflow (Service, Deployment, Secret, CronJobs). Use `-y` to skip confirmation in scripts. Note: ConfigMap `<name>-code` is not deleted. |
 | `cluster check` | `tntc cluster check` | `--fix`, `-n` namespace | Preflight validation of cluster readiness; `--fix` auto-remediates |
-| `visualize` | `tntc visualize [dir]` | | Generate Mermaid diagram of the workflow DAG |
+| `visualize` | `tntc visualize [dir]` | `--rich` | Generate Mermaid diagram of the workflow DAG. `--rich` adds dependency graph, derived secrets, and network intent |
 
 Global flags: `-n`/`--namespace` (default "default"),
 `-r`/`--registry`, `-o`/`--output` (text\|json).
@@ -153,10 +153,56 @@ export default async function run(
 
 | Member | Type | Description |
 |--------|------|-------------|
-| `ctx.fetch(service, path, init?)` | `(string, string, RequestInit?) => Promise<Response>` | HTTP request with auto URL construction (`https://api.<service>.com<path>`) and auth injection from secrets (Bearer token or X-API-Key). Use full URL in `path` to bypass service resolution. |
+| `ctx.dependency(name)` | `(string) => DependencyConnection` | **Primary API** for external services. Returns connection metadata (host, port, protocol, authType, protocol-specific fields) and resolved secret value. HTTPS deps also get a `fetch()` convenience method. Throws if the dependency is not declared in the contract. |
 | `ctx.log` | `Logger` | Structured logging with `info`, `warn`, `error`, `debug` methods. All output prefixed with `[nodeId]`. |
-| `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml. |
-| `ctx.secrets` | `Record<string, Record<string, string>>` | Secrets loaded from `.secrets.yaml` (local) or K8s Secret volume at `/app/secrets` (production). Keyed by service name. |
+| `ctx.config` | `Record<string, unknown>` | Workflow-level config from `config:` in workflow.yaml. Use for business-logic parameters only (e.g., `target_repo`). |
+| `ctx.fetch(service, path, init?)` | `(string, string, RequestInit?) => Promise<Response>` | **Legacy.** HTTP request with auto URL construction. Flagged as contract violation when a contract is present. Use `ctx.dependency()` instead. |
+| `ctx.secrets` | `Record<string, Record<string, string>>` | **Legacy.** Direct secret access. Flagged as contract violation when a contract is present. Use `ctx.dependency()` instead. |
+
+### Using ctx.dependency()
+
+Nodes access external service connection info through
+the contract dependency API:
+
+```typescript
+import type { Context } from "tentacular";
+
+export default async function run(
+  ctx: Context,
+  input: unknown
+): Promise<unknown> {
+  const pg = ctx.dependency("postgres");
+  // pg.protocol -- "postgresql"
+  // pg.host, pg.port, pg.database, pg.user
+  // pg.authType -- "password"
+  // pg.secret -- resolved password value
+
+  const gh = ctx.dependency("github-api");
+  // gh.protocol -- "https"
+  // gh.host, gh.port
+  // gh.authType -- "bearer-token"
+  // gh.secret -- resolved bearer token
+  // gh.fetch(path, init?) -- convenience method
+  //   with auto auth injection
+
+  // HTTPS deps have a fetch() shortcut:
+  const resp = await gh.fetch!("/repos/org/repo");
+
+  ctx.log.info("connecting to dependencies");
+  return { result: "done" };
+}
+```
+
+In mock context (during `tntc test`), `ctx.dependency()`
+returns mock values and records the access for
+runtime-tracing drift detection.
+
+**Migration note:** Replace `ctx.config` + `ctx.secrets`
+assembly with `ctx.dependency()`. The `config` section
+in workflow.yaml should contain only business-logic
+parameters (e.g., `target_repo`, `sep_label`).
+Connection metadata (host, port, database, user) and
+secret references belong in `contract.dependencies`.
 
 ## Trigger Types
 
@@ -225,6 +271,137 @@ In Go, extra keys are stored in
 `WorkflowConfig.Extras` (via `yaml:",inline"`). Use
 `ToMap()` to get a flat merged map.
 
+## Contract Model
+
+The `contract` section in `workflow.yaml` is the
+authoritative declaration of every external dependency
+a workflow needs. It is a top-level peer of `nodes`,
+`edges`, and `config`.
+
+**Core principle: dependencies are the single primitive.**
+A Tentacular workflow is a sealed pod that can only reach
+declared network dependencies. Secrets, NetworkPolicy,
+connection config, and validation are ALL derived from
+the dependency list. There is no separate `secrets` or
+`networkPolicy` section to author -- both are derived
+automatically.
+
+### Contract Structure
+
+```yaml
+contract:
+  version: "1"
+  dependencies:
+    github-api:
+      protocol: https
+      host: api.github.com
+      # port defaults to 443 for https
+      auth:
+        type: bearer-token
+        secret: github.token
+    postgres:
+      protocol: postgresql
+      host: db.svc.cluster.local
+      # port defaults to 5432 for postgresql
+      database: appdb
+      user: postgres
+      auth:
+        type: password
+        secret: postgres.password
+    azure-blob:
+      protocol: https
+      host: myaccount.blob.core.windows.net
+      auth:
+        type: sas-token
+        secret: azure-blob.sas_token
+    slack-webhook:
+      protocol: https
+      host: hooks.slack.com
+      auth:
+        type: bearer-token
+        secret: slack.webhook_url
+```
+
+### What Gets Derived
+
+| Artifact | Source | Derivation |
+|----------|--------|------------|
+| Required secrets | `dep.auth.secret` | Collect all auth secret refs |
+| Egress NetworkPolicy | `dep.host` + `dep.port` | One allow rule per dep + DNS |
+| Ingress NetworkPolicy | `triggers[].type` | Webhook: allow; else deny all |
+| Connection config | `dep.*` metadata | Injected via `ctx.dependency()` |
+
+### Dependency Protocols
+
+Supported protocols in v1: `https`, `postgresql`,
+`nats`, `blob`. Each protocol has default ports and
+specific metadata fields:
+
+- **https**: host, port (default 443), auth
+- **postgresql**: host, port (default 5432),
+  database, user, auth
+- **nats**: host, port (default 4222), auth,
+  subject
+- **blob**: host, port (default 443), auth,
+  container
+
+Auth types are declared explicitly via `auth.type`
+in the contract. Supported values: `bearer-token`,
+`api-key`, `sas-token`, `password`. The `authType`
+field on `DependencyConnection` reflects this
+declared value.
+
+### Minimal Contract (No Dependencies)
+
+Workflows with no external dependencies use an empty
+dependency map:
+
+```yaml
+contract:
+  version: "1"
+  dependencies: {}
+```
+
+### NetworkPolicy Overrides
+
+For edge cases not derivable from dependencies, use
+optional overrides:
+
+```yaml
+contract:
+  version: "1"
+  dependencies: { ... }
+  networkPolicy:
+    additionalEgress:
+      - cidr: 10.0.0.0/8
+        port: 8080
+        protocol: TCP
+        reason: "internal service mesh"
+```
+
+### Contract Enforcement
+
+Contract enforcement is **strict** by default. All
+workflows are held to the same standard. Environment
+config can override to `audit` mode (warnings instead
+of errors) for development:
+
+```yaml
+# In .tentacular/config.yaml
+environments:
+  dev:
+    enforcement: audit
+```
+
+In strict mode, `tntc test` fails on any contract
+drift. In audit mode, drift is reported as warnings.
+
+### Extensibility
+
+Extension fields are supported via `x-*` namespaced
+keys. They are preserved through parsing and do not
+break core schema validation.
+
 ## Minimal workflow.yaml
 
 ```yaml
@@ -234,6 +411,10 @@ description: "A minimal workflow"
 
 triggers:
   - type: manual
+
+contract:
+  version: "1"
+  dependencies: {}
 
 nodes:
   hello:
@@ -271,27 +452,61 @@ tntc undeploy my-workflow          # remove from cluster
 
 ## Deployment Flow
 
-The recommended agentic deployment flow validates workflows through five steps. Each step produces structured JSON output (with `-o json`) for automation.
+The recommended agentic deployment flow validates
+workflows through six steps. Each step produces
+structured JSON output (with `-o json`) for automation.
 
 ```
-tntc validate -o json           # 1. Parse and validate workflow.yaml
-tntc test -o json               # 2. Run mock tests (node-level + pipeline)
-tntc test --live --env dev -o json  # 3. Live test against dev environment
-tntc deploy -o json             # 4. Deploy (auto-gates on live test)
-tntc run <name> -o json         # 5. Post-deploy verification
+tntc validate -o json               # 1. Validate spec + contract
+tntc visualize --rich -o json       # 2. Review contract artifacts
+tntc test -o json                   # 3. Mock tests + drift detection
+tntc test --live --env dev -o json  # 4. Live test against dev
+tntc deploy -o json                 # 5. Deploy (auto-gates on live)
+tntc run <name> -o json             # 6. Post-deploy verification
 ```
 
 ### Step Details
 
-1. **Validate** -- parses workflow.yaml, checks name/version format, trigger definitions, node paths, edge references, and DAG acyclicity. Catches spec errors before any execution.
+1. **Validate** -- parses workflow.yaml, checks
+   name/version format, trigger definitions, node paths,
+   edge references, DAG acyclicity, and contract
+   structure. Also displays derived artifacts: secret
+   inventory and network policy summary. Catches spec
+   and contract errors before any execution.
 
-2. **Mock Test** -- runs node-level tests from fixtures using the mock context. No cluster or credentials required. Validates node logic and data flow in isolation.
+2. **Review Contract Artifacts** -- generates rich
+   visualization showing DAG topology, dependency graph,
+   derived secrets, and network intent. Agent and user
+   review these artifacts before proceeding to test or
+   build. See [Pre-Build Review Gate](#pre-build-review-gate).
 
-3. **Live Test** -- deploys the workflow to a configured dev environment, triggers it, validates the result, and cleans up. Requires a `dev` environment in config (see [Environment Configuration](#environment-configuration)). Use `--env <name>` to target a different environment. Add `--keep` to skip cleanup for debugging. Default timeout is 120 seconds (`--timeout` to override).
+3. **Mock Test** -- runs node-level tests from fixtures
+   using the mock context. No cluster or credentials
+   required. Validates node logic, data flow, and
+   contract drift (undeclared deps, dead deps, API
+   bypass). Fails in strict mode on any drift.
 
-4. **Deploy** -- generates K8s manifests and applies to the target cluster. When a dev environment is configured, deploy automatically runs a live test first and aborts if it fails. Use `--force` (alias `--skip-live-test`) to skip the live test gate. Add `--verify` to run post-deploy verification (trigger workflow once after deploy).
+4. **Live Test** -- deploys the workflow to a configured
+   dev environment, triggers it, validates the result,
+   and cleans up. Requires a `dev` environment in config
+   (see [Environment Configuration](#environment-configuration)).
+   Use `--env <name>` to target a different environment.
+   Add `--keep` to skip cleanup for debugging. Default
+   timeout is 120 seconds (`--timeout` to override).
 
-5. **Post-Deploy Verification** -- triggers the deployed workflow once and validates the result. Confirms the workflow runs successfully in its target environment.
+5. **Deploy** -- generates K8s manifests including
+   auto-derived NetworkPolicy from contract dependencies
+   and trigger types. When a dev environment is
+   configured, deploy automatically runs a live test
+   first and aborts if it fails. Use `--force` (alias
+   `--skip-live-test`) to skip the live test gate. Add
+   `--verify` for post-deploy verification. Deploy
+   aborts before manifest apply if contract validation
+   fails in strict mode.
+
+6. **Post-Deploy Verification** -- triggers the deployed
+   workflow once and validates the result. Confirms the
+   workflow runs successfully in its target environment.
 
 ### Deploy Gate
 
@@ -303,7 +518,42 @@ tntc deploy --force             # skip live test, deploy directly
 tntc deploy --skip-live-test    # alias for --force
 ```
 
-If the live test fails, deploy aborts with a structured error including the test failure details and hints for remediation.
+If the live test fails, deploy aborts with a structured
+error including the test failure details and hints for
+remediation.
+
+### Pre-Build Review Gate
+
+Before any `build`, `test --live`, or `deploy`, the
+agent MUST run a contract review loop:
+
+1. `tntc validate` -- confirm contract parses cleanly
+   and derived artifacts are correct.
+2. `tntc visualize --rich` -- generate rich diagram
+   showing DAG, dependencies, secrets, and network
+   intent.
+3. Review with user -- present the diagram and derived
+   artifacts. Confirm:
+   - Dependency targets (hosts, ports, protocols)
+   - Secret key references match provisioned secrets
+   - Derived network policy matches expected access
+4. `tntc test` -- run mock tests with drift detection.
+   Resolve any contract violations before proceeding.
+
+**Required checklist before build/deploy:**
+
+- [ ] Contract section present in workflow.yaml
+- [ ] `tntc validate` passes (contract + spec)
+- [ ] `tntc visualize --rich` reviewed with user
+- [ ] Dependency hosts and ports confirmed
+- [ ] Secret refs match `.secrets.yaml` keys
+- [ ] Derived NetworkPolicy matches expected access
+- [ ] `tntc test` passes with zero drift
+- [ ] Rich visualization artifacts committed to repo
+
+Agents MUST fail closed when contract or diagram
+artifacts are missing or stale. Do not proceed to
+build or deploy without completing this gate.
 
 ### Structured Output
 
@@ -413,9 +663,10 @@ implementation starts.
 #### Planning Objectives
 
 1. Confirm the user's intent and expected outcome.
-2. Identify every external dependency and side effect.
-3. Define a complete secrets and config contract up front.
-4. Pre-validate the environment, credentials, and connectivity.
+2. Author the `contract.dependencies` block first.
+3. Derive secrets and network intent from the contract.
+4. Pre-validate the environment, credentials, and
+   connectivity.
 5. Define explicit dev-to-prod promotion gates.
 
 #### Step 1: Confirm User Intent (Do Not Assume)
@@ -431,45 +682,55 @@ Ask targeted questions and restate the intent before coding:
 The agent should summarize the intent back to the user and get
 confirmation before proceeding.
 
-#### Step 2: Build a Dependency Map
+#### Step 2: Author the Contract
 
-Enumerate all dependencies early:
+The planning loop starts with contract authoring.
+Enumerate all external dependencies and write the
+`contract.dependencies` block in `workflow.yaml`:
 
-1. APIs/services (GitHub, Slack, NATS, cloud storage, etc.)
+1. APIs/services (GitHub, Slack, NATS, cloud storage)
 2. Data stores (Postgres, Redis, object stores)
-3. Network routes and DNS targets
+3. For each: protocol, host, port, auth type, secret ref
 4. Environment-specific behavior (`dev` vs. `prod`)
 5. Required trigger scheduling and runtime behavior
 
-If any dependency is uncertain, stop and ask. Do not proceed
-with guessed endpoints, guessed credentials, or placeholder
-resources unless explicitly requested for mock-only testing.
+If any dependency is uncertain, stop and ask. Do not
+proceed with guessed endpoints, guessed credentials,
+or placeholder resources unless explicitly requested
+for mock-only testing.
 
-#### Step 3: Define Secrets and Config Contracts Up Front
+Once the contract is authored, run `tntc validate` and
+`tntc visualize --rich` to verify derived artifacts:
 
-Build two explicit contracts before implementation:
+- Derived secrets: confirm all `auth.secret` refs match
+  provisioned keys in `.secrets.yaml`
+- Derived NetworkPolicy: confirm egress rules match
+  expected network access
+- Review the rich visualization with the user
 
-1. **Secrets Contract** (required keys, where they come from,
-   which environment uses them, and how they are validated)
-2. **Config Contract** (workflow `config:` keys, expected types,
-   environment overrides, and target namespaces/contexts)
+#### Step 3: Define Config and Secrets Sources
+
+The `config` section now holds only business-logic
+parameters (e.g., `target_repo`, `sep_label`).
+Connection metadata belongs in contract dependencies.
 
 Secrets handling policy:
 
-1. Current supported source: local workflow secrets
+1. Secret keys are derived from contract `auth.secret`
+   refs -- do not define them separately
+2. Current source: local workflow secrets
    (`<workflow>/.secrets.yaml` or `<workflow>/.secrets/`)
-2. Future source: external secrets vault (**FUTURE**)
-3. Never use environment variables for workflow secrets
-4. Never print secret values in terminal output
-5. Validate key presence and format before live runs
+3. Future source: external secrets vault (**FUTURE**)
+4. Never use environment variables for workflow secrets
+5. Never print secret values in terminal output
+6. Validate key presence and format before live runs
 
-Minimum contract to confirm with user:
+Minimum to confirm with user:
 
-1. Secret key names exactly as node code expects
-2. Real target endpoints (DB host, webhook URL, container/blob
-   base URL, queue URL/subject, etc.)
-3. Environment mapping (`dev` namespace/context/image and
-   `prod` namespace/context/image)
+1. Secret key names match contract `auth.secret` refs
+2. Real target endpoints match contract host/port values
+3. Environment mapping (`dev` namespace/context/image
+   and `prod` namespace/context/image)
 4. Expected side effects per environment
 
 #### Step 4: Planning Loop With User (Round-Trip Until Stable)
@@ -499,8 +760,13 @@ Run lightweight checks before coding/deploying:
 tntc cluster check --fix -n <dev-namespace>
 tntc cluster check --fix -n <prod-namespace>
 
-# Validate workflow and secrets contract
+# Validate workflow spec and contract
 tntc validate <workflow-dir>
+
+# Review derived artifacts with user
+tntc visualize --rich <workflow-dir>
+
+# Check secrets provisioning vs contract
 tntc secrets check <workflow-dir>
 
 # Confirm config points to expected image and envs
@@ -520,15 +786,16 @@ If validation fails, fix inputs first; do not continue blindly.
 
 #### Step 6: Enforce Dev E2E Gate Before Prod
 
-Every new or updated workflow must include a full development
-environment run with real credentials/config before production:
+Every new or updated workflow must pass the full
+contract and testing pipeline before production:
 
-1. `tntc validate`
-2. `tntc test`
-3. `tntc test --pipeline`
-4. `tntc test --live --env dev`
-5. Review outputs/logs and confirm side effects
-6. Only then `tntc deploy --env prod` (with `--verify`)
+1. `tntc validate` (spec + contract)
+2. `tntc visualize --rich` (review with user)
+3. `tntc test` (mock tests + drift detection)
+4. `tntc test --pipeline`
+5. `tntc test --live --env dev`
+6. Review outputs/logs and confirm side effects
+7. Only then `tntc deploy --env prod` (with `--verify`)
 
 Using separate dev creds is fine and encouraged. The key
 requirement is that dev is a real environment with real
@@ -548,25 +815,31 @@ integration behavior, not mock-only.
 ### Full E2E Cycle (Non-Interactive)
 
 ```bash
-# 1. Validate spec
+# 1. Validate spec + contract
 tntc validate example-workflows/my-wf -o json
 
-# 2. Mock tests (no cluster needed)
+# 2. Review contract artifacts with user
+tntc visualize --rich example-workflows/my-wf
+
+# 3. Mock tests + drift detection (no cluster needed)
 tntc test example-workflows/my-wf -o json
 
-# 3. Build container image
-tntc build example-workflows/my-wf -t tentacular-engine:my-wf
+# 4. Build container image
+tntc build example-workflows/my-wf \
+  -t tentacular-engine:my-wf
 
-# 4. Live test on dev (deploy -> run -> validate -> cleanup)
-tntc test --live --env dev example-workflows/my-wf -o json
+# 5. Live test on dev (deploy -> run -> validate -> cleanup)
+tntc test --live --env dev \
+  example-workflows/my-wf -o json
 
-# 5. Deploy to target environment
-tntc deploy --env prod example-workflows/my-wf -o json
+# 6. Deploy to target environment
+tntc deploy --env prod \
+  example-workflows/my-wf -o json
 
-# 6. Post-deploy run
+# 7. Post-deploy run
 tntc run my-wf -n <namespace> -o json
 
-# 7. Cleanup when done
+# 8. Cleanup when done
 tntc undeploy my-wf -n <namespace> -y
 ```
 
@@ -674,6 +947,67 @@ for remediation steps.
    configured, `deploy` auto-runs a live test first.
    Use `--force` to skip. This only triggers when the
    CLI detects a dev environment in config.
+
+7. **Contract required**: All workflows need a
+   `contract` section (even if `dependencies: {}`).
+   Deploy fails in strict mode without a valid
+   contract. See [Contract Model](#contract-model).
+
+8. **NetworkPolicy auto-generated**: `deploy`
+   generates NetworkPolicy from contract dependencies.
+   Verify with `kubectl get networkpolicy` after
+   deploy. Use `contract.networkPolicy.additionalEgress`
+   for edge cases not derivable from dependencies.
+
+9. **Drift detection**: `tntc test` compares runtime
+   behavior against contract declarations. Direct
+   `ctx.fetch()` or `ctx.secrets` usage is flagged
+   as a contract violation. Use `ctx.dependency()`.
+
+## Visualization Reference
+
+`tntc visualize` generates workflow diagrams. The
+`--rich` flag adds contract-derived metadata.
+
+### Basic Mode
+
+```bash
+tntc visualize example-workflows/sep-tracker
+```
+
+Produces a Mermaid diagram of the DAG topology
+(nodes and edges only).
+
+### Rich Mode
+
+```bash
+tntc visualize --rich example-workflows/sep-tracker
+```
+
+Rich output includes:
+
+- **DAG topology**: nodes and edges as in basic mode
+- **Dependency nodes**: external services shown with
+  protocol and host labels
+- **Derived secret inventory**: all secret key refs
+  collected from `dep.auth.secret` across dependencies
+- **Network intent summary**: derived egress and
+  ingress rules from contract + triggers
+
+Rich visualization artifacts are written co-resident
+with the workflow directory for PR review. Output is
+deterministic and stable for diffs.
+
+### Example: sep-tracker Workflow Diagram
+
+![sep-tracker workflow diagram](../example-workflows/sep-tracker/workflow-diagram.png)
+
+The sep-tracker workflow demonstrates a full contract
+with four external dependencies (GitHub API, Postgres,
+Azure Blob Storage, Slack webhook). The rich
+visualization shows how each dependency connects to
+the nodes that use it, along with derived secrets and
+network policy rules.
 
 ## References
 

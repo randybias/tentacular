@@ -48,12 +48,14 @@ config:
   sep_label: "sep"
 
 contract:
+  version: "1"
   dependencies:
     github:
       protocol: https
       host: api.github.com
       port: 443
       auth:
+        type: bearer-token
         secret: github.token
     postgres:
       protocol: postgresql
@@ -62,10 +64,12 @@ contract:
       database: appdb
       user: postgres
       auth:
+        type: password
         secret: postgres.password
     azure-blob:
       protocol: https
       host: mcpreports9276621.blob.core.windows.net
       port: 443
       auth:
+        type: sas-token
         secret: azure.sas_token
