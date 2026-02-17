@@ -1,0 +1,11 @@
+{
+  "input": {
+    "html": "<html><body>test</body></html>",
+    "title": "Test Report",
+    "summary": "Test summary"
+  },
+  "expected": {
+    "uploaded": false,
+    "reportUrl": ""
+  }
+}

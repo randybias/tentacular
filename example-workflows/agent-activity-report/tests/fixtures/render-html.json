@@ -1,0 +1,16 @@
+{
+  "input": {
+    "generate-analysis": {
+      "narrative": "Test narrative",
+      "highlights": ["highlight 1"],
+      "prediction": "Test prediction",
+      "healthScores": { "openai/codex": 80 }
+    },
+    "compute-metrics": {
+      "repos": [],
+      "rankings": { "byStars": [], "byVelocity": [], "byCommits": [], "byIssues": [] },
+      "totals": { "totalStars": 0, "totalForks": 0, "totalOpenIssues": 0, "totalRecentCommits": 0 },
+      "generatedAt": "2026-02-17T00:00:00Z"
+    }
+  }
+}

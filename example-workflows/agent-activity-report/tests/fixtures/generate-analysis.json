@@ -1,0 +1,33 @@
+{
+  "input": {
+    "repos": [
+      {
+        "repo": "openai/codex",
+        "stars": 60000,
+        "forks": 8000,
+        "openIssues": 1200,
+        "openPRs": 120,
+        "recentCommits": 45,
+        "releaseCount": 1,
+        "latestRelease": "v0.101.0",
+        "topLanguage": "Rust",
+        "contributorCount": 1,
+        "weeklyCommitTrend": [45, 40, 38, 35],
+        "velocity": 213
+      }
+    ],
+    "rankings": {
+      "byStars": ["openai/codex"],
+      "byVelocity": ["openai/codex"],
+      "byCommits": ["openai/codex"],
+      "byIssues": ["openai/codex"]
+    },
+    "totals": {
+      "totalStars": 60000,
+      "totalForks": 8000,
+      "totalOpenIssues": 1200,
+      "totalRecentCommits": 45
+    },
+    "generatedAt": "2026-02-17T00:00:00Z"
+  }
+}
