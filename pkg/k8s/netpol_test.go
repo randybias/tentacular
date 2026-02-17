@@ -435,6 +435,57 @@ func TestGenerateNetworkPolicyNamespacing(t *testing.T) {
 	}
 }
 
+func TestGenerateNetworkPolicyAdditionalEgressOverride(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "test-workflow",
+		Version: "1.0",
+		Nodes:   map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+		Contract: &spec.Contract{
+			Version: "1",
+			Dependencies: map[string]spec.Dependency{
+				"api": {Protocol: "https", Host: "api.example.com", Port: 443},
+			},
+			NetworkPolicyOverride: &spec.NetworkPolicyOverrides{
+				AdditionalEgress: []spec.EgressOverride{
+					{ToCIDR: "10.0.0.0/8", Ports: []string{"8080/TCP"}},
+					{ToCIDR: "172.16.0.0/12"}, // no ports = any
+				},
+			},
+		},
+	}
+
+	manifest := GenerateNetworkPolicy(wf, "default")
+
+	if manifest == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+
+	// Should have the dependency egress (port 443)
+	if !strings.Contains(manifest.Content, "port: 443") {
+		t.Error("expected HTTPS port 443 from dependency")
+	}
+
+	// Should have DNS egress
+	if !strings.Contains(manifest.Content, "port: 53") {
+		t.Error("expected DNS port 53")
+	}
+
+	// Should have additional egress override CIDR (10.0.0.0/8)
+	if !strings.Contains(manifest.Content, "cidr: 10.0.0.0/8") {
+		t.Error("expected additionalEgress CIDR 10.0.0.0/8")
+	}
+
+	// Should have the override port 8080
+	if !strings.Contains(manifest.Content, "port: 8080") {
+		t.Error("expected additionalEgress port 8080")
+	}
+
+	// Should have the second override CIDR (172.16.0.0/12)
+	if !strings.Contains(manifest.Content, "cidr: 172.16.0.0/12") {
+		t.Error("expected additionalEgress CIDR 172.16.0.0/12")
+	}
+}
+
 func TestGenerateNetworkPolicyDefaultPortApplication(t *testing.T) {
 	wf := &spec.Workflow{
 		Name:    "test",
@@ -461,5 +512,167 @@ func TestGenerateNetworkPolicyDefaultPortApplication(t *testing.T) {
 	// Should have default HTTPS port 443
 	if !strings.Contains(manifest.Content, "port: 443") {
 		t.Error("expected default port 443 for HTTPS")
+	}
+}
+
+// TestFullPipelineYAMLToNetworkPolicy exercises the complete flow:
+// YAML → spec.Parse → DeriveSecrets/DeriveEgressRules → GenerateNetworkPolicy
+func TestFullPipelineYAMLToNetworkPolicy(t *testing.T) {
+	yamlContent := `
+name: pipeline-test
+version: "1.0"
+
+triggers:
+  - type: cron
+    schedule: "0 * * * *"
+  - type: webhook
+    path: /hook
+
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+  process:
+    path: ./nodes/process.ts
+
+edges:
+  - from: fetch
+    to: process
+
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+    postgres:
+      protocol: postgresql
+      host: db.ns.svc.cluster.local
+      port: 5432
+      database: appdb
+      user: app
+      auth:
+        type: password
+        secret: postgres.password
+    slack:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url
+  networkPolicyOverride:
+    additionalEgress:
+      - toCIDR: "10.100.0.0/16"
+        ports:
+          - "9090/TCP"
+`
+
+	// Step 1: Parse YAML
+	wf, warnings := spec.Parse([]byte(yamlContent))
+	if wf == nil {
+		t.Fatalf("spec.Parse failed, warnings: %v", warnings)
+	}
+	_ = warnings
+
+	// Step 2: Verify contract was parsed
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	if len(wf.Contract.Dependencies) != 3 {
+		t.Fatalf("expected 3 dependencies, got %d", len(wf.Contract.Dependencies))
+	}
+
+	// Step 3: Verify derived secrets
+	secrets := spec.DeriveSecrets(wf.Contract)
+	if len(secrets) != 3 {
+		t.Fatalf("expected 3 derived secrets, got %d: %v", len(secrets), secrets)
+	}
+	secretSet := make(map[string]bool)
+	for _, s := range secrets {
+		secretSet[s] = true
+	}
+	for _, expected := range []string{"github.token", "postgres.password", "slack.webhook_url"} {
+		if !secretSet[expected] {
+			t.Errorf("expected derived secret %q", expected)
+		}
+	}
+
+	// Step 4: Verify derived egress rules
+	egressRules := spec.DeriveEgressRules(wf.Contract)
+	// 2 DNS (UDP+TCP) + 3 dependencies + 1 override = 6
+	if len(egressRules) < 6 {
+		t.Fatalf("expected at least 6 egress rules, got %d", len(egressRules))
+	}
+
+	// Verify DNS present
+	hasDNS := false
+	for _, r := range egressRules {
+		if r.Port == 53 {
+			hasDNS = true
+			break
+		}
+	}
+	if !hasDNS {
+		t.Error("expected DNS egress rule")
+	}
+
+	// Verify override CIDR present
+	hasOverride := false
+	for _, r := range egressRules {
+		if r.Host == "10.100.0.0/16" && r.Port == 9090 {
+			hasOverride = true
+			break
+		}
+	}
+	if !hasOverride {
+		t.Error("expected additionalEgress override 10.100.0.0/16:9090")
+	}
+
+	// Step 5: Verify derived ingress rules (has webhook trigger)
+	ingressRules := spec.DeriveIngressRules(wf)
+	if len(ingressRules) != 1 {
+		t.Fatalf("expected 1 ingress rule for webhook, got %d", len(ingressRules))
+	}
+	if ingressRules[0].Port != 8080 {
+		t.Errorf("expected webhook ingress port 8080, got %d", ingressRules[0].Port)
+	}
+
+	// Step 6: Generate NetworkPolicy
+	manifest := GenerateNetworkPolicy(wf, "tentacular-test")
+	if manifest == nil {
+		t.Fatal("expected non-nil NetworkPolicy manifest")
+	}
+
+	// Verify complete manifest structure
+	if !strings.Contains(manifest.Content, "kind: NetworkPolicy") {
+		t.Error("expected kind: NetworkPolicy")
+	}
+	if !strings.Contains(manifest.Content, "namespace: tentacular-test") {
+		t.Error("expected namespace: tentacular-test")
+	}
+	if !strings.Contains(manifest.Content, "port: 443") {
+		t.Error("expected HTTPS port 443")
+	}
+	if !strings.Contains(manifest.Content, "port: 5432") {
+		t.Error("expected PostgreSQL port 5432")
+	}
+	if !strings.Contains(manifest.Content, "port: 53") {
+		t.Error("expected DNS port 53")
+	}
+	if !strings.Contains(manifest.Content, "cidr: 10.100.0.0/16") {
+		t.Error("expected override CIDR in generated policy")
+	}
+	if !strings.Contains(manifest.Content, "port: 9090") {
+		t.Error("expected override port 9090 in generated policy")
+	}
+	if !strings.Contains(manifest.Content, "ingress:") {
+		t.Error("expected ingress section for webhook trigger")
+	}
+	if !strings.Contains(manifest.Content, "port: 8080") {
+		t.Error("expected webhook ingress port 8080")
 	}
 }
