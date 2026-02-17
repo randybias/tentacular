@@ -106,18 +106,8 @@ function createDependencyAccessor(
         secret = secrets[serviceName]?.[keyName];
       }
 
-      // Infer auth type from key name or protocol
-      if (dep.protocol === "postgresql") {
-        authType = "password";
-      } else if (keyName === "token") {
-        authType = "bearer-token";
-      } else if (keyName === "api_key") {
-        authType = "api-key";
-      } else if (keyName === "sas_token") {
-        authType = "sas-token";
-      } else {
-        authType = "bearer-token"; // default for HTTPS
-      }
+      // Use explicit auth type from contract declaration
+      authType = dep.auth.type as typeof authType;
     }
 
     const conn: DependencyConnection = {

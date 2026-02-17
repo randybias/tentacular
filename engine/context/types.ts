@@ -15,6 +15,7 @@ export interface DependencySpec {
   host: string;
   port?: number;
   auth?: {
+    type: "bearer-token" | "api-key" | "sas-token" | "password" | "webhook-url";
     secret: string; // "service.key" format
   };
   // Protocol-specific fields

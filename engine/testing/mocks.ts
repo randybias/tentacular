@@ -100,8 +100,17 @@ export function createMockContext(overrides?: Partial<Context>): MockContext {
     _setDependency(name: string, dep: DependencyConnection) {
       mockDependencies.set(name, dep);
     },
-    ...overrides,
   };
+
+  // Apply overrides without clobbering dependency tracking wrapper or internal fields
+  if (overrides) {
+    if (overrides.config) ctx.config = overrides.config;
+    if (overrides.secrets) ctx.secrets = overrides.secrets;
+    if (overrides.log) ctx.log = overrides.log;
+    // fetch override replaces the mock fetch but keeps dependency tracking intact
+    if (overrides.fetch) ctx.fetch = overrides.fetch;
+    // dependency() is never overridden — drift detection tracking must be preserved
+  }
 
   return ctx;
 }
