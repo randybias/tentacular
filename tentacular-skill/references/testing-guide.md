@@ -406,7 +406,7 @@ The live test executes these steps in order:
 1. **Load environment config** -- reads the named environment from the config cascade, resolving context, namespace, image, and runtime class.
 2. **Deploy** -- calls the shared `deployWorkflow()` function which handles kind cluster detection (adjusting RuntimeClass and ImagePullPolicy), manifest generation, preflight checks, and applying manifests to the environment namespace. If the environment specifies a kubeconfig context, it connects to that cluster.
 3. **Wait for Ready** -- polls the Deployment until `ReadyReplicas == Replicas` or the timeout expires.
-4. **Trigger workflow** -- sends a `POST /run` to the deployed workflow via a temporary curl pod and captures the execution result.
+4. **Trigger workflow** -- sends a `POST /run` to the deployed workflow via a temporary curl pod (with `--retry --retry-connrefused` for NetworkPolicy ipset sync) and captures the execution result.
 5. **Parse and validate** -- parses the JSON execution result and checks the `success` field.
 6. **Cleanup** -- removes the deployed workflow from the environment namespace (skipped with `--keep`).
 7. **Emit result** -- outputs structured test result (text or JSON based on `-o` flag).

@@ -34,12 +34,17 @@ The generated Dockerfile SHALL copy only the engine directory and import map int
 - **WHEN** `GenerateDockerfile()` is called
 - **THEN** the Dockerfile SHALL contain `COPY .engine/deno.json /app/deno.json`
 
-### Requirement: Dockerfile caches engine dependencies at build time
-The generated Dockerfile SHALL pre-cache engine dependencies at build time via `deno cache`.
+### Requirement: Dockerfile caches engine dependencies at build time with lockfile
+The generated Dockerfile SHALL pre-cache engine dependencies at build time via `deno cache` using a lockfile for integrity verification.
 
-#### Scenario: Engine deps cached
+#### Scenario: Lockfile copied into image
 - **WHEN** `GenerateDockerfile()` is called
-- **THEN** the Dockerfile SHALL contain a `RUN` instruction that caches `engine/main.ts` dependencies
+- **THEN** the Dockerfile SHALL contain `COPY .engine/deno.lock /app/deno.lock`
+
+#### Scenario: Engine deps cached with lockfile
+- **WHEN** `GenerateDockerfile()` is called
+- **THEN** the Dockerfile SHALL contain a `RUN` instruction that caches `engine/main.ts` dependencies using `--lock=deno.lock`
+- **AND** the cache instruction SHALL NOT use `--no-lock`
 
 ### Requirement: Dockerfile does NOT override DENO_DIR
 The generated Dockerfile SHALL NOT set the `DENO_DIR` environment variable. Engine dependencies are cached at build time to the distroless default `/deno-dir/` and served from that read-only image layer at runtime.
@@ -59,16 +64,24 @@ The generated Dockerfile ENTRYPOINT SHALL include `--workflow /app/workflow/work
 - **WHEN** `GenerateDockerfile()` is called
 - **THEN** the ENTRYPOINT SHALL include `--port 8080`
 
-### Requirement: Dockerfile preserves existing security permissions
-The generated Dockerfile ENTRYPOINT SHALL preserve the existing Deno permission flags without adding new ones.
+### Requirement: Dockerfile ENTRYPOINT uses broad permissions as fallback
+The generated Dockerfile ENTRYPOINT SHALL use broad Deno permission flags as a fallback. When a workflow has contract dependencies, the K8s Deployment manifest overrides the ENTRYPOINT with scoped flags via `command` and `args`.
 
-#### Scenario: Existing permissions preserved
+#### Scenario: Broad fallback permissions in ENTRYPOINT
 - **WHEN** `GenerateDockerfile()` is called
-- **THEN** the ENTRYPOINT SHALL include `--allow-net`
+- **THEN** the ENTRYPOINT SHALL include `--allow-net` (broad, scoped at deploy time via K8s args)
 - **AND** the ENTRYPOINT SHALL include `--allow-read=/app,/var/run/secrets`
 - **AND** the ENTRYPOINT SHALL include `--allow-write=/tmp`
 - **AND** the ENTRYPOINT SHALL include `--allow-env`
 - **AND** the ENTRYPOINT SHALL NOT include `--allow-all`
+
+#### Scenario: K8s Deployment overrides ENTRYPOINT when contract exists
+- **WHEN** `GenerateK8sManifests()` is called for a workflow with contract dependencies
+- **THEN** the Deployment container spec SHALL include `command` and `args` fields that override the image ENTRYPOINT
+- **AND** `--allow-net` SHALL be replaced with `--allow-net=<host1>:<port>,<host2>:<port>,0.0.0.0:8080` scoped to declared dependencies and the trigger listener
+- **AND** if any dependency has `type: dynamic-target`, `--allow-net` SHALL remain broad (no host restriction)
+- **AND** `--allow-env` SHALL be scoped to `--allow-env=DENO_DIR,HOME`
+- **AND** numeric args (e.g., port `8080`) SHALL be YAML-quoted to prevent integer interpretation
 
 ### Requirement: Build command saves image tag to file
 After a successful build (and push if requested), the build command SHALL save the image tag to `.tentacular/base-image.txt` in the project root.

@@ -1,0 +1,49 @@
+name: ai-news-roundup-e2e
+version: "1.0"
+description: "Fetches news feeds, filters recent articles, summarizes with LLM, notifies Slack"
+
+triggers:
+  - type: cron
+    schedule: "0 8 * * *"
+
+nodes:
+  fetch-feeds:
+    path: ./nodes/fetch-feeds.ts
+  filter-24h:
+    path: ./nodes/filter-24h.ts
+  summarize-llm:
+    path: ./nodes/summarize-llm.ts
+  notify-slack:
+    path: ./nodes/notify-slack.ts
+
+edges:
+  - from: fetch-feeds
+    to: filter-24h
+  - from: filter-24h
+    to: summarize-llm
+  - from: summarize-llm
+    to: notify-slack
+
+contract:
+  version: "1"
+  dependencies:
+    openai-api:
+      protocol: https
+      host: api.openai.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: openai.api_key
+    slack:
+      protocol: https
+      host: hooks.slack.com
+      port: 443
+      auth:
+        type: webhook-url
+        secret: slack.webhook_url
+    news-sources:
+      protocol: https
+      type: dynamic-target
+      cidr: "0.0.0.0/0"
+      dynPorts:
+        - "443/TCP"

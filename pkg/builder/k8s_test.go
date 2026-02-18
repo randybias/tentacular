@@ -176,8 +176,11 @@ func TestK8sManifestVolumes(t *testing.T) {
 	if !strings.Contains(dep, "mountPath: /tmp") {
 		t.Error("expected /tmp volume mount")
 	}
-	if !strings.Contains(dep, "emptyDir: {}") {
+	if !strings.Contains(dep, "emptyDir:") {
 		t.Error("expected emptyDir for tmp volume")
+	}
+	if !strings.Contains(dep, "sizeLimit: 512Mi") {
+		t.Error("expected sizeLimit: 512Mi on emptyDir volume")
 	}
 	if !strings.Contains(dep, "secretName: vol-test-secrets") {
 		t.Error("expected secretName: vol-test-secrets")
@@ -659,5 +662,123 @@ func TestDeploymentNoContainerArgs(t *testing.T) {
 	// Verify NO args field in container spec (relies on ENTRYPOINT defaults)
 	if strings.Contains(dep, "args:") {
 		t.Error("expected NO container args field (ENTRYPOINT provides defaults)")
+	}
+}
+
+func TestDeploymentAutomountServiceAccountTokenFalse(t *testing.T) {
+	wf := makeTestWorkflow("sa-token-test")
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	if !strings.Contains(dep, "automountServiceAccountToken: false") {
+		t.Error("expected automountServiceAccountToken: false in Deployment spec")
+	}
+}
+
+func TestDeploymentEmptyDirSizeLimit(t *testing.T) {
+	wf := makeTestWorkflow("size-limit-test")
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	if !strings.Contains(dep, "sizeLimit: 512Mi") {
+		t.Error("expected sizeLimit: 512Mi on emptyDir volume")
+	}
+}
+
+func TestDeploymentScopedNetWithContract(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "scoped-net-test",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "manual"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+		Contract: &spec.Contract{
+			Dependencies: map[string]spec.Dependency{
+				"github": {
+					Protocol: "https",
+					Host:     "api.github.com",
+					Port:     443,
+				},
+			},
+		},
+	}
+
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	// Should have command and args with scoped --allow-net
+	if !strings.Contains(dep, "command:") {
+		t.Error("expected command field when contract exists")
+	}
+	if !strings.Contains(dep, "args:") {
+		t.Error("expected args field when contract exists")
+	}
+	if !strings.Contains(dep, "--allow-net=0.0.0.0:8080,api.github.com:443") {
+		t.Error("expected scoped --allow-net with specific hosts in args")
+	}
+	if !strings.Contains(dep, "--allow-env=DENO_DIR,HOME") {
+		t.Error("expected scoped --allow-env=DENO_DIR,HOME in args")
+	}
+}
+
+func TestDeploymentBroadNetWithDynamicTarget(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "broad-net-test",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "manual"},
+		},
+		Nodes: map[string]spec.NodeSpec{
+			"fetch": {Path: "./nodes/fetch.ts"},
+		},
+		Contract: &spec.Contract{
+			Dependencies: map[string]spec.Dependency{
+				"external-api": {
+					Protocol: "https",
+					Type:     "dynamic-target",
+					CIDR:     "0.0.0.0/0",
+					DynPorts: []string{"443/TCP"},
+				},
+			},
+		},
+	}
+
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	// Should have command and args with broad --allow-net
+	if !strings.Contains(dep, "command:") {
+		t.Error("expected command field when contract exists")
+	}
+	if !strings.Contains(dep, "args:") {
+		t.Error("expected args field when contract exists")
+	}
+	// For dynamic-target, should use broad --allow-net (not scoped)
+	if !strings.Contains(dep, "- --allow-net") {
+		t.Error("expected broad --allow-net flag in args for dynamic-target")
+	}
+	// Should NOT have scoped form like --allow-net=host:port
+	lines := strings.Split(dep, "\n")
+	for _, line := range lines {
+		if strings.Contains(line, "--allow-net=") {
+			t.Error("expected NO scoped --allow-net= for dynamic-target, should use broad --allow-net")
+		}
+	}
+}
+
+func TestDeploymentNoArgsWithoutContract(t *testing.T) {
+	wf := makeTestWorkflow("no-contract-test")
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+
+	// Without contract, should NOT inject command/args (rely on ENTRYPOINT)
+	if strings.Contains(dep, "command:") {
+		t.Error("expected NO command field when contract is nil")
+	}
+	if strings.Contains(dep, "args:") {
+		t.Error("expected NO args field when contract is nil")
 	}
 }

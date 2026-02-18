@@ -33,8 +33,11 @@ COPY .engine/ /app/engine/
 # Copy deno.json for import map resolution
 COPY .engine/deno.json /app/deno.json
 
-# Cache engine dependencies (cached to /deno-dir/ — distroless default)
-RUN ["deno", "cache", "--no-lock", "engine/main.ts"]
+# Copy lockfile for dependency integrity verification
+COPY .engine/deno.lock /app/deno.lock
+
+# Cache engine dependencies with lockfile (cached to /deno-dir/ — distroless default)
+RUN ["deno", "cache", "--lock=deno.lock", "engine/main.ts"]
 
 EXPOSE 8080
 
@@ -119,6 +122,7 @@ spec:
         app.kubernetes.io/version: "<version>"
         app.kubernetes.io/managed-by: tentacular
     spec:
+      automountServiceAccountToken: false
       runtimeClassName: gvisor
       securityContext:
         runAsNonRoot: true
@@ -182,7 +186,8 @@ spec:
             secretName: <workflow-name>-secrets
             optional: true
         - name: tmp
-          emptyDir: {}
+          emptyDir:
+            sizeLimit: 512Mi
 ```
 
 **Service** (ClusterIP on port 8080):
@@ -578,7 +583,7 @@ tntc run my-workflow -n production
 tntc run my-workflow -n production --timeout 60s
 ```
 
-Creates a temporary curl pod that POSTs to the workflow's ClusterIP service. Status messages go to stderr; the JSON result goes to stdout (pipe-friendly).
+Creates a temporary curl pod that POSTs to the workflow's ClusterIP service. The curl command includes `--retry 5 --retry-connrefused --retry-delay 1` to handle the kube-router NetworkPolicy ipset sync race (new pods may not be in the ingress allowlist immediately). Status messages go to stderr; the JSON result goes to stdout (pipe-friendly).
 
 ### View Logs
 
@@ -767,15 +772,28 @@ Tentacular uses a three-layer security model:
 
 The engine runs with restricted Deno permissions:
 
+The ENTRYPOINT in the base image uses broad permissions as a fallback. When a workflow has `contract.dependencies`, the K8s Deployment overrides the ENTRYPOINT with scoped flags via `command` and `args`.
+
+**Base image ENTRYPOINT (broad fallback):**
+
 | Flag | Scope | Purpose |
 |------|-------|---------|
-| `--allow-net` | All network | Nodes make HTTP requests via ctx.fetch, NATS connections |
-| `--allow-read=/app,/var/run/secrets` | `/app` and `/var/run/secrets` | Read workflow files, engine code, secrets, K8s service account tokens |
+| `--allow-net` | All network | Broad fallback for workflows without a contract |
+| `--allow-read=/app,/var/run/secrets` | `/app` and `/var/run/secrets` | Read workflow files, engine code, secrets |
 | `--allow-write=/tmp` | `/tmp` only | Temporary file operations only |
 | `--allow-env` | All env vars | Environment variable access for NATS and runtime config |
 | `--unstable-net` | Network | Enables `Deno.createHttpClient()` for custom TLS (e.g., in-cluster K8s API calls) |
 
-No file system access outside `/app` and `/var/run/secrets` (read) and `/tmp` (write). No subprocess spawning, no FFI.
+**K8s Deployment override (scoped, when contract exists):**
+
+| Flag | Scope | Purpose |
+|------|-------|---------|
+| `--allow-net=<host1>,<host2>,0.0.0.0:8080` | Declared dependencies + trigger listener | Scoped to contract dependencies; prevents exfiltration to undeclared hosts |
+| `--allow-read=/app,/var/run/secrets` | `/app` and `/var/run/secrets` | Same as fallback |
+| `--allow-write=/tmp` | `/tmp` only | Same as fallback |
+| `--allow-env=DENO_DIR,HOME` | Scoped env vars | Only runtime-required env vars (narrower than fallback) |
+
+No file system access outside `/app` and `/var/run/secrets` (read) and `/tmp` (write). No subprocess spawning, no FFI. The service account token is not mounted (`automountServiceAccountToken: false`), and the `/tmp` emptyDir has a `sizeLimit: 512Mi` to prevent disk exhaustion.
 
 ### Layer 2: Distroless Container
 

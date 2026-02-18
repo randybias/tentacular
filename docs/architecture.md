@@ -100,7 +100,7 @@ pkg/
 │   ├── build.go        Docker build with engine copy, tag derivation
 │   ├── deploy.go       Generate manifests, provision secrets, k8s.Apply()
 │   ├── status.go       Query deployment via k8s.GetStatus() (--detail for extended info)
-│   ├── run.go          Trigger deployed workflow via temp curl pod
+│   ├── run.go          Trigger deployed workflow via in-cluster curl pod
 │   ├── logs.go         Stream/tail pod logs via k8s.GetPodLogs()
 │   ├── list.go         List deployed workflows via k8s.ListWorkflows()
 │   ├── undeploy.go     Remove deployed workflow via k8s.DeleteResources()
@@ -264,12 +264,15 @@ Container uses `denoland/deno:distroless` — no shell, no package manager, no d
 
 ### Layer 2: Deno Permission Locking
 
-Entrypoint flags restrict the Deno runtime:
-- `--allow-net` — network access (required for ctx.fetch and HTTP server)
-- `--allow-read=/app` — read-only access to /app (workflow files)
-- `--allow-write=/tmp` — write access only to /tmp (ephemeral scratch)
+The base image ENTRYPOINT uses broad Deno permission flags as a fallback:
+- `--allow-net` — broad network access (fallback for workflows without a contract)
+- `--allow-read=/app,/var/run/secrets` — read-only access to workflow files and secrets
+- `--allow-write=/tmp` — write access only to /tmp (ephemeral scratch, limited to 512Mi)
+- `--allow-env` — environment variable access for runtime configuration
 
-No file system, subprocess, FFI, or environment variable access beyond these.
+**Contract-derived scoping:** When a workflow declares `contract.dependencies`, the K8s Deployment manifest overrides the ENTRYPOINT with scoped flags via `command` and `args`. The `DeriveDenoFlags()` function generates `--allow-net=<host1>:<port>,<host2>:<port>,0.0.0.0:8080`, restricting network access to only declared dependency hosts and the trigger listener port. If any dependency has `type: dynamic-target`, the function falls back to broad `--allow-net` (no host restriction) since targets are resolved at runtime. The `--allow-env` flag is scoped to `DENO_DIR,HOME` only (narrower than the ENTRYPOINT fallback). Numeric args like port `8080` are YAML-quoted to prevent integer interpretation by K8s.
+
+No subprocess, FFI, or unrestricted file system access beyond the declared paths.
 
 ### Layer 3: gVisor Sandbox
 
@@ -280,6 +283,8 @@ Pods run with `runtimeClassName: gvisor`. gVisor intercepts syscalls via its app
 ### Layer 4: Kubernetes SecurityContext
 
 ```yaml
+automountServiceAccountToken: false  # Pod level — no SA token exposed
+
 securityContext:                    # Pod level
   runAsNonRoot: true
   runAsUser: 65534                  # nobody
@@ -292,6 +297,8 @@ securityContext:                    # Container level
   capabilities:
     drop: ["ALL"]
 ```
+
+The service account token is not mounted (`automountServiceAccountToken: false`), preventing compromised pods from authenticating to the K8s API. The `/tmp` emptyDir volume has a `sizeLimit: 512Mi` to prevent disk exhaustion attacks.
 
 ### Layer 5: Secrets as Volume Mounts
 
@@ -333,8 +340,9 @@ tntc deploy [dir]
 ```
 tntc status <name>        Query Deployment readiness/replicas
   --detail                       Extended info: image, runtime, pods, events
-tntc run <name>           Trigger workflow via temp curl pod, return JSON result
+tntc run <name>           Trigger workflow via in-cluster curl pod, return JSON result
   --timeout 30s                  Maximum wait time
+                                 Uses --retry/--retry-connrefused for NetworkPolicy ipset sync
 tntc logs <name>          View pod logs (last 100 lines by default)
   --follow/-f                    Stream logs in real time
   --tail N                       Number of recent lines

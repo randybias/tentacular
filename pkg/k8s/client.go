@@ -548,6 +548,8 @@ func (c *Client) GetPodLogs(ctx context.Context, namespace, name string, follow 
 }
 
 // RunWorkflow triggers a deployed workflow by creating a temporary curl pod that POSTs to the workflow service.
+// Uses --retry and --retry-connrefused so that if NetworkPolicy ipsets haven't synced the pod's IP
+// yet (kube-router race), curl retries automatically with exponential backoff instead of failing.
 // Returns the JSON result from stdout. The temp pod is cleaned up on completion.
 func (c *Client) RunWorkflow(ctx context.Context, namespace, name string) (string, error) {
 	svcURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080/run", name, namespace)
@@ -570,7 +572,11 @@ func (c *Client) RunWorkflow(ctx context.Context, namespace, name string) (strin
 					Name:  "curl",
 					Image: "curlimages/curl:latest",
 					Command: []string{
-						"curl", "-sf", "-X", "POST",
+						"curl", "-sf",
+						"--retry", "5",
+						"--retry-connrefused",
+						"--retry-delay", "1",
+						"-X", "POST",
 						"-H", "Content-Type: application/json",
 						"-d", "{}",
 						svcURL,

@@ -21,7 +21,8 @@ The `pkg/builder/k8s.go` `GenerateK8sManifests()` function SHALL generate a Depl
   - Be named `engine`
   - Use the provided `imageTag` as the image
   - Expose `containerPort: 8080` with `protocol: TCP`
-  - NOT have an `args` field (relies on base image ENTRYPOINT defaults)
+  - NOT have `command` or `args` fields when the workflow has no contract dependencies (relies on base image ENTRYPOINT defaults)
+  - Have `command` and `args` fields when the workflow contract has dependencies, overriding the ENTRYPOINT with scoped Deno permission flags (e.g., `--allow-net=<host1>:<port>,<host2>:<port>,0.0.0.0:8080`) derived from `contract.dependencies` via `DeriveDenoFlags()`. If any dependency has `type: dynamic-target`, flags fall back to broad `--allow-net`. Numeric args (e.g., port `8080`) SHALL be YAML-quoted to prevent integer interpretation.
 
 #### Scenario: Code volume mount
 - **WHEN** a Deployment manifest is generated for workflow `my-workflow`
@@ -38,7 +39,11 @@ The `pkg/builder/k8s.go` `GenerateK8sManifests()` function SHALL generate a Depl
 
 #### Scenario: Existing volumes preserved
 - **WHEN** a Deployment manifest is generated
-- **THEN** the pod spec SHALL still include the `secrets` volume (secret mount at `/app/secrets`) and `tmp` volume (emptyDir at `/tmp`)
+- **THEN** the pod spec SHALL still include the `secrets` volume (secret mount at `/app/secrets`) and `tmp` volume (emptyDir at `/tmp` with `sizeLimit: 512Mi`)
+
+#### Scenario: Service account token disabled
+- **WHEN** a Deployment manifest is generated
+- **THEN** the pod spec SHALL include `automountServiceAccountToken: false`
 
 ### Requirement: K8s Service manifest generation
 The `GenerateK8sManifests()` function SHALL generate a ClusterIP Service manifest.
@@ -83,7 +88,19 @@ Secrets SHALL be mounted from a K8s Secret as a read-only volume, never as envir
 
 #### Scenario: Temp volume
 - **WHEN** a Deployment manifest is generated
-- **THEN** the pod spec SHALL include an `emptyDir` volume mounted at `/tmp` for temporary file writes
+- **THEN** the pod spec SHALL include an `emptyDir` volume mounted at `/tmp` for temporary file writes, with `sizeLimit: 512Mi`
+
+### Requirement: RunWorkflow uses curl retry for NetworkPolicy compatibility
+The `RunWorkflow()` function SHALL create a curl pod with retry flags to handle kube-router NetworkPolicy ipset sync delays.
+
+#### Scenario: Curl retry flags
+- **WHEN** `RunWorkflow()` creates a trigger pod
+- **THEN** the curl command SHALL include `--retry 5 --retry-connrefused --retry-delay 1`
+- **AND** the pod SHALL have label `tentacular.dev/role: trigger` for NetworkPolicy ingress matching
+
+#### Scenario: Trigger pod cleanup
+- **WHEN** `RunWorkflow()` completes (success or failure)
+- **THEN** the temporary trigger pod SHALL be deleted
 
 ### Requirement: Deploy command applies manifests via client-go
 The `tntc deploy` command SHALL generate K8s manifests including a code ConfigMap, apply them to the cluster, and trigger a rollout restart. The preflight secret existence check SHALL be skipped when local secrets will be auto-provisioned during the same deploy.
