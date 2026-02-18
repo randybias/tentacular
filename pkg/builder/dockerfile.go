@@ -13,8 +13,11 @@ COPY .engine/ /app/engine/
 # Copy deno.json for import map resolution
 COPY .engine/deno.json /app/deno.json
 
+# Copy lockfile for dependency integrity
+COPY .engine/deno.lock /app/deno.lock
+
 # Cache engine dependencies (cached to /deno-dir/ — distroless default)
-RUN ["deno", "cache", "--no-lock", "engine/main.ts"]
+RUN ["deno", "cache", "--lock=deno.lock", "engine/main.ts"]
 
 EXPOSE 8080
 

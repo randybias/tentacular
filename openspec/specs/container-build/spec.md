@@ -33,23 +33,29 @@ The generated Dockerfile SHALL copy only the engine directory and import map int
 - **WHEN** `GenerateDockerfile()` is called
 - **THEN** the Dockerfile SHALL NOT contain `COPY nodes/`
 
-### Requirement: Dockerfile caches Deno dependencies
-The generated Dockerfile SHALL run `deno cache` to pre-cache dependencies at build time.
+### Requirement: Dockerfile caches Deno dependencies with lockfile integrity
+The generated Dockerfile SHALL run `deno cache` with lockfile verification to pre-cache dependencies at build time.
 
-#### Scenario: Dependency caching
+#### Scenario: Lockfile copied
 - **WHEN** `GenerateDockerfile()` is called
-- **THEN** the Dockerfile SHALL contain a `RUN` instruction that caches `engine/main.ts` dependencies
+- **THEN** the Dockerfile SHALL contain `COPY .engine/deno.lock /app/deno.lock`
+
+#### Scenario: Dependency caching with lockfile
+- **WHEN** `GenerateDockerfile()` is called
+- **THEN** the Dockerfile SHALL contain a `RUN` instruction that caches `engine/main.ts` dependencies using `--lock=deno.lock`
+- **AND** the cache instruction SHALL NOT use `--no-lock`
 
 ### Requirement: Dockerfile sets secure Deno entrypoint
 The generated Dockerfile SHALL use a Deno entrypoint with minimal permissions and a default workflow path.
 
-#### Scenario: Permission flags
+#### Scenario: Permission flags (broad fallback)
 - **WHEN** `GenerateDockerfile()` is called
-- **THEN** the ENTRYPOINT SHALL include `--allow-net` (for HTTP trigger server)
+- **THEN** the ENTRYPOINT SHALL include `--allow-net` (broad fallback; scoped to specific hosts at deploy time via K8s args when contract exists)
 - **AND** the ENTRYPOINT SHALL include `--allow-read=/app,/var/run/secrets` (read engine, workflow, and secret files)
 - **AND** the ENTRYPOINT SHALL include `--allow-write=/tmp` (temporary file writes only)
 - **AND** the ENTRYPOINT SHALL include `--allow-env` (runtime configuration)
 - **AND** the ENTRYPOINT SHALL NOT include `--allow-all`
+- **AND** the ENTRYPOINT SHALL include `--no-lock` (lockfile integrity is enforced at build time via `--lock=deno.lock` in `deno cache`; runtime uses `--no-lock` because the read-only root filesystem prevents lock file writes)
 
 #### Scenario: Workflow path argument
 - **WHEN** `GenerateDockerfile()` is called

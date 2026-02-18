@@ -155,6 +155,27 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
 	}
 
+	// Build command/args block for Deno permission flags (10-space indent for container-level)
+	commandArgsBlock := ""
+	denoFlags := spec.DeriveDenoFlags(wf.Contract)
+	if denoFlags != nil && len(denoFlags) > 0 {
+		var lines []string
+		lines = append(lines, "          command:")
+		lines = append(lines, fmt.Sprintf("            - %s", denoFlags[0])) // "deno"
+		if len(denoFlags) > 1 {
+			lines = append(lines, "          args:")
+			for _, arg := range denoFlags[1:] {
+				// Quote numeric values so YAML treats them as strings (K8s args must be strings)
+				if _, err := fmt.Sscanf(arg, "%d", new(int)); err == nil {
+					lines = append(lines, fmt.Sprintf("            - \"%s\"", arg))
+				} else {
+					lines = append(lines, fmt.Sprintf("            - %s", arg))
+				}
+			}
+		}
+		commandArgsBlock = strings.Join(lines, "\n") + "\n"
+	}
+
 	// Deployment with security hardening
 	deployment := fmt.Sprintf(`apiVersion: apps/v1
 kind: Deployment
@@ -175,6 +196,7 @@ spec:
       labels:
         %s
     spec:
+      automountServiceAccountToken: false
 %s      securityContext:
         runAsNonRoot: true
         runAsUser: 65534
@@ -184,7 +206,7 @@ spec:
         - name: engine
           image: %s
           imagePullPolicy: %s
-          ports:
+%s          ports:
             - containerPort: 8080
               protocol: TCP
           securityContext:
@@ -232,8 +254,9 @@ spec:
             secretName: %s-secrets
             optional: true
         - name: tmp
-          emptyDir: {}
-`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, wf.Name, strings.Join(configMapItems, "\n"), wf.Name)
+          emptyDir:
+            sizeLimit: 512Mi
+`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, wf.Name, strings.Join(configMapItems, "\n"), wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,

@@ -269,3 +269,261 @@ func TestGetSecretKeyName(t *testing.T) {
 		}
 	}
 }
+
+func TestDeriveDenoFlagsNilContract(t *testing.T) {
+	flags := DeriveDenoFlags(nil)
+	if flags != nil {
+		t.Errorf("expected nil flags for nil contract, got %v", flags)
+	}
+}
+
+func TestDeriveDenoFlagsEmptyDependencies(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{},
+	}
+	flags := DeriveDenoFlags(contract)
+	if flags != nil {
+		t.Errorf("expected nil flags for empty dependencies, got %v", flags)
+	}
+}
+
+func TestDeriveDenoFlagsFixedHostScoped(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for fixed-host dependency")
+	}
+
+	// Should return scoped --allow-net with specific hosts
+	allowNetFlag := ""
+	allowEnvFlag := ""
+	for _, flag := range flags {
+		if len(flag) > 11 && flag[:11] == "--allow-net" {
+			allowNetFlag = flag
+		}
+		if len(flag) > 11 && flag[:11] == "--allow-env" {
+			allowEnvFlag = flag
+		}
+	}
+
+	if allowNetFlag == "" {
+		t.Error("expected --allow-net flag in derived flags")
+	}
+
+	// Should include api.github.com:443 and 0.0.0.0:8080
+	if allowNetFlag != "--allow-net=0.0.0.0:8080,api.github.com:443" {
+		t.Errorf("expected --allow-net=0.0.0.0:8080,api.github.com:443, got %s", allowNetFlag)
+	}
+
+	// Should include scoped --allow-env
+	if allowEnvFlag != "--allow-env=DENO_DIR,HOME" {
+		t.Errorf("expected --allow-env=DENO_DIR,HOME, got %s", allowEnvFlag)
+	}
+}
+
+func TestDeriveDenoFlagsDynamicTargetBroad(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"external-api": {
+				Protocol: "https",
+				Type:     "dynamic-target",
+				CIDR:     "0.0.0.0/0",
+				DynPorts: []string{"443/TCP"},
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for dynamic-target dependency")
+	}
+
+	// Should return broad --allow-net (no host restrictions)
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if flag == "--allow-net" {
+			allowNetFlag = flag
+		}
+	}
+
+	if allowNetFlag != "--allow-net" {
+		t.Errorf("expected broad --allow-net for dynamic-target, got %v", flags)
+	}
+}
+
+func TestDeriveDenoFlagsMixedDependenciesBroad(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+			"external-api": {
+				Protocol: "https",
+				Type:     "dynamic-target",
+				CIDR:     "0.0.0.0/0",
+				DynPorts: []string{"443/TCP"},
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for mixed dependencies")
+	}
+
+	// Mixed (fixed + dynamic-target) should return broad --allow-net
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if flag == "--allow-net" {
+			allowNetFlag = flag
+		}
+	}
+
+	if allowNetFlag != "--allow-net" {
+		t.Errorf("expected broad --allow-net for mixed dependencies, got %v", flags)
+	}
+}
+
+func TestDeriveDenoFlagsDefaultPortResolution(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				// Port omitted, should default to 443
+			},
+			"postgres": {
+				Protocol: "postgresql",
+				Host:     "postgres.svc",
+				// Port omitted, should default to 5432
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for fixed-host dependencies")
+	}
+
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if len(flag) > 11 && flag[:11] == "--allow-net" {
+			allowNetFlag = flag
+		}
+	}
+
+	// Should include default ports
+	if allowNetFlag != "--allow-net=0.0.0.0:8080,api.github.com:443,postgres.svc:5432" {
+		t.Errorf("expected ports resolved with defaults, got %s", allowNetFlag)
+	}
+}
+
+func TestDeriveDenoFlagsMultipleFixedSorted(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"z-service": {
+				Protocol: "https",
+				Host:     "z.example.com",
+				Port:     443,
+			},
+			"a-service": {
+				Protocol: "https",
+				Host:     "a.example.com",
+				Port:     443,
+			},
+			"m-service": {
+				Protocol: "postgresql",
+				Host:     "m.example.com",
+				Port:     5432,
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for multiple fixed-host dependencies")
+	}
+
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if len(flag) > 11 && flag[:11] == "--allow-net" {
+			allowNetFlag = flag
+		}
+	}
+
+	// Hosts should be sorted alphabetically
+	expected := "--allow-net=0.0.0.0:8080,a.example.com:443,m.example.com:5432,z.example.com:443"
+	if allowNetFlag != expected {
+		t.Errorf("expected sorted hosts, got %s, want %s", allowNetFlag, expected)
+	}
+}
+
+func TestDeriveDenoFlagsAlwaysIncludesLocalhost(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract)
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if len(flag) > 11 && flag[:11] == "--allow-net" {
+			allowNetFlag = flag
+		}
+	}
+
+	// Should always include 0.0.0.0:8080 as first entry
+	if len(allowNetFlag) < 23 || allowNetFlag[:23] != "--allow-net=0.0.0.0:808" {
+		t.Errorf("expected 0.0.0.0:8080 to be included first, got %s", allowNetFlag)
+	}
+}
+
+func TestDeriveDenoFlagsScopedAllowEnv(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract)
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	// Should include scoped --allow-env=DENO_DIR,HOME
+	foundAllowEnv := false
+	for _, flag := range flags {
+		if flag == "--allow-env=DENO_DIR,HOME" {
+			foundAllowEnv = true
+			break
+		}
+	}
+
+	if !foundAllowEnv {
+		t.Errorf("expected --allow-env=DENO_DIR,HOME in derived flags, got %v", flags)
+	}
+}

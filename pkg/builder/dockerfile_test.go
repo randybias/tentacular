@@ -55,15 +55,18 @@ func TestGenerateDockerfile_Entrypoint(t *testing.T) {
 
 func TestGenerateDockerfileNoLockOnCache(t *testing.T) {
 	df := GenerateDockerfile()
-	// The deno cache line must include --no-lock to avoid lock file conflicts
-	// Find the line that has "deno", "cache" and verify it also has "--no-lock"
+	// The deno cache line must include --lock=deno.lock for integrity verification
+	// Find the line that has "deno", "cache" and verify it has "--lock=deno.lock" and NOT "--no-lock"
 	lines := strings.Split(df, "\n")
 	found := false
 	for _, line := range lines {
 		if strings.Contains(line, `"deno", "cache"`) {
 			found = true
-			if !strings.Contains(line, `"--no-lock"`) {
-				t.Error("expected --no-lock flag in deno cache RUN instruction")
+			if !strings.Contains(line, `"--lock=deno.lock"`) {
+				t.Error("expected --lock=deno.lock flag in deno cache RUN instruction")
+			}
+			if strings.Contains(line, `"--no-lock"`) {
+				t.Error("expected NO --no-lock flag in deno cache RUN instruction (should use --lock=deno.lock)")
 			}
 			break
 		}
@@ -77,5 +80,32 @@ func TestGenerateDockerfile_NoDenoDirOverride(t *testing.T) {
 	df := GenerateDockerfile()
 	if strings.Contains(df, "ENV DENO_DIR") {
 		t.Error("expected no ENV DENO_DIR override — engine deps use distroless default /deno-dir/")
+	}
+}
+
+func TestGenerateDockerfile_CopyDenoLock(t *testing.T) {
+	df := GenerateDockerfile()
+	// Should COPY deno.lock file for integrity verification
+	if !strings.Contains(df, "COPY .engine/deno.lock /app/deno.lock") {
+		t.Error("expected COPY .engine/deno.lock /app/deno.lock instruction")
+	}
+}
+
+func TestGenerateDockerfile_RuntimeEntrypointNoLock(t *testing.T) {
+	df := GenerateDockerfile()
+	// Runtime ENTRYPOINT should still have --no-lock (scoped flags override via command/args in k8s.go)
+	lines := strings.Split(df, "\n")
+	foundEntrypoint := false
+	for _, line := range lines {
+		if strings.Contains(line, "ENTRYPOINT") {
+			foundEntrypoint = true
+			if !strings.Contains(line, "--no-lock") {
+				t.Error("expected --no-lock in runtime ENTRYPOINT")
+			}
+			break
+		}
+	}
+	if !foundEntrypoint {
+		t.Fatal("expected to find ENTRYPOINT in Dockerfile")
 	}
 }

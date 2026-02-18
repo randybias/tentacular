@@ -210,3 +210,77 @@ func parsePortSpec(spec string) (int, string) {
 	}
 	return port, proto
 }
+
+// DeriveDenoFlags returns the complete Deno command with permission flags based on contract dependencies.
+// Returns nil if contract is nil or has no dependencies.
+// When any dependency has type "dynamic-target", returns broad --allow-net.
+// When all dependencies are fixed-host, returns scoped --allow-net=host1:port,host2:port,...
+// Always includes 0.0.0.0:8080 in scoped mode for internal health endpoints.
+// Scopes --allow-env to DENO_DIR,HOME only.
+func DeriveDenoFlags(c *Contract) []string {
+	if c == nil || len(c.Dependencies) == 0 {
+		return nil
+	}
+
+	// Check if any dependency is dynamic-target
+	hasDynamic := false
+	var allowedHosts []string
+	for _, dep := range c.Dependencies {
+		if dep.Type == "dynamic-target" {
+			hasDynamic = true
+			break
+		}
+	}
+
+	var allowNetFlag string
+	if hasDynamic {
+		// Broad network access for dynamic targets
+		allowNetFlag = "--allow-net"
+	} else {
+		// Build scoped network access list
+		seen := make(map[string]bool)
+		for _, dep := range c.Dependencies {
+			if dep.Host != "" {
+				port := dep.Port
+				if port == 0 {
+					// Apply default port if not specified
+					if defaultPort, ok := protocolDefaultPorts[dep.Protocol]; ok {
+						port = defaultPort
+					}
+				}
+				if port > 0 {
+					hostPort := dep.Host + ":" + strconv.Itoa(port)
+					if !seen[hostPort] {
+						allowedHosts = append(allowedHosts, hostPort)
+						seen[hostPort] = true
+					}
+				}
+			}
+		}
+
+		// Always include localhost:8080 for health endpoints
+		if !seen["0.0.0.0:8080"] {
+			allowedHosts = append(allowedHosts, "0.0.0.0:8080")
+		}
+
+		// Sort for deterministic output
+		sort.Strings(allowedHosts)
+		allowNetFlag = "--allow-net=" + strings.Join(allowedHosts, ",")
+	}
+
+	return []string{
+		"deno",
+		"run",
+		"--no-lock",
+		"--unstable-net",
+		allowNetFlag,
+		"--allow-read=/app,/var/run/secrets",
+		"--allow-write=/tmp",
+		"--allow-env=DENO_DIR,HOME",
+		"engine/main.ts",
+		"--workflow",
+		"/app/workflow/workflow.yaml",
+		"--port",
+		"8080",
+	}
+}

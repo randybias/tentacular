@@ -85,3 +85,5 @@ The following issues have been fixed. See [roadmap.md](roadmap.md) Archive secti
 - **Deployment Guide Dockerfile** -- Updated to match actual generated Dockerfile
 - **Preflight Secret Check First-Deploy Failure** -- `tntc deploy` no longer checks for K8s secret existence when local secrets will be auto-provisioned during the same deploy
 - **Version Label YAML Float Parsing** -- `app.kubernetes.io/version` label is now YAML-quoted (`"1.0"`) to prevent float interpretation
+- **Deployment Args Numeric YAML Quoting** -- Numeric values in Deployment `args:` (e.g., port `8080`) are now YAML-quoted (`"8080"`) to prevent K8s rejecting them as non-string types
+- **kube-router NetworkPolicy ipset Sync Race** -- kube-router populates `podSelector` ipsets asynchronously. Ephemeral trigger pods may connect before their IP is in the ingress allowlist. Mitigated by curl `--retry --retry-connrefused` flags on `tntc run` and CronJob triggers
