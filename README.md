@@ -170,14 +170,18 @@ Five layers of defense-in-depth, from innermost to outermost:
 
 **Execution Model:** All nodes in a workflow execute within a single Deno process and share memory. Stages run sequentially while nodes within each stage run concurrently via async/await. Isolation is provided at the pod level through gVisor's syscall interception, Deno's permission controls, and Kubernetes SecurityContext hardening. This single-process design prioritizes simplicity and performance while maintaining strong container-level security boundaries.
 
-### Why Not Monolithic?
+### Why Per-Workflow Isolation?
 
-| | Monolithic Engines | Tentacular |
-|--|-------------------|-------------|
-| **Isolation** | One breach = all processes | Each workflow pod isolated by gVisor |
-| **Scaling** | All or nothing | Per-workflow autoscaling |
-| **Deployment** | Redeploy everything | Update code via ConfigMap, no rebuild |
-| **Security** | Single trust boundary | Five-layer defense-in-depth |
+Automation platforms like n8n and Airflow run all workflows in a shared runtime — one compromised workflow can reach every other workflow's data and credentials. Tentacular deploys each workflow as its own sealed pod with its own NetworkPolicy, secrets, and Deno permission scope.
+
+| | Shared-Runtime Platforms | Tentacular |
+|--|--------------------------|-------------|
+| **Blast radius** | One breach exposes all workflows | Each workflow is an isolated pod with its own security boundary |
+| **Network access** | Shared, hard to restrict per-workflow | Per-workflow NetworkPolicy derived from declared dependencies |
+| **Secrets** | Shared secret store across workflows | Each workflow mounts only its own secrets |
+| **Deployment** | Platform upgrade affects everything | Update one workflow's code via ConfigMap, others untouched |
+
+Within a workflow, all nodes share a single Deno process — this is intentional. Nodes in a DAG are tightly coupled by design, and single-process execution gives simplicity and performance without sacrificing the pod-level security boundary.
 
 See [docs/architecture.md](docs/architecture.md) for the full architecture reference including data flow, execution model, and extension points.
 
