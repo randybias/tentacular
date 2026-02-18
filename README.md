@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="Tentacular — Security-First Workflow Engine for Kubernetes" width="100%">
+</p>
+
 # Tentacular
 
 Tentacular is a secure workflow build and execution system for AI agents. Instead of long-lived monolithic automation stacks or generic node catalogs, you build purpose-fit TypeScript DAG workflows for each job, then iterate or replace them quickly.
