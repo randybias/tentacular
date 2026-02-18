@@ -179,7 +179,7 @@ Automation platforms like n8n and Airflow run all workflows in a shared runtime 
 | **Blast radius** | One breach exposes all workflows | Each workflow is an isolated pod with its own security boundary |
 | **Network access** | Shared, hard to restrict per-workflow | Per-workflow NetworkPolicy derived from declared dependencies |
 | **Secrets** | Shared secret store across workflows | Each workflow mounts only its own secrets |
-| **Deployment** | Platform upgrade affects everything | Update one workflow's code via ConfigMap, others untouched |
+| **Deployment** | Platform upgrade affects everything | Deploy/replace one workflow, others untouched |
 
 Within a workflow, all nodes share a single Deno process — this is intentional. Nodes in a DAG are tightly coupled by design, and single-process execution gives simplicity and performance without sacrificing the pod-level security boundary.
 
