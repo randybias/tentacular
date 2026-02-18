@@ -18,10 +18,10 @@ Tentacular is a workflow execution platform that runs TypeScript DAGs on Kuberne
                 │  └────────────────────┘  │          │   │  └──────────────────┘  │   │
                 │           │              │          │   │  /app/workflow (CM)     │   │
                 │      ┌────┴────┐         │          │   │  /app/secrets (vol)     │   │
-                │      │ Docker  │         │  push    │   └────────────────────────┘   │
-                │      │ Build   │ ────────│────────> │   ConfigMap (code) ──┘         │
-                │      └─────────┘         │  (image) │   K8s Secret                   │
-                │                          │          │   Zot Registry                 │
+                │      │ Docker  │         │          │   └────────────────────────┘   │
+                │      │ Build   │         │          │   ConfigMap (code) ──┘         │
+                │      └─────────┘         │          │   K8s Secret                   │
+                │                          │          │   NetworkPolicy                │
                 └──────────────────────────┘          └────────────────────────────────┘
 ```
 
@@ -538,11 +538,7 @@ The target deployment environment is a k0s Kubernetes cluster — a lightweight,
 
 ### Container Registry
 
-Dual-registry pattern:
-- **Build registry** — external registry URL passed via `--registry` (used during `docker push`)
-- **Cluster registry** — in-cluster Zot registry passed via `--cluster-registry` (used in K8s manifest image references)
-
-This allows building and pushing from a CI machine while K8s pulls from the local Zot registry, avoiding egress traffic and improving pull latency.
+Images are pushed to whatever external registry the user configures via `--registry` or the `registry` field in `.tentacular/config.yaml`. There is no in-cluster registry component — K8s pulls images from the configured external registry.
 
 ### gVisor Setup
 
