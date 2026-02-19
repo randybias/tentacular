@@ -9,7 +9,7 @@ Real workflows with secrets, credentials, and
 production-specific configuration belong in a separate
 local directory.
 
-**Recommended layout:**
+**Canonical location: `~/workspace/tentacles/`**
 
 ```
 ~/workspace/tentacles/
@@ -37,6 +37,42 @@ local directory.
 tentacles directory, not in the repo. Use
 `example-workflows/` as templates if helpful, but the
 working copy lives in tentacles.
+
+> ⚠️ **NEVER deploy from `example-workflows/`** — those
+> are read-only reference implementations. If a workflow
+> was accidentally deployed from there, move the source to
+> `~/workspace/tentacles/<name>/`, verify `.secrets.yaml`
+> is present there, and redeploy from the new location.
+
+## Querying Running Workflows
+
+`tntc list` does **not** support `--env`. To list
+deployed workflows, pass the `KUBECONFIG` and namespace
+explicitly:
+
+```bash
+# Dev environment
+KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
+  tntc list -n tentacular-dev
+
+# Prod environment
+KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
+  tntc list -n tentacular-prod
+```
+
+Similarly for status, logs, run, undeploy:
+
+```bash
+KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
+  tntc status ai-news-roundup -n tentacular-prod
+
+KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
+  tntc logs ai-news-roundup -n tentacular-prod
+```
+
+The `--env` flag is only supported on `tntc deploy` and
+`tntc test --live`. All other commands require explicit
+`-n` + `KUBECONFIG`.
 
 ---
 
