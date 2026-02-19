@@ -51,23 +51,22 @@ deployed workflows, pass the `KUBECONFIG` and namespace
 explicitly:
 
 ```bash
-# Dev environment
-KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
-  tntc list -n tentacular-dev
+# Dev environment (kubeconfig from ~/.tentacular/config.yaml env.dev.kubeconfig)
+KUBECONFIG=<env.dev.kubeconfig> tntc list -n <env.dev.namespace>
 
 # Prod environment
-KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
-  tntc list -n tentacular-prod
+KUBECONFIG=<env.prod.kubeconfig> tntc list -n <env.prod.namespace>
 ```
+
+The kubeconfig path and namespace for each environment come from
+`~/.tentacular/config.yaml` (or `.tentacular/config.yaml`).
+Check that file for the values to use.
 
 Similarly for status, logs, run, undeploy:
 
 ```bash
-KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
-  tntc status ai-news-roundup -n tentacular-prod
-
-KUBECONFIG=~/dev-secrets/kubeconfigs/agensys2.kubeconfig \
-  tntc logs ai-news-roundup -n tentacular-prod
+KUBECONFIG=<env.prod.kubeconfig> tntc status <workflow-name> -n <env.prod.namespace>
+KUBECONFIG=<env.prod.kubeconfig> tntc logs   <workflow-name> -n <env.prod.namespace>
 ```
 
 The `--env` flag is only supported on `tntc deploy` and
