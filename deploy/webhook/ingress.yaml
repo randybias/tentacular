@@ -1,0 +1,42 @@
+# Nginx Ingress for the Tentacular webhook listener.
+# Requires:
+#   - cert-manager with tls-acme support (already on agensys2)
+#   - DNS: tentacular-webhook.ospo-dev.miralabs.dev -> Lagoon ELB
+#
+# Once DNS is in place, cert-manager automatically provisions TLS via Let's Encrypt.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: tentacular-webhook
+  namespace: tentacular-prod
+  labels:
+    app: tentacular-webhook
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/part-of: tentacular
+  annotations:
+    # Modern cert-manager annotation (preferred over legacy kubernetes.io/tls-acme)
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    # Keep legacy annotation for ingress-shim compatibility
+    kubernetes.io/tls-acme: "true"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # GitHub webhook deliveries time out at 10s; the handler returns 200 immediately
+    # (async execution), so this is conservative but safe.
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "15"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "15"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: tentacular-webhook.ospo-dev.miralabs.dev
+      http:
+        paths:
+          - path: /webhook
+            pathType: Prefix
+            backend:
+              service:
+                name: tentacular-webhook
+                port:
+                  name: http
+  tls:
+    - hosts:
+        - tentacular-webhook.ospo-dev.miralabs.dev
+      secretName: tentacular-webhook-tls

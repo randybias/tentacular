@@ -19,11 +19,15 @@ type DeploymentConfig struct {
 }
 
 type Trigger struct {
-	Type     string `yaml:"type"`
-	Name     string `yaml:"name,omitempty"`
-	Schedule string `yaml:"schedule,omitempty"`
-	Path     string `yaml:"path,omitempty"`
-	Subject  string `yaml:"subject,omitempty"`
+	Type     string   `yaml:"type"`
+	Name     string   `yaml:"name,omitempty"`
+	Schedule string   `yaml:"schedule,omitempty"`
+	Path     string   `yaml:"path,omitempty"`
+	Subject  string   `yaml:"subject,omitempty"`
+	// webhook-specific fields
+	Provider string   `yaml:"provider,omitempty"` // e.g. "github"
+	Event    string   `yaml:"event,omitempty"`    // e.g. "pull_request"
+	Actions  []string `yaml:"actions,omitempty"`  // e.g. ["opened", "synchronize"]
 }
 
 type NodeSpec struct {

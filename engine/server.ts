@@ -1,6 +1,7 @@
 import type { CompiledDAG, Context, ExecutionResult } from "./types.ts";
 import type { NodeRunner } from "./executor/types.ts";
 import { SimpleExecutor } from "./executor/simple.ts";
+import { handleGitHubWebhook, validateOptions as validateWebhookOptions } from "./triggers/webhook.ts";
 
 export interface ServerOptions {
   port: number;
@@ -9,6 +10,8 @@ export interface ServerOptions {
   ctx: Context;
   timeoutMs?: number;
   maxRetries?: number;
+  /** GitHub webhook secret for HMAC-SHA256 signature validation */
+  webhookSecret?: string;
 }
 
 /**
@@ -16,6 +19,13 @@ export interface ServerOptions {
  * Exposes POST /run to trigger workflow execution.
  */
 export function startServer(opts: ServerOptions): Deno.HttpServer {
+  // Validate webhook triggers if any are configured
+  const webhookTriggers = (opts.graph.workflow.triggers ?? []).filter((t) => t.type === "webhook");
+  if (webhookTriggers.length > 0) {
+    const err = validateWebhookOptions({ triggers: webhookTriggers });
+    if (err) throw new Error(`Webhook trigger configuration error: ${err}`);
+  }
+
   const executor = new SimpleExecutor({
     timeoutMs: opts.timeoutMs,
     maxRetries: opts.maxRetries,
@@ -26,6 +36,40 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
 
     if (url.pathname === "/health") {
       return new Response(JSON.stringify({ status: "ok" }), {
+        headers: { "content-type": "application/json" },
+      });
+    }
+
+    // Webhook trigger: POST /webhook/:provider (exact match only)
+    const webhookMatch = url.pathname.match(/^\/webhook\/([a-z][a-z0-9-]*)$/);
+    if (webhookMatch && req.method === "POST") {
+      const provider = webhookMatch[1];
+      const webhookTriggers = (opts.graph.workflow.triggers ?? []).filter(
+        (t) => t.type === "webhook",
+      );
+
+      if (webhookTriggers.length === 0) {
+        return new Response(JSON.stringify({ error: "No webhook triggers configured" }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        });
+      }
+
+      if (provider === "github") {
+        return await handleGitHubWebhook(req, {
+          port: opts.port,
+          triggers: webhookTriggers,
+          graph: opts.graph,
+          runner: opts.runner,
+          ctx: opts.ctx,
+          timeoutMs: opts.timeoutMs,
+          maxRetries: opts.maxRetries,
+          secret: opts.webhookSecret,
+        });
+      }
+
+      return new Response(JSON.stringify({ error: `Unknown webhook provider: ${provider}` }), {
+        status: 400,
         headers: { "content-type": "application/json" },
       });
     }
@@ -65,8 +109,12 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
 
   const server = Deno.serve({ port: opts.port }, handler);
   console.log(`Workflow server listening on http://localhost:${opts.port}`);
-  console.log(`  POST /run    — trigger workflow execution`);
-  console.log(`  GET  /health — health check`);
+  console.log(`  POST /run              — trigger workflow execution`);
+  console.log(`  GET  /health           — health check`);
+  const hasWebhookTrigger = (opts.graph.workflow.triggers ?? []).some((t) => t.type === "webhook");
+  if (hasWebhookTrigger) {
+    console.log(`  POST /webhook/github   — GitHub webhook receiver`);
+  }
 
   return server;
 }
