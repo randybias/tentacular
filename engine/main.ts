@@ -110,6 +110,24 @@ async function main() {
     }
   }
 
+  // Resolve webhook secret: secrets.github.webhook_secret → WEBHOOK_SECRET env
+  const webhookSecret =
+    (secrets["github"] as Record<string, string> | undefined)?.["webhook_secret"] ??
+    Deno.env.get("WEBHOOK_SECRET");
+
+  if (webhookSecret) {
+    console.log("  Webhook secret: configured");
+  } else {
+    const hasWebhookTrigger = spec.triggers.some((t) => t.type === "webhook");
+    if (hasWebhookTrigger) {
+      console.warn(
+        "  WARNING: Webhook trigger configured but no webhook secret found. " +
+          "Set secrets.github.webhook_secret or WEBHOOK_SECRET env var. " +
+          "Signature validation will be SKIPPED — do not use in production.",
+      );
+    }
+  }
+
   // Start HTTP server
   const server = startServer({
     port,
@@ -118,6 +136,7 @@ async function main() {
     ctx,
     timeoutMs,
     maxRetries: spec.config?.retries ?? 0,
+    webhookSecret,
   });
 
   // Start NATS triggers for queue-type triggers

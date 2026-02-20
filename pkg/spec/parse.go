@@ -71,8 +71,8 @@ func Parse(data []byte) (*Workflow, []string) {
 		if t.Type == "cron" && t.Schedule == "" {
 			errs = append(errs, fmt.Sprintf("trigger[%d]: cron trigger requires schedule", i))
 		}
-		if t.Type == "webhook" && t.Path == "" {
-			errs = append(errs, fmt.Sprintf("trigger[%d]: webhook trigger requires path", i))
+		if t.Type == "webhook" && t.Path == "" && t.Provider == "" {
+			errs = append(errs, fmt.Sprintf("trigger[%d]: webhook trigger requires path or provider", i))
 		}
 		if t.Type == "queue" && t.Subject == "" {
 			errs = append(errs, fmt.Sprintf("trigger[%d]: queue trigger requires subject", i))

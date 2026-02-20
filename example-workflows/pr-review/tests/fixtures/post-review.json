@@ -1,0 +1,15 @@
+{
+  "owner": "randybias",
+  "repo": "tentacular",
+  "pr_number": 42,
+  "commit_id": "abc123def456abc123def456abc123def456abc1",
+  "review_body": "This PR adds a webhook trigger for the Tentacular engine.\n\nThe HMAC signature validation uses `crypto.subtle.verify()` — correct constant-time approach. One Semgrep finding requires attention (see inline comment). CI passes. No vulnerable dependencies introduced.",
+  "inline_comments": [
+    {
+      "path": "engine/triggers/webhook.ts",
+      "line": 45,
+      "body": "Semgrep flagged this HMAC comparison path. Verify that `crypto.subtle.verify()` is being used here and not a manual string comparison — timing attacks are a real concern for webhook secret validation."
+    }
+  ],
+  "verdict": "COMMENT"
+}

@@ -1,0 +1,47 @@
+{
+  "fetch-pr": {
+    "owner": "randybias",
+    "repo": "tentacular",
+    "pr_number": 42,
+    "head_sha": "abc123def456abc123def456abc123def456abc1",
+    "base_sha": "789012345678901234567890123456789012345",
+    "pr_title": "feat: add webhook trigger support",
+    "pr_body": "Implements native webhook trigger for the Tentacular engine.",
+    "pr_url": "https://github.com/randybias/tentacular/pull/42",
+    "changed_files": [
+      { "filename": "engine/triggers/webhook.ts", "status": "added", "additions": 120, "deletions": 0 }
+    ],
+    "diff_summary": "--- engine/triggers/webhook.ts (added) +120 -0 ---\n@@ -0,0 +1,5 @@\n+export async function handleGitHubWebhook(req, opts) {}"
+  },
+  "semgrep-scan": {
+    "alerts": [
+      {
+        "id": 1,
+        "rule_id": "typescript.security.audit.hmac-timing",
+        "severity": "high",
+        "message": "Potential timing attack in HMAC comparison",
+        "path": "engine/triggers/webhook.ts",
+        "line": 45,
+        "end_line": 47,
+        "url": "https://github.com/randybias/tentacular/security/code-scanning/1"
+      }
+    ],
+    "tool": "Semgrep"
+  },
+  "dep-review": {
+    "vulnerabilities": [],
+    "license_concerns": []
+  },
+  "check-runs": {
+    "checks": [
+      { "name": "build", "status": "completed", "conclusion": "success", "url": "", "started_at": null, "completed_at": null },
+      { "name": "test", "status": "completed", "conclusion": "success", "url": "", "started_at": null, "completed_at": null }
+    ],
+    "overall_status": "pass",
+    "failed_checks": []
+  },
+  "code-scan": {
+    "alerts": [],
+    "tool": "CodeQL"
+  }
+}

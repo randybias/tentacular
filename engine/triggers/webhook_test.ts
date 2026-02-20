@@ -7,6 +7,7 @@ import { handleGitHubWebhook } from "./webhook.ts";
 import type { WebhookTriggerOptions } from "./webhook.ts";
 import type { CompiledDAG, Context } from "../types.ts";
 import type { NodeRunner } from "../executor/types.ts";
+import { SimpleExecutor } from "../executor/simple.ts";
 
 // --- Test helpers ---
 
@@ -85,11 +86,11 @@ function makeOpts(overrides: Partial<WebhookTriggerOptions> = {}): WebhookTrigge
   };
 
   return {
-    port: 8080,
     triggers: mockGraph.workflow.triggers,
     graph: mockGraph,
     runner: mockRunner,
     ctx: mockCtx,
+    executor: new SimpleExecutor(),
     secret: SECRET,
     ...overrides,
   };
