@@ -1,0 +1,30 @@
+{
+  "checks": [
+    {
+      "name": "build",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/randybias/tentacular/runs/1",
+      "started_at": "2026-02-20T17:00:00Z",
+      "completed_at": "2026-02-20T17:02:30Z"
+    },
+    {
+      "name": "test",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/randybias/tentacular/runs/2",
+      "started_at": "2026-02-20T17:00:00Z",
+      "completed_at": "2026-02-20T17:03:15Z"
+    },
+    {
+      "name": "lint",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/randybias/tentacular/runs/3",
+      "started_at": "2026-02-20T17:00:00Z",
+      "completed_at": "2026-02-20T17:01:20Z"
+    }
+  ],
+  "overall_status": "pass",
+  "failed_checks": []
+}

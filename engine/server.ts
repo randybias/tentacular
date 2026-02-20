@@ -57,13 +57,11 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
 
       if (provider === "github") {
         return await handleGitHubWebhook(req, {
-          port: opts.port,
           triggers: webhookTriggers,
           graph: opts.graph,
           runner: opts.runner,
           ctx: opts.ctx,
-          timeoutMs: opts.timeoutMs,
-          maxRetries: opts.maxRetries,
+          executor, // shared — created once at server startup
           secret: opts.webhookSecret,
         });
       }

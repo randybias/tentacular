@@ -7,12 +7,9 @@
  */
 
 import type { CompiledDAG, Context, Trigger } from "../types.ts";
-import type { NodeRunner } from "../executor/types.ts";
-import { SimpleExecutor } from "../executor/simple.ts";
+import type { NodeRunner, WorkflowExecutor } from "../executor/types.ts";
 
 export interface WebhookTriggerOptions {
-  /** Port to listen on for webhook requests */
-  port: number;
   /** Webhook triggers from the workflow spec */
   triggers: Trigger[];
   /** Compiled workflow DAG */
@@ -21,17 +18,10 @@ export interface WebhookTriggerOptions {
   runner: NodeRunner;
   /** Workflow context */
   ctx: Context;
-  /** Execution timeout in ms */
-  timeoutMs?: number;
-  /** Max retries per node */
-  maxRetries?: number;
+  /** Shared executor — created once at server startup, not per-request */
+  executor: WorkflowExecutor;
   /** GitHub webhook secret for HMAC-SHA256 signature validation */
   secret?: string;
-}
-
-export interface WebhookTriggerHandle {
-  /** Shut down the webhook HTTP server */
-  close(): Promise<void>;
 }
 
 /**
@@ -50,10 +40,10 @@ export function validateOptions(opts: Partial<WebhookTriggerOptions>): string | 
 }
 
 /**
- * Validate a GitHub webhook HMAC-SHA256 signature.
+ * Validate a GitHub webhook HMAC-SHA256 signature using Web Crypto.
  *
  * GitHub sends: X-Hub-Signature-256: sha256=<hex>
- * We compute:   HMAC-SHA256(secret, body) and compare.
+ * Uses crypto.subtle.verify() for native constant-time comparison (BoringSSL-backed).
  */
 async function validateGitHubSignature(
   body: string,
@@ -72,7 +62,7 @@ async function validateGitHubSignature(
     sigBytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
   }
 
-  // Use crypto.subtle.verify() for guaranteed constant-time HMAC comparison
+  // crypto.subtle.verify() guarantees constant-time comparison — no timing leaks
   const key = await crypto.subtle.importKey(
     "raw",
     new TextEncoder().encode(secret),
@@ -91,6 +81,7 @@ async function validateGitHubSignature(
 
 /**
  * Find a matching webhook trigger for the given provider, event, and action.
+ * Omitting provider/event/actions on a trigger acts as a wildcard.
  */
 function findMatchingTrigger(
   triggers: Trigger[],
@@ -110,21 +101,16 @@ function findMatchingTrigger(
 }
 
 /**
- * Start an HTTP server that handles webhook requests.
- * Integrates with the existing Tentacular engine HTTP server via the handler.
+ * Handle a GitHub webhook POST request.
  *
- * Returns a handler function for use in server.ts, plus a close() noop
- * (lifecycle is managed by the main server).
+ * - Validates HMAC-SHA256 signature (if secret configured)
+ * - Matches against workflow triggers by event + action
+ * - Returns 200 immediately, executes workflow asynchronously
  */
 export async function handleGitHubWebhook(
   req: Request,
   opts: WebhookTriggerOptions,
 ): Promise<Response> {
-  const executor = new SimpleExecutor({
-    timeoutMs: opts.timeoutMs,
-    maxRetries: opts.maxRetries,
-  });
-
   // Read body once
   const body = await req.text();
 
@@ -184,10 +170,11 @@ export async function handleGitHubWebhook(
     },
   };
 
-  // Execute workflow asynchronously — do NOT await, return 200 immediately
+  // Execute workflow asynchronously — return 200 immediately, do NOT await
+  // V1 known limitation: pod crash after 200 = lost event (NATS bridge planned for V2)
   (async () => {
     try {
-      const result = await executor.execute(opts.graph, opts.runner, opts.ctx, input);
+      const result = await opts.executor.execute(opts.graph, opts.runner, opts.ctx, input);
       if (!result.success) {
         console.error(
           `[webhook] Workflow execution failed for delivery=${deliveryId}:`,

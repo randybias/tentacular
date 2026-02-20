@@ -1,0 +1,82 @@
+name: pr-review
+version: "1.0"
+description: "Agentic PR review — parallel scanning + Claude synthesis, triggered by GitHub webhook"
+
+deployment:
+  namespace: tentacular-pr-review
+
+triggers:
+  - type: webhook
+    provider: github
+    event: pull_request
+    actions: [opened, synchronize, reopened]
+
+nodes:
+  fetch-pr:
+    path: ./nodes/fetch-pr.ts
+
+  semgrep-scan:
+    path: ./nodes/semgrep-scan.ts
+
+  dep-review:
+    path: ./nodes/dep-review.ts
+
+  check-runs:
+    path: ./nodes/check-runs.ts
+
+  code-scan:
+    path: ./nodes/code-scan.ts
+
+  synthesize:
+    path: ./nodes/synthesize.ts
+
+  post-review:
+    path: ./nodes/post-review.ts
+
+edges:
+  # fetch-pr fans out to all 4 parallel scanners
+  - from: fetch-pr
+    to: semgrep-scan
+  - from: fetch-pr
+    to: dep-review
+  - from: fetch-pr
+    to: check-runs
+  - from: fetch-pr
+    to: code-scan
+  # fetch-pr also feeds synthesize directly (for PR metadata + diff)
+  - from: fetch-pr
+    to: synthesize
+  # fan-in: all 4 scanners feed into synthesize
+  - from: semgrep-scan
+    to: synthesize
+  - from: dep-review
+    to: synthesize
+  - from: check-runs
+    to: synthesize
+  - from: code-scan
+    to: synthesize
+  # post-review receives synthesized output
+  - from: synthesize
+    to: post-review
+
+config:
+  timeout: 300s
+  retries: 1
+
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+    anthropic:
+      protocol: https
+      host: api.anthropic.com
+      port: 443
+      auth:
+        type: api-key
+        secret: anthropic.api_key

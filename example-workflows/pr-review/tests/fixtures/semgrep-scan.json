@@ -1,0 +1,15 @@
+{
+  "alerts": [
+    {
+      "id": 1,
+      "rule_id": "javascript.express.security.audit.xss.mustache-vars-in-href.mustache-vars-in-href",
+      "severity": "high",
+      "message": "User-controlled input in href attribute — potential XSS",
+      "path": "engine/triggers/webhook.ts",
+      "line": 45,
+      "end_line": 47,
+      "url": "https://github.com/randybias/tentacular/security/code-scanning/1"
+    }
+  ],
+  "tool": "Semgrep"
+}
