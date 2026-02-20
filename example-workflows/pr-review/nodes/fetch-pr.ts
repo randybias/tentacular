@@ -114,3 +114,4 @@ export default async function run(ctx: Context, input: unknown): Promise<PrConte
 // Note: GitHub truncates patches for large files (>1000 lines changed).
 // In that case, `patch` will be undefined and the file is excluded from the diff summary.
 // For very large PRs, consider fetching the raw diff via the compare endpoint instead.
+
