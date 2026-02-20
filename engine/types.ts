@@ -39,6 +39,10 @@ export interface Trigger {
   schedule?: string;
   path?: string;
   subject?: string;
+  // webhook-specific fields
+  provider?: string;   // e.g. "github"
+  event?: string;      // e.g. "pull_request"
+  actions?: string[];  // e.g. ["opened", "synchronize", "reopened"]
 }
 
 export interface NodeSpec {

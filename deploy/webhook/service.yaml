@@ -1,0 +1,21 @@
+# ClusterIP Service for the Tentacular webhook listener.
+# The engine HTTP server listens on port 8080.
+# Deploy this alongside the workflow Deployment.
+apiVersion: v1
+kind: Service
+metadata:
+  name: tentacular-webhook
+  namespace: tentacular-prod
+  labels:
+    app: tentacular-webhook
+    app.kubernetes.io/component: webhook
+    app.kubernetes.io/part-of: tentacular
+spec:
+  type: ClusterIP
+  selector:
+    app: tentacular-webhook
+  ports:
+    - name: http
+      port: 80
+      targetPort: 8080
+      protocol: TCP
