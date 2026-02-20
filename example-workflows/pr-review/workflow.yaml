@@ -73,10 +73,10 @@ contract:
       auth:
         type: bearer-token
         secret: github.token
-    anthropic:
+    openai:
       protocol: https
-      host: api.anthropic.com
+      host: api.openai.com
       port: 443
       auth:
-        type: api-key
-        secret: anthropic.api_key
+        type: bearer-token
+        secret: openai.api_key

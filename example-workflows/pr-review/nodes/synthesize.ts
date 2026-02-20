@@ -34,9 +34,9 @@ interface SynthesizeInput {
   "code-scan": CodeScanOutput;
 }
 
-/** Claude messages API response (minimal subset) */
-interface ClaudeResponse {
-  content: Array<{ type: string; text: string }>;
+/** OpenAI chat completions API response (minimal subset) */
+interface OpenAIResponse {
+  choices: Array<{ message: { content: string } }>;
 }
 
 /**
@@ -161,29 +161,28 @@ Rules:
 - Use APPROVE if: no significant issues found
 - Prioritize: security > correctness > performance > style`;
 
-  // --- Call Claude API ---
-  const anthropic = ctx.dependency("anthropic");
+  // --- Call OpenAI API ---
+  const openai = ctx.dependency("openai");
 
-  const res = await anthropic.fetch!("/v1/messages", {
+  const res = await openai.fetch!("/v1/chat/completions", {
     method: "POST",
     headers: {
-      "x-api-key": anthropic.secret!,
-      "anthropic-version": "2023-06-01",
+      "Authorization": `Bearer ${openai.secret}`,
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-sonnet-4-5",
+      model: "gpt-4o",
       max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     }),
   });
 
   if (!res.ok) {
-    throw new Error(`Anthropic API error: ${res.status} ${await res.text()}`);
+    throw new Error(`OpenAI API error: ${res.status} ${await res.text()}`);
   }
 
-  const claude = await res.json() as ClaudeResponse;
-  const rawText = claude.content[0]?.text ?? "";
+  const completion = await res.json() as OpenAIResponse;
+  const rawText = completion.choices[0]?.message.content ?? "";
 
   // Parse Claude's JSON response
   let parsed: { verdict: string; review_body: string; inline_comments: InlineComment[] };
