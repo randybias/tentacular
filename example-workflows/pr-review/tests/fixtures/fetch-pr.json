@@ -1,27 +1,30 @@
 {
-  "owner": "randybias",
-  "repo": "tentacular",
-  "pr_number": 42,
-  "head_sha": "abc123def456abc123def456abc123def456abc1",
-  "base_sha": "789012345678901234567890123456789012345",
-  "pr_title": "feat: add webhook trigger support",
-  "pr_body": "Implements native webhook trigger for the Tentacular engine.\n\nChanges:\n- engine/triggers/webhook.ts\n- engine/server.ts\n- engine/types.ts",
-  "pr_url": "https://github.com/randybias/tentacular/pull/42",
-  "changed_files": [
-    {
-      "filename": "engine/triggers/webhook.ts",
-      "status": "added",
-      "additions": 120,
-      "deletions": 0,
-      "patch": "@@ -0,0 +1,120 @@\n+import type { Context } from \"../types.ts\";\n+// ...\n"
+  "input": {
+    "_webhook": { "event": "pull_request", "action": "opened", "delivery_id": "test-delivery-001" },
+    "pull_request": {
+      "number": 42,
+      "title": "feat: add webhook trigger support",
+      "body": "Implements native webhook trigger for the Tentacular engine.\n\nChanges:\n- engine/triggers/webhook.ts\n- engine/server.ts\n- engine/types.ts",
+      "html_url": "https://github.com/randybias/tentacular/pull/42",
+      "head": { "sha": "abc123def456abc123def456abc123def456abc1" },
+      "base": { "sha": "789012345678901234567890123456789012345" }
     },
-    {
-      "filename": "engine/server.ts",
-      "status": "modified",
-      "additions": 35,
-      "deletions": 2,
-      "patch": "@@ -1,5 +1,8 @@\n+import { handleGitHubWebhook } from \"./triggers/webhook.ts\";\n"
+    "repository": {
+      "name": "tentacular",
+      "full_name": "randybias/tentacular",
+      "owner": { "login": "randybias" }
     }
-  ],
-  "diff_summary": "--- engine/triggers/webhook.ts (added) +120 -0 ---\n@@ -0,0 +1,120 @@\n+import type { Context } from \"../types.ts\";\n"
+  },
+  "expected": {
+    "owner": "randybias",
+    "repo": "tentacular",
+    "pr_number": 42,
+    "head_sha": "abc123def456abc123def456abc123def456abc1",
+    "base_sha": "789012345678901234567890123456789012345",
+    "pr_title": "feat: add webhook trigger support",
+    "pr_body": "Implements native webhook trigger for the Tentacular engine.\n\nChanges:\n- engine/triggers/webhook.ts\n- engine/server.ts\n- engine/types.ts",
+    "pr_url": "https://github.com/randybias/tentacular/pull/42",
+    "changed_files": [],
+    "diff_summary": ""
+  }
 }

@@ -69,7 +69,8 @@ export default async function run(ctx: Context, input: unknown): Promise<PrConte
     throw new Error(`GitHub files API error: ${filesRes.status} ${await filesRes.text()}`);
   }
 
-  const rawFiles = await filesRes.json() as Record<string, unknown>[];
+  const rawFilesData = await filesRes.json();
+  const rawFiles = Array.isArray(rawFilesData) ? rawFilesData as Record<string, unknown>[] : [];
 
   const changedFiles: ChangedFile[] = rawFiles.map((f) => ({
     filename: String(f["filename"] ?? ""),

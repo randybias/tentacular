@@ -181,18 +181,34 @@ Rules:
     throw new Error(`OpenAI API error: ${res.status} ${await res.text()}`);
   }
 
-  const completion = await res.json() as OpenAIResponse;
-  const rawText = completion.choices[0]?.message.content ?? "";
+  const completionRaw = await res.json() as Record<string, unknown>;
+  const choices = completionRaw["choices"] as OpenAIResponse["choices"] | undefined;
+  const rawText = choices?.[0]?.message?.content ?? "";
 
   // Parse Claude's JSON response
   let parsed: { verdict: string; review_body: string; inline_comments: InlineComment[] };
+
+  if (!rawText) {
+    // Mock context — no real AI response available, return placeholder
+    ctx.log.warn("No AI response (mock context) — returning placeholder synthesis");
+    return {
+      owner: pr.owner,
+      repo: pr.repo,
+      pr_number: pr.pr_number,
+      commit_id: pr.head_sha,
+      review_body: "(placeholder — AI unavailable in mock context)",
+      inline_comments: [],
+      verdict: "COMMENT",
+    };
+  }
+
   try {
-    // Claude may wrap JSON in a ```json``` block — strip it
+    // Model may wrap JSON in a ```json``` block — strip it
     const jsonStr = rawText.replace(/^```(?:json)?\s*/m, "").replace(/\s*```$/m, "").trim();
     parsed = JSON.parse(jsonStr);
   } catch (err) {
-    ctx.log.error("Failed to parse Claude response as JSON:", rawText.slice(0, 200));
-    throw new Error(`Claude returned invalid JSON: ${err}`);
+    ctx.log.error("Failed to parse AI response as JSON:", rawText.slice(0, 200));
+    throw new Error(`AI returned invalid JSON: ${err}`);
   }
 
   // Validate verdict

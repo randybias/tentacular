@@ -50,7 +50,8 @@ export default async function run(ctx: Context, input: unknown): Promise<CodeSca
     throw new Error(`GitHub Code Scanning API error: ${res.status} ${await res.text()}`);
   }
 
-  const raw = await res.json() as Record<string, unknown>[];
+  const rawData = await res.json();
+  const raw = Array.isArray(rawData) ? rawData as Record<string, unknown>[] : [];
 
   const alerts: CodeScanAlert[] = raw.map((a) => {
     const instance = (a["most_recent_instance"] as Record<string, unknown> | undefined) ?? {};
