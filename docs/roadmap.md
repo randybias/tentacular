@@ -4,6 +4,28 @@ Prioritized around the new-developer critical path: **how fast can someone go fr
 
 ---
 
+## ⚡ Immediate Priority: `tntc init`
+
+`tntc init` is the single highest-priority item on this roadmap. Everything else — the catalog, the UX refactor, the example workflows story — depends on it. Without a scaffold command, users copy from `example-workflows/` by hand, the skill documents a workaround instead of a feature, and the onboarding story is broken.
+
+**What it does:**
+- `tntc init <name>` — scaffolds a new workflow in the current directory (or `--dir <path>`)
+- Generates a minimal valid `workflow.yaml`, `nodes/hello.ts`, `.secrets.yaml.example`, and `tests/`
+- No dependency on `example-workflows/` — the scaffold IS the template
+
+**What it unlocks:**
+- `example-workflows/` can be removed from the core repo (replaced by skill assets and the scaffold)
+- The skill stops documenting "copy from example-workflows" and instead says `tntc init`
+- The catalog story becomes "pull a community workflow" not "copy a template"
+- UX-B (workspace setup) and UX-C (catalog) can follow naturally
+
+**Implementation notes:**
+- Lives in `pkg/cli/init.go`, registered as `cli.NewInitCmd()` in `main.go`
+- Scaffold content should match the minimal `workflow.yaml` already documented in the skill
+- Should respect the configured workspace dir from `~/.tentacular/config.yaml` when no `--dir` given
+
+---
+
 ## Repo Structure
 
 Tentacular is intended to live across three repositories with distinct ownership and release cadences. This split is a prerequisite for the catalog and independent skill publishing described in the UX Refactor section.
@@ -184,13 +206,7 @@ A local deployment state store (SQLite, JSON file, etc.) creates a second source
 
 ### UX-A. `tntc init` — Scaffold Anywhere
 
-There is no `tntc init` command. New users copy from `example-workflows/` by hand. The skill documents this workaround. It should not exist.
-
-**Fix:**
-- `tntc init <name>` scaffolds a new workflow in the current directory (or `--dir <path>`)
-- Generates `workflow.yaml` (minimal valid spec), `nodes/hello.ts`, `.secrets.yaml.example`, `tests/`
-- Optionally: `tntc init <name> --from catalog://pr-review` pulls a catalog template and scaffolds from it
-- Replaces the "copy from `example-workflows/`" instruction in the skill entirely
+**Promoted to ⚡ Immediate Priority** — see top of this document for full spec and implementation notes.
 
 ### UX-B. First-Run Workspace Setup
 
