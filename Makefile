@@ -10,8 +10,11 @@ help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
 
 ## ── Engine Image ────────────────────────────────────────────────────────────
+## Primary build path: .github/workflows/build-engine.yml (GHA, triggers on
+## push to main when engine/** changes). The targets below are for local
+## one-off builds only — not required for normal development.
 
-build: ## Multi-arch build and push to GHCR (linux/amd64 + linux/arm64)
+build: ## [local only] Multi-arch build and push to GHCR (linux/amd64 + linux/arm64)
 	$(DOCKER) buildx build \
 		--platform $(PLATFORMS) \
 		--file engine/Dockerfile \
@@ -20,7 +23,7 @@ build: ## Multi-arch build and push to GHCR (linux/amd64 + linux/arm64)
 		--push \
 		.
 
-build-local: ## Single-arch build into local daemon (no push, for testing)
+build-local: ## [local only] Single-arch build into local daemon (no push, for testing)
 	$(DOCKER) build \
 		--file engine/Dockerfile \
 		--tag $(IMAGE):local \
@@ -61,7 +64,7 @@ lint: ## Run Go linter
 
 ## ── Auth ────────────────────────────────────────────────────────────────────
 
-login: ## Login to GHCR using gh CLI token
+login: ## [local only] Login to GHCR using gh CLI token
 	gh auth token | $(DOCKER) login ghcr.io -u randybias --password-stdin
 
 ## ── Cleanup ─────────────────────────────────────────────────────────────────
