@@ -53,12 +53,7 @@ deployment:
 
 ### 13. Deployment Metadata Enrichment
 
-**Replaces the proposed local deployment registry.** The Kubernetes cluster IS the deployment registry. A local state store (SQLite/JSON) creates a second source of truth that drifts from the cluster. If you have kubectl access, you have the state. If you don't, a local file wouldn't help because you can't deploy either.
-
-**Approach:**
-- Add annotations to all generated K8s resources: `tentacular.io/deployed-by`, `tentacular.io/git-sha`, `tentacular.io/deployed-at`, `tentacular.io/source-path`
-- `tntc list --all-namespaces` queries the cluster directly for all tentacular-managed resources
-- Local `.tentacular/last-deploy.json` (git-ignored) caches the last deploy per-workflow for convenience (timestamp, namespace, cluster, image tag) — not a registry, just a "what did I last do from this machine" cache
+Moved to the **Refactoring the UX** section where it anchors the broader principle that Kubernetes is the authoritative source of truth for deployed workflow state.
 
 ### 14. OpenTelemetry Integration
 
@@ -117,6 +112,97 @@ Support binary payloads, content-type negotiation, and schema validation for inc
 ### 26. JSR Import Migration
 
 The engine uses `deno.land/std` URL-based imports, but third-party JSR libraries import `@std/*` bare specifiers that the engine's import map doesn't cover. Current fix is whack-a-mole (adding mappings as failures surface). Long-term fix: migrate engine to JSR imports (`jsr:@std/yaml`, `jsr:@std/path`, etc.) so JSR resolution works naturally.
+
+---
+
+## Refactoring the UX
+
+A cross-cutting initiative to give Tentacular a coherent user-facing story independent of the skill documentation. Today, the skill compensates for gaps in the CLI and tooling — canonical workflow location is documented in prose, config layering isn't enforced, and the cluster has almost no queryable metadata. This section resolves the underlying problems.
+
+**Core principle: Kubernetes is the source of truth for runtime state. Local disk is source code. No third state.**
+
+### 13. Deployment Metadata Enrichment (K8s as the Registry)
+
+A local deployment state store (SQLite, JSON file, etc.) creates a second source of truth that drifts from the cluster. If you have kubectl access, you have the state. If you don't, a local file doesn't help — you can't deploy either.
+
+**Approach:**
+- Annotate all generated K8s resources at deploy time with `tentacular.io/*` labels:
+  - `tentacular.io/deployed-by` — username or agent identity
+  - `tentacular.io/git-sha` — source commit at deploy time
+  - `tentacular.io/deployed-at` — RFC3339 timestamp
+  - `tentacular.io/source-path` — path on disk the workflow was deployed from
+  - `tentacular.io/workflow-name`, `tentacular.io/workflow-version`
+- `tntc list --all-namespaces` queries the cluster directly for all tentacular-managed resources via label selector (`app.kubernetes.io/managed-by=tentacular`)
+- `tntc status <name>` surfaces these annotations — no local cache needed
+- Local `.tentacular/last-deploy.json` (git-ignored) is a *convenience cache only* — "what did I last do from this machine" — never a registry
+
+**Result:** `tntc list --all-namespaces` becomes the single global view of what's deployed, where, and from what source. Agents and humans get the same answer.
+
+### UX-A. `tntc init` — Scaffold Anywhere
+
+There is no `tntc init` command. New users copy from `example-workflows/` by hand. The skill documents this workaround. It should not exist.
+
+**Fix:**
+- `tntc init <name>` scaffolds a new workflow in the current directory (or `--dir <path>`)
+- Generates `workflow.yaml` (minimal valid spec), `nodes/hello.ts`, `.secrets.yaml.example`, `tests/`
+- Optionally: `tntc init <name> --from catalog://pr-review` pulls a catalog template and scaffolds from it
+- Replaces the "copy from `example-workflows/`" instruction in the skill entirely
+
+### UX-B. First-Run Workspace Setup
+
+`tntc configure` currently sets registry, namespace, and runtime class. It does not establish where workflows live or verify anything about the local environment.
+
+**Fix:**
+- `tntc configure --init-workspace` creates `~/tentacles/` (or user-specified path), writes a sane `~/.tentacular/config.yaml` with real defaults, and confirms the K8s connection
+- Default workspace path becomes a first-class config key: `workspace: ~/tentacles`
+- `tntc init` without `--dir` scaffolds into the configured workspace
+- Project config (`.tentacular/config.yaml`) should only hold project-level overrides — not duplicate the full user config. The current state (identical files) is a bug.
+
+### UX-C. Workflow Catalog
+
+Discovery and sharing for Tentacular workflows. Modeled on Helm's OCI chart registry approach: workflows are source artifacts (TypeScript + YAML), not binaries — they should be inspectable before running.
+
+**Commands:**
+- `tntc catalog search <query>` — search the default catalog index
+- `tntc catalog pull <ref>` — fetch a workflow into the local workspace (e.g., `ghcr.io/tentacular/catalog/pr-review:v1.0`)
+- `tntc catalog push <name>` — publish a local workflow to a registry
+- `tntc catalog list` — list workflows available in a configured registry
+
+**Storage:** OCI artifacts in any compliant registry (GHCR, ECR, etc.). Workflow source is packaged as a layer; `workflow.yaml` manifest is the OCI config. Human-readable before `tntc deploy`.
+
+**Index:** A simple HTTPS-served JSON index (like a Helm repo index) for `tntc catalog search`. The official Tentacular catalog lives at `catalog.tentacular.io` (TBD); users can configure private catalogs.
+
+**Relationship to the skill:** `example-workflows/` in the Tentacular repo becomes the source for the official catalog entries. The skill stops documenting workarounds; the CLI enforces the convention.
+
+---
+
+## Speculative Proposals
+
+Items not yet on the committed roadmap. These are design sketches and open questions for future discussion. No implementation commitment.
+
+### SP-1: Webhook Gateway — Per-Registration Routing via NATS
+
+A dedicated webhook gateway component that replaces the simple per-workflow webhook trigger with a centralized, multi-tenant-safe ingress model. Designed for production use where multiple workflows consume events from multiple upstream sources (GitHub, GitLab, etc.).
+
+**Core design:**
+
+- **Secure paths:** Each registration gets a UUID path (`/wh/{uuid}`) — no enumeration, no shared endpoints
+- **No code push:** Registrations stored in a CRD or ConfigMap; `tntc webhook register --event pull_request --workflow pr-review` creates one
+- **NATS mapping:** Registration record maps `{uuid}` + `event_type` → NATS subject (e.g., `webhooks.github.pr.opened`)
+- **Auth:** HMAC validation per-registration (each consumer gets its own secret); optional IP allowlist for known GitHub/GitLab CIDR ranges
+- **Single ingress:** One HTTPRoute, one TLS cert, one NetworkPolicy — forever
+
+**Relationship to existing roadmap:**
+- Supersedes #23 (Webhook Triggers via NATS Bridge) with a more complete design
+- Depends on #18 (NATS JetStream Durable Subscriptions) for reliable delivery
+- Integrates with #20 (Dead Letter Queue) for failed event handling
+
+**Open questions:**
+
+1. **Registration lifecycle:** What happens on CRD deletion? Drain in-flight NATS messages before teardown, or hard cut?
+2. **Fan-out:** Can multiple workflows subscribe to the same `webhooks.github.pr.opened` subject? If yes, JetStream durable consumer per-workflow (not per-registration).
+3. **Replay / DLQ:** Design jointly with #18 and #20 — worth speccing together rather than independently.
+4. **`tntc webhook register` UX:** Should print the webhook URL + secret at registration time only (like GitHub deploy keys). Secret must never be retrievable after creation.
 
 ---
 
