@@ -44,7 +44,7 @@ curl -fsSL https://raw.githubusercontent.com/randybias/tentacular/main/install.s
 
 **Skill integration:** The skill prerequisite check runs `which tntc` first. If missing, it runs the install script automatically before proceeding with any CLI commands.
 
-**Testing:** Validate `install.sh` end-to-end in a clean Linux container via Podman (`podman run --rm ubuntu:24.04`) once Podman is available in the environment. Tests both the download path and error cases (unsupported OS/arch).
+**Testing:** `.github/workflows/test-install.yml` — triggers on changes to `install.sh`, `stable.txt`, or CLI source. Builds the binary, spins up a local HTTP server mimicking the GitHub Releases structure, patches `install.sh` to point at it, and runs the full install end-to-end. Verifies `tntc version` output as the final assertion.
 
 ---
 
