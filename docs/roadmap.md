@@ -8,21 +8,137 @@ Prioritized around the new-developer critical path: **how fast can someone go fr
 
 `tntc init` is the single highest-priority item on this roadmap. Everything else — the catalog, the UX refactor, the example workflows story — depends on it. Without a scaffold command, users copy from `example-workflows/` by hand, the skill documents a workaround instead of a feature, and the onboarding story is broken.
 
-**What it does:**
-- `tntc init <name>` — scaffolds a new workflow in the current directory (or `--dir <path>`)
-- Generates a minimal valid `workflow.yaml`, `nodes/hello.ts`, `.secrets.yaml.example`, and `tests/`
-- No dependency on `example-workflows/` — the scaffold IS the template
+### Workflow Directory Structure
+
+Every workflow is a self-contained directory. This is the canonical structure `tntc init` produces and `tntc deploy` expects:
+
+```
+<workflow-name>/
+├── workflow.yaml              # required — full spec: metadata, triggers, DAG, config, contract
+├── nodes/                     # required — one .ts file per node declared in workflow.yaml
+│   └── <node-name>.ts
+├── tests/
+│   └── fixtures/              # one JSON per node: { "input": {}, "expected": {} }
+│       └── <node-name>.json
+├── .secrets.yaml              # gitignored — actual secrets, never committed
+├── .secrets.yaml.example      # committed — keys with placeholder values, no secrets
+└── contract-summary.md        # optional — human-readable contract summary (tntc validate writes this)
+```
+
+**`workflow.yaml` minimal spec:**
+
+```yaml
+name: hello-world
+version: "1.0"
+description: "A minimal Tentacular workflow"
+
+triggers:
+  - type: manual
+
+nodes:
+  hello:
+    path: ./nodes/hello.ts
+
+edges: []          # single node, no edges needed
+
+config:
+  timeout: 30s
+
+contract:
+  version: "1"
+  dependencies: {}
+```
+
+**Node file (`nodes/hello.ts`) minimal spec:**
+
+```typescript
+import type { Context } from "tentacular";
+
+export default async function run(
+  ctx: Context,
+  _input: unknown
+): Promise<{ message: string }> {
+  ctx.log.info("Hello from Tentacular");
+  return { message: "hello" };
+}
+```
+
+**Test fixture (`tests/fixtures/hello.json`) minimal spec:**
+
+```json
+{
+  "input": {},
+  "expected": {
+    "message": "hello"
+  }
+}
+```
+
+**`.secrets.yaml.example`:**
+
+```yaml
+# Copy to .secrets.yaml and fill in real values. Never commit .secrets.yaml.
+# example_service:
+#   api_key: "your-key-here"
+```
+
+---
+
+### `tntc init` Command Spec
+
+**Usage:**
+
+```
+tntc init <name> [flags]
+
+Flags:
+  --dir string       Target directory (default: ./<name> relative to cwd)
+  --trigger string   Trigger type for workflow.yaml: manual|cron|queue|webhook (default: manual)
+  --force            Overwrite if directory already exists
+```
+
+**Behavior:**
+
+1. Validates `<name>` — kebab-case, no spaces, no special chars
+2. Resolves target directory: `--dir` if provided, else `./<name>` in cwd; warns if outside configured workspace
+3. Fails if target already exists (unless `--force`)
+4. Creates directory structure and writes all scaffold files
+5. Prints next steps:
+   ```
+   Created hello-world/
+     workflow.yaml       edit DAG nodes and edges
+     nodes/hello.ts      implement your node logic
+     .secrets.yaml.example  copy to .secrets.yaml and fill in secrets
+
+   Next:
+     tntc validate hello-world/   # validate spec and contracts
+     tntc test hello-world/       # run node tests against fixtures
+     tntc deploy hello-world/ --env dev
+   ```
+
+**Trigger variants** — when `--trigger` is not `manual`, `workflow.yaml` gets the appropriate trigger block pre-filled:
+
+- `--trigger cron` → adds `schedule: "0 9 * * *"` (daily 9am, user edits)
+- `--trigger queue` → adds `subject: "workflows.<name>.run"` (NATS subject)
+- `--trigger webhook` → adds `provider: github` (webhook trigger skeleton)
+
+**What it does NOT do:**
+- Does not create `.secrets.yaml` — user creates from the example
+- Does not run `tntc validate` — that's an explicit next step
+- Does not modify `~/.tentacular/config.yaml`
+
+**Implementation:**
+- `pkg/cli/init.go` — `NewInitCmd()` registered in `cmd/tntc/main.go`
+- Scaffold content is embedded Go strings (`//go:embed`), not read from example-workflows
+- No network calls — fully offline
+
+---
 
 **What it unlocks:**
 - `example-workflows/` can be removed from the core repo (replaced by skill assets and the scaffold)
 - The skill stops documenting "copy from example-workflows" and instead says `tntc init`
 - The catalog story becomes "pull a community workflow" not "copy a template"
 - UX-B (workspace setup) and UX-C (catalog) can follow naturally
-
-**Implementation notes:**
-- Lives in `pkg/cli/init.go`, registered as `cli.NewInitCmd()` in `main.go`
-- Scaffold content should match the minimal `workflow.yaml` already documented in the skill
-- Should respect the configured workspace dir from `~/.tentacular/config.yaml` when no `--dir` given
 
 ---
 
