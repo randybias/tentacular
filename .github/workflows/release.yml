@@ -41,7 +41,8 @@ jobs:
       - name: Install via script
         run: |
           curl -fsSL \
-            https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | sh
+            https://raw.githubusercontent.com/randybias/tentacular/main/install.sh \
+            | TNTC_VERSION=${{ github.ref_name }} sh
 
       - name: Verify version matches tag
         run: |
