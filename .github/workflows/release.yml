@@ -25,7 +25,27 @@ jobs:
       - name: Run GoReleaser
         uses: goreleaser/goreleaser-action@v6
         with:
-          version: latest
+          version: ~> v2
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  smoke:
+    name: Smoke test on ${{ matrix.os }}
+    needs: release
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install via script
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | sh
+
+      - name: Verify version matches tag
+        run: |
+          INSTALLED=$($HOME/.local/bin/tntc version | awk '{print $1}')
+          echo "Installed: $INSTALLED"
+          echo "Expected:  ${{ github.ref_name }}"
+          [ "$INSTALLED" = "${{ github.ref_name }}" ]
