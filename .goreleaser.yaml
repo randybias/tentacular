@@ -25,13 +25,8 @@ builds:
       - -X github.com/randybias/tentacular/pkg/version.Date={{.Date}}
 
 archives:
-  - id: tntc
+  - format: binary
     name_template: "tntc_{{ .Os }}_{{ .Arch }}"
-    format: tar.gz
-    files:
-      - README.md
-      - LICENSE
-      - install.sh
 
 checksum:
   name_template: "checksums.txt"
@@ -44,6 +39,8 @@ release:
   draft: false
   prerelease: auto
   name_template: "{{.Tag}}"
+  extra_files:
+    - glob: stable.txt
 
 changelog:
   sort: asc

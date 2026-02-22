@@ -34,11 +34,17 @@ A prerequisite for the repo split being useful. Without published binaries, user
 - **`make release-snapshot`** — dry-run build for local testing
 
 **Install (one-liner):**
-```bash
-curl -fsSL https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | bash
+```sh
+curl -fsSL https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | sh
 ```
 
+**`stable.txt`:** A single file at the repo root containing the current stable version (e.g. `v0.1.0`). The install script reads this instead of hitting the GitHub API — simpler, no rate limiting. Updated automatically by `make release TAG=v0.1.0` before the tag is pushed.
+
+**Version convention:** `v`-prefixed semver going forward (`v0.1.0`, `v0.2.0`, etc.).
+
 **Skill integration:** The skill prerequisite check runs `which tntc` first. If missing, it runs the install script automatically before proceeding with any CLI commands.
+
+**Testing:** Validate `install.sh` end-to-end in a clean Linux container via Podman (`podman run --rm ubuntu:24.04`) once Podman is available in the environment. Tests both the download path and error cases (unsupported OS/arch).
 
 ---
 

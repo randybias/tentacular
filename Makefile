@@ -2,6 +2,7 @@ REGISTRY   := ghcr.io/randybias
 IMAGE      := $(REGISTRY)/tentacular-engine
 TAG        ?= latest
 PLATFORMS  := linux/amd64,linux/arm64
+DOCKER     ?= docker
 
 .PHONY: help build build-local push test lint clean
 
@@ -11,7 +12,7 @@ help: ## Show this help
 ## ── Engine Image ────────────────────────────────────────────────────────────
 
 build: ## Multi-arch build and push to GHCR (linux/amd64 + linux/arm64)
-	docker buildx build \
+	$(DOCKER) buildx build \
 		--platform $(PLATFORMS) \
 		--file engine/Dockerfile \
 		--tag $(IMAGE):$(TAG) \
@@ -20,7 +21,7 @@ build: ## Multi-arch build and push to GHCR (linux/amd64 + linux/arm64)
 		.
 
 build-local: ## Single-arch build into local daemon (no push, for testing)
-	docker build \
+	$(DOCKER) build \
 		--file engine/Dockerfile \
 		--tag $(IMAGE):local \
 		.
@@ -35,8 +36,14 @@ build-cli: ## Build tntc binary for the current platform (output: ./tntc)
 		  -X github.com/randybias/tentacular/pkg/version.Date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 		./cmd/tntc
 
-release: ## Cut a release via GoReleaser (requires GITHUB_TOKEN and a version tag)
-	goreleaser release --clean
+release: ## Tag and release (usage: make release TAG=v0.1.0)
+	@test -n "$(TAG)" || (echo "usage: make release TAG=v0.1.0" && exit 1)
+	echo "$(TAG)" > stable.txt
+	git add stable.txt
+	git commit -m "release: $(TAG)"
+	git tag $(TAG)
+	git push origin main $(TAG)
+	GITHUB_TOKEN=$$(gh auth token) goreleaser release --clean
 
 release-snapshot: ## Dry-run release build without publishing
 	goreleaser release --snapshot --clean
@@ -55,10 +62,10 @@ lint: ## Run Go linter
 ## ── Auth ────────────────────────────────────────────────────────────────────
 
 login: ## Login to GHCR using gh CLI token
-	gh auth token | docker login ghcr.io -u randybias --password-stdin
+	gh auth token | $(DOCKER) login ghcr.io -u randybias --password-stdin
 
 ## ── Cleanup ─────────────────────────────────────────────────────────────────
 
 clean: ## Remove local build artifacts
-	rm -rf .tentacular/base-image.txt
-	docker rmi $(IMAGE):local 2>/dev/null || true
+	rm -rf .tentacular/base-image.txt dist/
+	$(DOCKER) rmi $(IMAGE):local 2>/dev/null || true
