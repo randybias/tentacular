@@ -39,6 +39,7 @@ jobs:
       - name: Build tntc binary
         run: |
           go build \
+            -trimpath \
             -ldflags "-s -w \
               -X github.com/randybias/tentacular/pkg/version.Version=test \
               -X github.com/randybias/tentacular/pkg/version.Commit=$(git rev-parse --short HEAD) \
@@ -46,29 +47,26 @@ jobs:
             -o tntc_linux_amd64 \
             ./cmd/tntc
 
-      - name: Serve mock release
+      - name: Set up mock release server
         run: |
           VERSION=$(cat stable.txt)
           mkdir -p mock-releases/${VERSION}
           cp tntc_linux_amd64 mock-releases/${VERSION}/tntc_linux_amd64
+          cp stable.txt mock-releases/stable.txt
           cd mock-releases && python3 -m http.server 8888 &
-          echo "Mock server running at http://localhost:8888"
+          # Wait for server to be ready
+          for i in $(seq 1 10); do
+            curl -sf http://localhost:8888/stable.txt && break
+            sleep 1
+          done
 
-      - name: Patch install.sh for local server
+      - name: Patch and run install script
         run: |
-          VERSION=$(cat stable.txt)
           sed \
             -e 's|https://github.com/${GITHUB_REPO}/releases/download|http://localhost:8888|g' \
-            -e 's|https://raw.githubusercontent.com/${GITHUB_REPO}/main/stable.txt|http://localhost:8888/../stable.txt|g' \
+            -e 's|https://raw.githubusercontent.com/${GITHUB_REPO}/main/stable.txt|http://localhost:8888/stable.txt|g' \
             install.sh > install-test.sh
-          # Serve stable.txt from mock root
-          cp stable.txt mock-releases/stable.txt
-          sh -n install-test.sh
-
-      - name: Run install script
-        run: |
           TNTC_INSTALL_DIR=$HOME/.local/bin sh install-test.sh
 
       - name: Verify binary
-        run: |
-          $HOME/.local/bin/tntc version
+        run: $HOME/.local/bin/tntc version

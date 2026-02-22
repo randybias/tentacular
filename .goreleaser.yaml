@@ -6,6 +6,12 @@ before:
   hooks:
     - go mod tidy
 
+snapshot:
+  version_template: "{{ incpatch .Version }}-next"
+
+gomod:
+  proxy: true
+
 builds:
   - id: tntc
     main: ./cmd/tntc
@@ -18,11 +24,13 @@ builds:
     goarch:
       - amd64
       - arm64
+    flags:
+      - -trimpath
     ldflags:
       - -s -w
       - -X github.com/randybias/tentacular/pkg/version.Version={{.Version}}
       - -X github.com/randybias/tentacular/pkg/version.Commit={{.Commit}}
-      - -X github.com/randybias/tentacular/pkg/version.Date={{.Date}}
+      - -X github.com/randybias/tentacular/pkg/version.Date={{.CommitDate}}
 
 archives:
   - format: binary
@@ -44,8 +52,21 @@ release:
 
 changelog:
   sort: asc
+  use: github
+  format: "{{ .SHA }}: {{ .Message }}"
   filters:
     exclude:
       - "^docs:"
       - "^test:"
       - "^chore:"
+      - "Merge pull request"
+      - "Merge branch"
+  groups:
+    - title: "New Features"
+      regexp: '^.*?feat(\(.+\))??!?:.+$'
+      order: 0
+    - title: "Bug Fixes"
+      regexp: '^.*?fix(\(.+\))??!?:.+$'
+      order: 1
+    - title: "Other"
+      order: 999

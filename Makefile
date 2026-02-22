@@ -39,16 +39,15 @@ build-cli: ## Build tntc binary for the current platform (output: ./tntc)
 		  -X github.com/randybias/tentacular/pkg/version.Date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 		./cmd/tntc
 
-release: ## Tag and release (usage: make release TAG=v0.1.0)
+release: ## Tag and push to trigger GHA release workflow (usage: make release TAG=v0.1.0)
 	@test -n "$(TAG)" || (echo "usage: make release TAG=v0.1.0" && exit 1)
 	echo "$(TAG)" > stable.txt
 	git add stable.txt
 	git commit -m "release: $(TAG)"
 	git tag $(TAG)
 	git push origin main $(TAG)
-	GITHUB_TOKEN=$$(gh auth token) goreleaser release --clean
 
-release-snapshot: ## Dry-run release build without publishing
+release-snapshot: ## Local dry-run build without publishing (requires goreleaser)
 	goreleaser release --snapshot --clean
 
 ## ── Development ─────────────────────────────────────────────────────────────
