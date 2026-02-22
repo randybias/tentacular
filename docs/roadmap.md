@@ -4,6 +4,25 @@ Prioritized around the new-developer critical path: **how fast can someone go fr
 
 ---
 
+## Repo Structure
+
+Tentacular is intended to live across three repositories with distinct ownership and release cadences. This split is a prerequisite for the catalog and independent skill publishing described in the UX Refactor section.
+
+### `randybias/tentacular` — Core CLI + Engine
+The tool itself: Go CLI (`cmd/`, `pkg/`) and Deno engine (`engine/`). Versioned releases. `example-workflows/` moves out of this repo entirely once the catalog repo exists — it does not belong in the tool repo.
+
+### `randybias/tentacular-skill` — Agent Skill
+The OpenClaw skill that teaches agents how to drive the CLI. Already a self-contained directory (`tentacular-skill/`), making it pre-split. Published to ClawHub for agent discovery.
+
+Skill versions track CLI versions — skill `v1.x` documents CLI `v1.x` features. The skill opens with a `requires: tntc >= vX.Y` declaration so agents can detect version mismatches before proceeding.
+
+### `randybias/tentacular-catalog` — Community Workflows
+The default source for `tntc catalog pull`. Seeded from `example-workflows/` in the current repo. Each workflow is a subdirectory; community contributions are PRs to this repo without touching the CLI.
+
+`tntc catalog pull github.com/randybias/tentacular-catalog/pr-review@v1.0` is a git-based reference — a clone of a subdirectory at a tag. No OCI tooling required. OCI registry storage is a future option for enterprise access-control scenarios.
+
+---
+
 ## Tier 2: First Hour (Secrets and Testing)
 
 ### Secrets Rotation and Sync (Phase C)
@@ -160,19 +179,19 @@ There is no `tntc init` command. New users copy from `example-workflows/` by han
 
 ### UX-C. Workflow Catalog
 
-Discovery and sharing for Tentacular workflows. Modeled on Helm's OCI chart registry approach: workflows are source artifacts (TypeScript + YAML), not binaries — they should be inspectable before running.
+Discovery and sharing for Tentacular workflows. Workflows are source artifacts (TypeScript + YAML) — they should be human-readable before running. A git-based reference model is the natural fit; no binary packaging or OCI tooling required.
 
 **Commands:**
-- `tntc catalog search <query>` — search the default catalog index
-- `tntc catalog pull <ref>` — fetch a workflow into the local workspace (e.g., `ghcr.io/tentacular/catalog/pr-review:v1.0`)
-- `tntc catalog push <name>` — publish a local workflow to a registry
-- `tntc catalog list` — list workflows available in a configured registry
+- `tntc catalog search <query>` — search the configured catalog index
+- `tntc catalog pull <ref>` — fetch a workflow into the local workspace. Refs are git-based: `github.com/randybias/tentacular-catalog/pr-review@v1.0` clones the subdirectory at that tag
+- `tntc catalog push <name>` — packages the workflow and opens a PR against the configured catalog repo (or pushes to a private catalog)
+- `tntc catalog list` — list workflows available in the configured catalog
 
-**Storage:** OCI artifacts in any compliant registry (GHCR, ECR, etc.). Workflow source is packaged as a layer; `workflow.yaml` manifest is the OCI config. Human-readable before `tntc deploy`.
+**Storage:** Git repos. The default catalog is `randybias/tentacular-catalog` (see Repo Structure). Private catalogs are any git repo with the same directory convention. OCI registry storage is a future option for environments that need access-control independent of git auth.
 
-**Index:** A simple HTTPS-served JSON index (like a Helm repo index) for `tntc catalog search`. The official Tentacular catalog lives at `catalog.tentacular.io` (TBD); users can configure private catalogs.
+**Index:** A static JSON index file (`catalog.json`) at the root of the catalog repo, served via GitHub raw or Pages. Fields per entry: name, description, version, path, required secrets, tags. `tntc catalog search` queries this index.
 
-**Relationship to the skill:** `example-workflows/` in the Tentacular repo becomes the source for the official catalog entries. The skill stops documenting workarounds; the CLI enforces the convention.
+**Relationship to the skill:** `example-workflows/` moves to `tentacular-catalog` as the seed. The skill stops documenting the "copy from example-workflows" workaround; `tntc catalog pull` replaces it.
 
 ---
 
