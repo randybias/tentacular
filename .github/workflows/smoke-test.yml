@@ -1,0 +1,25 @@
+name: Smoke Test
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  smoke:
+    name: Install on ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Install via script
+        run: |
+          curl -fsSL \
+            https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | sh
+
+      - name: Verify version matches release tag
+        run: |
+          INSTALLED=$($HOME/.local/bin/tntc version | awk '{print $1}')
+          echo "Installed: $INSTALLED"
+          echo "Expected:  ${{ github.event.release.tag_name }}"
+          [ "$INSTALLED" = "${{ github.event.release.tag_name }}" ]
