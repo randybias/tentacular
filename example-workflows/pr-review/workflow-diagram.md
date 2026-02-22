@@ -21,6 +21,6 @@ graph TD
     %% External Dependencies
     dep_github[(github<br/>api.github.com:443)]
     style dep_github fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
-    dep_openai[(openai<br/>api.openai.com:443)]
-    style dep_openai fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
+    dep_anthropic[(anthropic<br/>api.anthropic.com:443)]
+    style dep_anthropic fill:#e1f5ff,stroke:#0066cc,stroke-width:2px
 ```

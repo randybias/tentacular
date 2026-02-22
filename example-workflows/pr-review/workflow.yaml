@@ -64,6 +64,7 @@ config:
   timeout: 300s
   retries: 1
   # Fallback PR for manual trigger / dev testing
+  # Fallback PR for manual trigger / dev testing (override these for your own repo)
   test_owner: randybias
   test_repo: tentacular
   test_pr_number: 8

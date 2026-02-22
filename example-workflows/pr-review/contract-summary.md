@@ -4,7 +4,7 @@
 ### Secrets
 
 - `github.token` → service=github, key=token
-- `openai.api_key` → service=openai, key=api_key
+- `anthropic.api_key` → service=anthropic, key=api_key
 
 ### Egress Rules (NetworkPolicy)
 
@@ -13,7 +13,7 @@
 | kube-dns.kube-system.svc.cluster.local | 53 | UDP |
 | kube-dns.kube-system.svc.cluster.local | 53 | TCP |
 | api.github.com | 443 | TCP |
-| api.openai.com | 443 | TCP |
+| api.anthropic.com | 443 | TCP |
 
 ### Ingress Rules (NetworkPolicy)
 
