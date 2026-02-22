@@ -231,6 +231,14 @@ func TestGenerateNetworkPolicyWebhookTriggerIngress(t *testing.T) {
 	if !strings.Contains(manifest.Content, "- Ingress") {
 		t.Error("expected policyTypes to include Ingress")
 	}
+
+	// Check that istio-system namespace selector is present — required for Istio gateway routing
+	if !strings.Contains(manifest.Content, "namespaceSelector:") {
+		t.Error("expected namespaceSelector for istio-system ingress")
+	}
+	if !strings.Contains(manifest.Content, "istio-system") {
+		t.Error("expected istio-system in namespaceSelector for webhook ingress")
+	}
 }
 
 func TestGenerateNetworkPolicyNonWebhookTriggerNoIngress(t *testing.T) {

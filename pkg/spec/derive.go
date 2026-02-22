@@ -123,9 +123,10 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 
 // IngressRule represents a single ingress network policy rule.
 type IngressRule struct {
-	Port       int
-	Protocol   string // "TCP"
-	FromLabels map[string]string // if non-nil, restrict to matching pods
+	Port                int
+	Protocol            string            // "TCP"
+	FromLabels          map[string]string // if non-nil, restrict to matching pods (podSelector)
+	FromNamespaceLabels map[string]string // if non-nil, also allow from matching namespaces (namespaceSelector)
 }
 
 // DeriveIngressRules returns ingress rules derived from workflow triggers.
@@ -143,11 +144,16 @@ func DeriveIngressRules(wf *Workflow) []IngressRule {
 	}
 
 	if hasWebhook {
-		// Webhook triggers need open ingress from any pod in namespace for external traffic
+		// Webhook triggers need ingress from:
+		//   - any pod in the same namespace (podSelector: {})
+		//   - Istio gateway pods in istio-system (for cluster ingress routing)
 		rules = append(rules, IngressRule{
 			Port:       8080,
 			Protocol:   "TCP",
 			FromLabels: nil, // nil = podSelector: {} (any pod in namespace)
+			FromNamespaceLabels: map[string]string{
+				"kubernetes.io/metadata.name": "istio-system",
+			},
 		})
 	} else {
 		// Non-webhook workflows only need label-scoped ingress for internal triggers

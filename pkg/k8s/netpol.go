@@ -61,6 +61,19 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string) *builder.Manifes
 			} else {
 				ingressYAML += "    - podSelector: {}\n"
 			}
+			// Add namespace selector if specified (e.g. allow ingress from istio-system)
+			if rule.FromNamespaceLabels != nil {
+				ingressYAML += "    - namespaceSelector:\n"
+				ingressYAML += "        matchLabels:\n"
+				nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
+				for k := range rule.FromNamespaceLabels {
+					nsLabelKeys = append(nsLabelKeys, k)
+				}
+				sort.Strings(nsLabelKeys)
+				for _, k := range nsLabelKeys {
+					ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
+				}
+			}
 			ingressYAML += fmt.Sprintf("    ports:\n    - protocol: %s\n      port: %d\n",
 				rule.Protocol, rule.Port)
 		}
