@@ -12,7 +12,7 @@ Tentacular is intended to live across three repositories with distinct ownership
 The tool itself: Go CLI (`cmd/`, `pkg/`) and Deno engine (`engine/`). Versioned releases. `example-workflows/` moves out of this repo entirely once the catalog repo exists — it does not belong in the tool repo.
 
 ### `randybias/tentacular-skill` — Agent Skill
-The OpenClaw skill that teaches agents how to drive the CLI. Already a self-contained directory (`tentacular-skill/`), making it pre-split. Published to ClawHub for agent discovery.
+The OpenClaw skill that teaches agents how to drive the CLI. Extracted to its own repo. Published to ClawHub for agent discovery.
 
 Skill versions track CLI versions — skill `v1.x` documents CLI `v1.x` features. The skill opens with a `requires: tntc >= vX.Y` declaration so agents can detect version mismatches before proceeding.
 
