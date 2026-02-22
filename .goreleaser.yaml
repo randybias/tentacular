@@ -43,7 +43,7 @@ release:
     name: tentacular
   draft: false
   prerelease: auto
-  name_template: "v{{.Version}}"
+  name_template: "{{.Tag}}"
 
 changelog:
   sort: asc
