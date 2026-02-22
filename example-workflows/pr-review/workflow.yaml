@@ -6,6 +6,7 @@ deployment:
   namespace: tentacular-pr-review
 
 triggers:
+  - type: manual
   - type: webhook
     provider: github
     event: pull_request
@@ -62,6 +63,10 @@ edges:
 config:
   timeout: 300s
   retries: 1
+  # Fallback PR for manual trigger / dev testing
+  test_owner: randybias
+  test_repo: tentacular
+  test_pr_number: 8
 
 contract:
   version: "1"
@@ -73,10 +78,10 @@ contract:
       auth:
         type: bearer-token
         secret: github.token
-    openai:
+    anthropic:
       protocol: https
-      host: api.openai.com
+      host: api.anthropic.com
       port: 443
       auth:
         type: bearer-token
-        secret: openai.api_key
+        secret: anthropic.api_key
