@@ -25,6 +25,22 @@ build-local: ## Single-arch build into local daemon (no push, for testing)
 		--tag $(IMAGE):local \
 		.
 
+## ── CLI Binary ──────────────────────────────────────────────────────────────
+
+build-cli: ## Build tntc binary for the current platform (output: ./tntc)
+	go build -o tntc \
+		-ldflags "-s -w \
+		  -X github.com/randybias/tentacular/pkg/version.Version=$$(git describe --tags --always --dirty) \
+		  -X github.com/randybias/tentacular/pkg/version.Commit=$$(git rev-parse --short HEAD) \
+		  -X github.com/randybias/tentacular/pkg/version.Date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+		./cmd/tntc
+
+release: ## Cut a release via GoReleaser (requires GITHUB_TOKEN and a version tag)
+	goreleaser release --clean
+
+release-snapshot: ## Dry-run release build without publishing
+	goreleaser release --snapshot --clean
+
 ## ── Development ─────────────────────────────────────────────────────────────
 
 test: ## Run Go tests

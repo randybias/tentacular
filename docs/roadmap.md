@@ -21,6 +21,25 @@ The default source for `tntc catalog pull`. Seeded from `example-workflows/` in 
 
 `tntc catalog pull github.com/randybias/tentacular-catalog/pr-review@v1.0` is a git-based reference — a clone of a subdirectory at a tag. No OCI tooling required. OCI registry storage is a future option for enterprise access-control scenarios.
 
+### Release Pipeline
+
+A prerequisite for the repo split being useful. Without published binaries, users must clone and build manually — the catalog and skill repos have no install story.
+
+**Components:**
+- **`.goreleaser.yaml`** — builds `darwin-amd64`, `darwin-arm64`, `linux-amd64`, `linux-arm64` binaries; packages as `tntc_${OS}_${ARCH}.tar.gz`; publishes to GitHub Releases with `checksums.txt` (sha256)
+- **`install.sh`** — curl-based installer at the repo root. Phase 1: downloads the matching binary from GitHub Releases and verifies the checksum. Phase 2 fallback: clones and builds from source (requires Go). Default install dir: `~/.local/bin` (no sudo). Override via `TNTC_INSTALL_DIR`. Force source build via `TNTC_BUILD_FROM_SOURCE=true`.
+- **`pkg/version`** — version package with `Version`, `Commit`, `Date` variables injected by GoReleaser ldflags. Exposed via `tntc version`.
+- **`make build-cli`** — local single-platform build with version injection (no GoReleaser required)
+- **`make release`** — full GoReleaser release (requires `GITHUB_TOKEN` and a pushed version tag)
+- **`make release-snapshot`** — dry-run build for local testing
+
+**Install (one-liner):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | bash
+```
+
+**Skill integration:** The skill prerequisite check runs `which tntc` first. If missing, it runs the install script automatically before proceeding with any CLI commands.
+
 ---
 
 ## Tier 2: First Hour (Secrets and Testing)

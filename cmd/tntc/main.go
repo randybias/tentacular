@@ -5,6 +5,7 @@ import (
 	"os"
 
 	"github.com/randybias/tentacular/pkg/cli"
+	"github.com/randybias/tentacular/pkg/version"
 	"github.com/spf13/cobra"
 )
 
@@ -45,6 +46,15 @@ func main() {
 	// Utility commands
 	root.AddCommand(cli.NewVisualizeCmd())
 	root.AddCommand(cli.NewAuditCommand())
+
+	// Version
+	root.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print tntc version",
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Println(version.String())
+		},
+	})
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)

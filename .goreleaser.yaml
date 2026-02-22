@@ -1,0 +1,54 @@
+version: 2
+
+project_name: tentacular
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: tntc
+    main: ./cmd/tntc
+    binary: tntc
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+      - darwin
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/randybias/tentacular/pkg/version.Version={{.Version}}
+      - -X github.com/randybias/tentacular/pkg/version.Commit={{.Commit}}
+      - -X github.com/randybias/tentacular/pkg/version.Date={{.Date}}
+
+archives:
+  - id: tntc
+    name_template: "tntc_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
+    files:
+      - README.md
+      - LICENSE
+      - install.sh
+
+checksum:
+  name_template: "checksums.txt"
+  algorithm: sha256
+
+release:
+  github:
+    owner: randybias
+    name: tentacular
+  draft: false
+  prerelease: auto
+  name_template: "v{{.Version}}"
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^chore:"

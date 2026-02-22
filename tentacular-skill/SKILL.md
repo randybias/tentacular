@@ -1,5 +1,31 @@
 # Tentacular
 
+## Prerequisites
+
+Before using any `tntc` commands, verify the CLI is installed:
+
+```bash
+which tntc
+```
+
+If that fails, install it now:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | bash
+```
+
+After install, confirm it works:
+
+```bash
+tntc version
+```
+
+If `tntc version` reports `dev (commit none, built unknown)`, the binary was built from source (no release tag yet) — this is expected until the first tagged release. All commands are fully functional.
+
+> **Minimum required version:** Check `tntc version` output. If the skill specifies a minimum version and the installed binary reports an older tag, re-run the install script with `TNTC_VERSION=<tag>`.
+
+---
+
 ## Tentacles: Production Workflow Best Practice
 
 Production workflows (called **tentacles**) MUST be stored
