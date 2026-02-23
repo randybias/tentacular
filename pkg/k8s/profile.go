@@ -28,6 +28,7 @@ type ClusterProfile struct {
 	CNI            CNIInfo            `json:"cni"                  yaml:"cni"`
 	NetworkPolicy  NetPolInfo         `json:"networkPolicy"        yaml:"networkPolicy"`
 	StorageClasses []StorageClassInfo `json:"storageClasses"       yaml:"storageClasses"`
+	RWXNote        string             `json:"rwxNote"              yaml:"rwxNote"`
 	CSIDrivers     []string           `json:"csiDrivers"           yaml:"csiDrivers"`
 	Ingress        []string           `json:"ingress"              yaml:"ingress"`
 	Extensions     ExtensionSet       `json:"extensions"           yaml:"extensions"`
@@ -69,16 +70,14 @@ type NetPolInfo struct {
 
 // StorageClassInfo describes a Kubernetes StorageClass.
 // RWXCapable is inferred from the provisioner name — it is a heuristic hint,
-// not a guarantee. Actual RWX support depends on cluster configuration and
-// the specific CSI driver version deployed.
+// not a guarantee. See ClusterProfile.RWXNote for the qualification.
 type StorageClassInfo struct {
 	Name                 string `json:"name"                 yaml:"name"`
 	Provisioner          string `json:"provisioner"          yaml:"provisioner"`
 	IsDefault            bool   `json:"isDefault"            yaml:"isDefault"`
 	ReclaimPolicy        string `json:"reclaimPolicy"        yaml:"reclaimPolicy"`
 	AllowVolumeExpansion bool   `json:"allowVolumeExpansion" yaml:"allowVolumeExpansion"`
-	RWXCapable           bool   `json:"rwxCapable"           yaml:"rwxCapable"`    // inferred from provisioner name
-	RWXInferred          bool   `json:"rwxInferred"          yaml:"rwxInferred"`   // always true: RWX is never verified
+	RWXCapable           bool   `json:"rwxCapable"           yaml:"rwxCapable"` // inferred from provisioner name; see RWXNote
 }
 
 // ExtensionSet records which well-known CRD-based extensions are installed.
@@ -180,9 +179,9 @@ func (c *Client) Profile(ctx context.Context, namespace, envName string) (*Clust
 				ReclaimPolicy:        reclaimPolicy,
 				AllowVolumeExpansion: allowExpand,
 				RWXCapable:           isRWXCapable(sc.Provisioner),
-				RWXInferred:          true,
 			})
 		}
+		p.RWXNote = "rwxCapable is inferred from provisioner name only — not verified. Actual RWX support depends on CSI driver version and cluster configuration."
 	}
 	csiDrivers, err := c.clientset.StorageV1().CSIDrivers().List(ctx, metav1.ListOptions{})
 	if err == nil {
