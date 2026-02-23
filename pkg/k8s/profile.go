@@ -67,13 +67,17 @@ type NetPolInfo struct {
 }
 
 // StorageClassInfo describes a Kubernetes StorageClass.
+// RWXCapable is inferred from the provisioner name — it is a heuristic hint,
+// not a guarantee. Actual RWX support depends on cluster configuration and
+// the specific CSI driver version deployed.
 type StorageClassInfo struct {
 	Name                 string `json:"name"                 yaml:"name"`
 	Provisioner          string `json:"provisioner"          yaml:"provisioner"`
 	IsDefault            bool   `json:"isDefault"            yaml:"isDefault"`
 	ReclaimPolicy        string `json:"reclaimPolicy"        yaml:"reclaimPolicy"`
 	AllowVolumeExpansion bool   `json:"allowVolumeExpansion" yaml:"allowVolumeExpansion"`
-	RWXCapable           bool   `json:"rwxCapable"           yaml:"rwxCapable"`
+	RWXCapable           bool   `json:"rwxCapable"           yaml:"rwxCapable"`    // inferred from provisioner name
+	RWXInferred          bool   `json:"rwxInferred"          yaml:"rwxInferred"`   // always true: RWX is never verified
 }
 
 // ExtensionSet records which well-known CRD-based extensions are installed.
@@ -175,6 +179,7 @@ func (c *Client) Profile(ctx context.Context, namespace, envName string) (*Clust
 				ReclaimPolicy:        reclaimPolicy,
 				AllowVolumeExpansion: allowExpand,
 				RWXCapable:           isRWXCapable(sc.Provisioner),
+				RWXInferred:          true,
 			})
 		}
 	}
@@ -440,6 +445,10 @@ func deriveGuidance(p *ClusterProfile) []string {
 		g = append(g, "kind cluster detected: set runtime_class: \"\" and imagePullPolicy: IfNotPresent")
 	}
 
+	if p.CNI.Name == "unknown" {
+		g = append(g, "WARNING: CNI plugin could not be detected (kube-system pod labels may differ or RBAC may restrict listing pods) — NetworkPolicy support is unknown; verify manually before relying on egress controls")
+	}
+
 	if p.Extensions.Istio {
 		g = append(g, "Istio detected: NetworkPolicy egress rules must include namespaceSelector for istio-system; mTLS available between pods")
 	}
@@ -452,11 +461,11 @@ func deriveGuidance(p *ClusterProfile) []string {
 	for _, sc := range p.StorageClasses {
 		if sc.RWXCapable {
 			hasRWX = true
-			g = append(g, fmt.Sprintf("RWX storage available via StorageClass %q — suitable for shared volume mounts", sc.Name))
+			g = append(g, fmt.Sprintf("RWX storage (inferred) via StorageClass %q — verify actual RWX support with the CSI driver before use", sc.Name))
 		}
 	}
 	if !hasRWX {
-		g = append(g, "No RWX-capable StorageClass detected — avoid shared volume mounts across replicas")
+		g = append(g, "No RWX-capable StorageClass inferred — avoid shared volume mounts across replicas (verify with cluster admin)")
 	}
 
 	if p.Quota != nil {
@@ -470,6 +479,11 @@ func deriveGuidance(p *ClusterProfile) []string {
 
 	if p.Extensions.CertManager {
 		g = append(g, "cert-manager available — TLS certificates can be provisioned automatically")
+	}
+
+	// Security note for cloud distributions — node labels can contain account/region metadata
+	if p.Distribution == "eks" || p.Distribution == "gke" || p.Distribution == "aks" {
+		g = append(g, fmt.Sprintf("SECURITY NOTE: This profile includes node labels from a managed %s cluster — labels may contain account IDs, regions, or internal topology metadata. Treat this file as sensitive infrastructure data.", strings.ToUpper(p.Distribution)))
 	}
 
 	return g
@@ -530,8 +544,8 @@ func (p *ClusterProfile) Markdown() string {
 	if len(p.StorageClasses) == 0 {
 		fmt.Fprintf(&sb, "No StorageClasses found.\n")
 	} else {
-		fmt.Fprintf(&sb, "| Name | Provisioner | Default | Reclaim | RWX |\n")
-		fmt.Fprintf(&sb, "|------|-------------|---------|---------|-----|\n")
+		fmt.Fprintf(&sb, "| Name | Provisioner | Default | Reclaim | RWX (inferred) |\n")
+		fmt.Fprintf(&sb, "|------|-------------|---------|---------|----------------|\n")
 		for _, sc := range p.StorageClasses {
 			def := "✗"
 			if sc.IsDefault {

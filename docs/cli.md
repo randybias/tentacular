@@ -150,8 +150,12 @@ Profiles are generated automatically when running `tntc configure` and stored at
 | `--env <name>` | Environment from `.tentacular/config.yaml` (default: current context) |
 | `--all` | Profile every configured environment |
 | `--output markdown\|json` | Output format (default: markdown) |
-| `--save` | Write to `.tentacular/envprofiles/<env>.{md,json}` |
-| `--force` | Rebuild even if profile is less than 1 hour old |
+| `--save` | Write to `~/.tentacular/envprofiles/` (user config) or `.tentacular/envprofiles/` (project config) |
+| `--force` | Bypass the 1h re-run guard (prevents hammering the cluster on repeated `--save` calls) |
+
+**Freshness thresholds — two distinct concepts:**
+- **1-hour CLI guard**: `--save` skips re-profiling if a profile was written less than 1 hour ago. Use `--force` to override.
+- **7-day agent staleness**: Agents should treat any profile older than 7 days as potentially stale and trigger a re-profile. This is a heuristic — re-profile sooner after any cluster change.
 
 ### Examples
 
@@ -184,9 +188,11 @@ tntc configure --project  # → writes config, then profiles all environments
     prod.md
 ```
 
-Profiles are safe to commit alongside the tentacular config — they contain no secrets,
-only structural cluster metadata. Teams that prefer to keep them out of source control
-can add `envprofiles/` to `.gitignore`.
+Profiles contain no secrets, but **node labels are included verbatim**. On managed cloud
+clusters (EKS, GKE, AKS), labels routinely include account IDs, region identifiers, and
+internal topology metadata. Review the profile before committing it to a shared repository.
+Teams with strict infosec postures should add `envprofiles/` to `.gitignore` and treat
+profiles as generated artifacts, not source files.
 
 ### Drift Detection
 

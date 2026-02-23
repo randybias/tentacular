@@ -185,8 +185,13 @@ func buildClientForEnv(env *EnvironmentConfig) (*k8s.Client, error) {
 	return k8s.NewClient()
 }
 
+// autoProfileTimeout is the maximum time allowed to profile a single environment
+// during auto-profiling on configure. Keeps tntc configure responsive.
+const autoProfileTimeout = 45 * time.Second
+
 // AutoProfileEnvironments generates profiles for all reachable environments.
-// Called from configure after writing config. Errors are warnings only.
+// Called from configure after writing config. Each environment is given a
+// 45s deadline; unreachable or slow clusters emit a warning and are skipped.
 func AutoProfileEnvironments() {
 	cfg := LoadConfig()
 	if len(cfg.Environments) == 0 {
@@ -194,8 +199,18 @@ func AutoProfileEnvironments() {
 	}
 	for envName := range cfg.Environments {
 		fmt.Printf("Profiling environment %q... ", envName)
-		if err := runProfileForEnv(envName, "markdown", true, false); err != nil {
-			fmt.Printf("⚠ skipped (%s)\n", err)
+		done := make(chan error, 1)
+		go func(name string) {
+			done <- runProfileForEnv(name, "markdown", true, false)
+		}(envName)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				fmt.Printf("⚠ skipped (%s)\n", err)
+			}
+		case <-time.After(autoProfileTimeout):
+			fmt.Printf("⚠ skipped (timed out after %s)\n", autoProfileTimeout)
 		}
 	}
 }
