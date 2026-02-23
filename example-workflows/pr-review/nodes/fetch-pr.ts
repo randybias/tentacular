@@ -44,20 +44,66 @@ interface WebhookPayload {
 
 /**
  * Fetch PR metadata, changed files, and per-file diffs from GitHub.
- * This is the root node — receives the raw webhook payload as input.
+ * This is the root node — receives either:
+ *   - A raw GitHub webhook payload (production: webhook trigger)
+ *   - An empty/manual input (dev: uses ctx.config fallback for test_owner/test_repo/test_pr_number)
  */
 export default async function run(ctx: Context, input: unknown): Promise<PrContext> {
   const payload = input as WebhookPayload;
-  const { pull_request: pr, repository: repo } = payload;
 
-  const owner = repo.owner.login;
-  const repoName = repo.name;
-  const prNumber = pr.number;
+  // Manual trigger fallback: use config-defined test PR
+  const cfg = ctx.config as Record<string, unknown>;
+  const owner = payload?.repository?.owner?.login ?? String(cfg["test_owner"] ?? "");
+  const repoName = payload?.repository?.name ?? String(cfg["test_repo"] ?? "");
+  const prNumber = payload?.pull_request?.number ?? Number(cfg["test_pr_number"] ?? 0);
+
+  if (!owner || !repoName || !prNumber) {
+    throw new Error(
+      "No webhook payload and no test_owner/test_repo/test_pr_number in config. " +
+      "Set config.test_owner, config.test_repo, config.test_pr_number for manual trigger.",
+    );
+  }
+
+  // Build minimal pr/repo references for downstream use
+  const pr = payload?.pull_request ?? {
+    number: prNumber,
+    title: "(manual trigger)",
+    body: null,
+    html_url: `https://github.com/${owner}/${repoName}/pull/${prNumber}`,
+    head: { sha: "" },
+    base: { sha: "" },
+  };
 
   ctx.log.info(`Fetching PR #${prNumber} from ${owner}/${repoName}`);
 
   const github = ctx.dependency("github");
   const auth = `Bearer ${github.secret}`;
+
+  // For manual trigger, head.sha is empty — fetch PR details from API
+  let headSha = pr.head.sha;
+  let baseSha = pr.base.sha;
+  let prTitle = pr.title;
+  let prBody = pr.body ?? "";
+  let prUrl = pr.html_url;
+
+  if (!headSha) {
+    const prRes = await github.fetch!(
+      `/repos/${owner}/${repoName}/pulls/${prNumber}`,
+      { headers: { Authorization: auth, Accept: "application/vnd.github+json" } },
+    );
+    if (!prRes.ok) {
+      throw new Error(`GitHub PR API error: ${prRes.status} ${await prRes.text()}`);
+    }
+    const prData = await prRes.json() as Record<string, unknown>;
+    const head = prData["head"] as Record<string, unknown>;
+    const base = prData["base"] as Record<string, unknown>;
+    headSha = String(head?.["sha"] ?? "");
+    baseSha = String(base?.["sha"] ?? "");
+    prTitle = String(prData["title"] ?? prTitle);
+    prBody = String(prData["body"] ?? "");
+    prUrl = String(prData["html_url"] ?? prUrl);
+    ctx.log.info(`Fetched PR details: "${prTitle}" ${headSha.slice(0, 7)}`);
+  }
 
   // Fetch changed files (includes per-file patches/diffs)
   const filesRes = await github.fetch!(
@@ -102,11 +148,11 @@ export default async function run(ctx: Context, input: unknown): Promise<PrConte
     owner,
     repo: repoName,
     pr_number: prNumber,
-    head_sha: pr.head.sha,
-    base_sha: pr.base.sha,
-    pr_title: pr.title,
-    pr_body: pr.body ?? "",
-    pr_url: pr.html_url,
+    head_sha: headSha,
+    base_sha: baseSha,
+    pr_title: prTitle,
+    pr_body: prBody,
+    pr_url: prUrl,
     changed_files: changedFiles,
     diff_summary: diffSummary,
   };
