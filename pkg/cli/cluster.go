@@ -24,6 +24,7 @@ func NewClusterCmd() *cobra.Command {
 	check.Flags().Bool("fix", false, "Auto-create namespace and apply basic RBAC")
 
 	cluster.AddCommand(check)
+	cluster.AddCommand(NewProfileCmd())
 	return cluster
 }
 
