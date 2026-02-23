@@ -11,8 +11,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-const profileDir = ".tentacular/envprofiles"
 const profileFreshnessThreshold = time.Hour
+
+// resolveProfileDir returns the envprofiles directory alongside whichever
+// .tentacular/config.yaml is active: project-level (CWD) takes priority,
+// falling back to user-level (~/.tentacular/).
+func resolveProfileDir() string {
+	if _, err := os.Stat(filepath.Join(".tentacular", "config.yaml")); err == nil {
+		return filepath.Join(".tentacular", "envprofiles")
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(".tentacular", "envprofiles") // last resort
+	}
+	return filepath.Join(home, ".tentacular", "envprofiles")
+}
 
 // NewProfileCmd creates the "cluster profile" subcommand.
 func NewProfileCmd() *cobra.Command {
@@ -77,7 +90,7 @@ func runProfileAll(output string, save, force bool) error {
 func runProfileForEnv(envName, output string, save, force bool) error {
 	// Freshness check
 	if save && !force && envName != "" {
-		mdPath := filepath.Join(profileDir, envName+".md")
+		mdPath := filepath.Join(resolveProfileDir(), envName+".md")
 		if fi, err := os.Stat(mdPath); err == nil {
 			age := time.Since(fi.ModTime())
 			if age < profileFreshnessThreshold {
@@ -130,10 +143,11 @@ func runProfileForEnv(envName, output string, save, force bool) error {
 	}
 
 	if save {
-		if err := saveProfile(profile, label); err != nil {
+		dir := resolveProfileDir()
+		if err := saveProfile(profile, label, dir); err != nil {
 			return fmt.Errorf("saving profile: %w", err)
 		}
-		fmt.Printf("  ✓ Profile for %q saved to %s/%s.{md,json}\n", label, profileDir, label)
+		fmt.Printf("  ✓ Profile for %q saved to %s/%s.{md,json}\n", label, dir, label)
 	} else {
 		fmt.Println(rendered)
 	}
@@ -141,18 +155,18 @@ func runProfileForEnv(envName, output string, save, force bool) error {
 	return nil
 }
 
-// saveProfile writes both markdown and JSON representations to profileDir.
-func saveProfile(p *k8s.ClusterProfile, envName string) error {
-	if err := os.MkdirAll(profileDir, 0o755); err != nil {
+// saveProfile writes both markdown and JSON representations to dir.
+func saveProfile(p *k8s.ClusterProfile, envName, dir string) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating profile directory: %w", err)
 	}
 
-	mdPath := filepath.Join(profileDir, envName+".md")
+	mdPath := filepath.Join(dir, envName+".md")
 	if err := os.WriteFile(mdPath, []byte(p.Markdown()), 0o644); err != nil {
 		return fmt.Errorf("writing markdown profile: %w", err)
 	}
 
-	jsonPath := filepath.Join(profileDir, envName+".json")
+	jsonPath := filepath.Join(dir, envName+".json")
 	if err := os.WriteFile(jsonPath, []byte(p.JSON()), 0o644); err != nil {
 		return fmt.Errorf("writing JSON profile: %w", err)
 	}
