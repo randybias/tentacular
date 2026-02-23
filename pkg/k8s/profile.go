@@ -297,7 +297,7 @@ func detectCNI(pods *corev1.PodList) CNIInfo {
 }
 
 func isRWXCapable(provisioner string) bool {
-	rwxKeywords := []string{"efs", "nfs", "azurefile", "cephfs", "glusterfs", "rbd"}
+	rwxKeywords := []string{"efs", "nfs", "azurefile", "azure-file", "cephfs", "glusterfs", "rbd"}
 	lower := strings.ToLower(provisioner)
 	for _, kw := range rwxKeywords {
 		if strings.Contains(lower, kw) {
