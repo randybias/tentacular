@@ -379,6 +379,14 @@ func classifyExtensions(crdList *unstructured.UnstructuredList) ExtensionSet {
 		}
 	}
 	sort.Strings(ext.OtherCRDGroups)
+	// Cap to 20 entries to avoid bloating agent context on heavily-operatored clusters.
+	const maxOtherCRDGroups = 20
+	if len(ext.OtherCRDGroups) > maxOtherCRDGroups {
+		ext.OtherCRDGroups = append(
+			ext.OtherCRDGroups[:maxOtherCRDGroups],
+			fmt.Sprintf("... and %d more (truncated)", len(ext.OtherCRDGroups)-maxOtherCRDGroups),
+		)
+	}
 	return ext
 }
 

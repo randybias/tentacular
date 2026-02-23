@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -196,6 +197,23 @@ func TestClassifyExtensions_OtherGroups(t *testing.T) {
 	ext := classifyExtensions(list)
 	if len(ext.OtherCRDGroups) != 2 {
 		t.Errorf("expected 2 other groups, got %d: %v", len(ext.OtherCRDGroups), ext.OtherCRDGroups)
+	}
+}
+
+func TestClassifyExtensions_OtherGroupsCap(t *testing.T) {
+	// Build a list with 25 distinct unknown CRD groups — should be capped at 20 + a summary entry.
+	items := make([]unstructured.Unstructured, 25)
+	for i := range items {
+		items[i] = makeUnstructured(fmt.Sprintf("resource%d.group%d.example.com", i, i))
+	}
+	list := &unstructured.UnstructuredList{Items: items}
+	ext := classifyExtensions(list)
+	if len(ext.OtherCRDGroups) != 21 { // 20 entries + 1 "... and N more" entry
+		t.Errorf("expected 21 entries (20 + summary), got %d: %v", len(ext.OtherCRDGroups), ext.OtherCRDGroups)
+	}
+	last := ext.OtherCRDGroups[20]
+	if !strings.Contains(last, "and 5 more") {
+		t.Errorf("expected truncation summary in last entry, got %q", last)
 	}
 }
 
