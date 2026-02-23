@@ -83,5 +83,11 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		fmt.Printf("  runtime_class: %s\n", cfg.RuntimeClass)
 	}
 
+	// Auto-profile all configured environments (best-effort; skips unreachable clusters)
+	if len(cfg.Environments) > 0 {
+		fmt.Println("\nGenerating cluster profiles...")
+		AutoProfileEnvironments()
+	}
+
 	return nil
 }
