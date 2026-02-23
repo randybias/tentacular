@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -194,6 +195,12 @@ func (c *Client) Profile(ctx context.Context, namespace, envName string) (*Clust
 	ksPods, err := c.clientset.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{})
 	if err == nil {
 		p.CNI = detectCNI(ksPods)
+	}
+	if p.CNI.Name == "unknown" {
+		fmt.Fprintf(os.Stderr, "WARNING [profile]: CNI plugin could not be detected from kube-system pod labels. "+
+			"NetworkPolicy and egress support are marked false. This may be due to a non-standard CNI "+
+			"(e.g. Antrea, Canal, Kube-OVN) or RBAC restrictions on listing pods in kube-system. "+
+			"Verify NetworkPolicy support manually.\n")
 	}
 
 	// NetworkPolicy support + usage
@@ -481,10 +488,15 @@ func deriveGuidance(p *ClusterProfile) []string {
 		g = append(g, "cert-manager available — TLS certificates can be provisioned automatically")
 	}
 
-	// Security note for cloud distributions — node labels can contain account/region metadata
+	// Security note: node labels are included verbatim and may contain sensitive metadata.
+	// Cloud-managed clusters (EKS/GKE/AKS) routinely include account IDs and region info in labels.
+	note := "SECURITY NOTE: Node labels are included verbatim in this profile"
 	if p.Distribution == "eks" || p.Distribution == "gke" || p.Distribution == "aks" {
-		g = append(g, fmt.Sprintf("SECURITY NOTE: This profile includes node labels from a managed %s cluster — labels may contain account IDs, regions, or internal topology metadata. Treat this file as sensitive infrastructure data.", strings.ToUpper(p.Distribution)))
+		note += fmt.Sprintf(" — %s clusters commonly include account IDs, region names, and internal topology metadata in node labels.", strings.ToUpper(p.Distribution))
+	} else {
+		note += " — review before committing this file to a shared repository."
 	}
+	g = append(g, note)
 
 	return g
 }

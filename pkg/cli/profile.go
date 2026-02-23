@@ -94,7 +94,7 @@ func runProfileForEnv(envName, output string, save, force bool) error {
 		if fi, err := os.Stat(mdPath); err == nil {
 			age := time.Since(fi.ModTime())
 			if age < profileFreshnessThreshold {
-				fmt.Printf("  Profile for %q is fresh (generated %s ago). Use --force to rebuild.\n",
+				fmt.Printf("  Skipping %q: profile written %s ago (use --force to override)\n",
 					envName, age.Truncate(time.Minute))
 				return nil
 			}
