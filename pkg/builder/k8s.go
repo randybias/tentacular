@@ -228,16 +228,20 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		if len(curlURLs) > 0 {
 			var cmds []string
 			for _, url := range curlURLs {
-				cmds = append(cmds, fmt.Sprintf("curl -sf --retry 3 --retry-delay 10 --max-time 120 %s > /dev/null || echo 'prewarm non-fatal: %s'", url, url))
+				// Use '|| true' rather than '|| echo ...' to avoid ': ' in the echo
+				// message causing the YAML scalar to be parsed as a map key:value.
+				cmds = append(cmds, fmt.Sprintf("curl -sf --retry 3 --retry-delay 10 --max-time 120 %s > /dev/null || true", url))
 			}
 			shellScript := strings.Join(cmds, "; ")
+			// %q wraps in YAML-safe double quotes so '>', '|', '||' inside the
+			// shell script are treated as literal characters, not YAML operators.
 			initContainerBlock = fmt.Sprintf(`      initContainers:
         - name: proxy-prewarm
           image: curlimages/curl:latest
           command:
             - /bin/sh
             - -c
-            - %s
+            - %q
           resources:
             limits:
               memory: "32Mi"

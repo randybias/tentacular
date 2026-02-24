@@ -161,7 +161,7 @@ func TestE2E_DenoFlagsCommandStructure(t *testing.T) {
 			"- --no-lock",
 			"- --unstable-net",
 			"- --allow-net=0.0.0.0:8080,api.github.com:443,hooks.slack.com:443",
-			"- --allow-read=/app,/var/run/secrets",
+			"- --allow-read=/app",
 			"- --allow-write=/tmp",
 			"- --allow-env=DENO_DIR,HOME",
 			"- engine/main.ts",

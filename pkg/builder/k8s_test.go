@@ -836,6 +836,22 @@ func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
 		}
 	})
 
+	t.Run("initContainer shell script is YAML-double-quoted (no bare > or | operators)", func(t *testing.T) {
+		// The third command item must be a YAML double-quoted string so that
+		// '> /dev/null' and '||' are not parsed as YAML fold/literal scalars,
+		// and echo text with ': ' doesn't create a spurious map key:value.
+		opts := DeployOptions{
+			ModuleProxyURL: "http://esm-sh.tentacular-system.svc.cluster.local:8080",
+		}
+		manifests := GenerateK8sManifests(wf, "test:latest", "default", opts)
+		dep := manifests[0].Content
+		// The shell script line must start with '- "' (YAML double-quoted scalar)
+		if !strings.Contains(dep, "- \"curl -sf") {
+			t.Errorf("expected initContainer shell script to be YAML double-quoted, got snippet:\n%s",
+				dep[max(0, strings.Index(dep, "proxy-prewarm")):min(len(dep), strings.Index(dep, "proxy-prewarm")+500)])
+		}
+	})
+
 	t.Run("no initContainer when no jsr/npm deps", func(t *testing.T) {
 		httpOnly := &spec.Workflow{
 			Name:    "http-only",
