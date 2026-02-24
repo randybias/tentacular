@@ -155,6 +155,22 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
 	}
 
+	// Build conditional import map volume mount and volume (for jsr/npm module proxy deps)
+	importMapVolumeMount := ""
+	importMapVolume := ""
+	if spec.HasModuleProxyDeps(wf) {
+		importMapVolumeMount = `            - name: import-map
+              mountPath: /app/workflow/import_map.json
+              subPath: import_map.json
+              readOnly: true
+`
+		importMapVolume = fmt.Sprintf(`        - name: import-map
+          configMap:
+            name: %s-import-map
+            optional: true
+`, wf.Name)
+	}
+
 	// Build command/args block for Deno permission flags (10-space indent for container-level)
 	commandArgsBlock := ""
 	denoFlags := spec.DeriveDenoFlags(wf.Contract)
@@ -236,7 +252,7 @@ spec:
               readOnly: true
             - name: tmp
               mountPath: /tmp
-          resources:
+%s          resources:
             requests:
               memory: "64Mi"
               cpu: "100m"
@@ -256,7 +272,7 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
-`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, wf.Name, strings.Join(configMapItems, "\n"), wf.Name)
+%s`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,

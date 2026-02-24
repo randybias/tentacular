@@ -126,17 +126,14 @@ moduleProxy:
 
 ---
 
-## `tntc contract lock` Interaction
+## NetworkPolicy Behaviour
 
-With esm.sh in place, `tntc contract lock` (see `feature/contract-lock`) removes bootstrap
-egress rules as designed. The workflow pod only retains egress to `esm-sh.tentacular-system`
-— no direct external fetches ever appear in the live NetworkPolicy.
+Once the module proxy is installed and a workflow is deployed with `jsr`/`npm` deps, the
+generated NetworkPolicy for that workflow pod contains **no egress to `jsr.io` or
+`registry.npmjs.org`**. The only dep-related egress is to `esm-sh.tentacular-system:8080`.
 
-`tntc contract status` surfaces the module proxy status:
-
-```
-MODULE PROXY: esm-sh.tentacular-system:8080 (in-cluster)
-```
+External package fetches are isolated to the module proxy pod, which has its own
+NetworkPolicy allowing outbound 443 to the public internet.
 
 ---
 

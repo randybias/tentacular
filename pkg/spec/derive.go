@@ -50,6 +50,11 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 
 	// Add dependency-derived egress
 	for _, dep := range c.Dependencies {
+		// jsr/npm deps are resolved via the in-cluster module proxy — no direct external egress.
+		if dep.Protocol == "jsr" || dep.Protocol == "npm" {
+			continue
+		}
+
 		// Dynamic-target dependencies use CIDR + DynPorts instead of Host + Port
 		if dep.Type == "dynamic-target" {
 			for _, portStr := range dep.DynPorts {
@@ -217,24 +222,54 @@ func parsePortSpec(spec string) (int, string) {
 	return port, proto
 }
 
+// HasModuleProxyDeps returns true if the workflow contract has any jsr or npm dependencies
+// that are resolved via the in-cluster module proxy (esm.sh).
+func HasModuleProxyDeps(wf *Workflow) bool {
+	if wf == nil || wf.Contract == nil {
+		return false
+	}
+	for _, dep := range wf.Contract.Dependencies {
+		if dep.Protocol == "jsr" || dep.Protocol == "npm" {
+			return true
+		}
+	}
+	return false
+}
+
+// moduleProxyHost is the in-cluster hostname:port of the esm.sh module proxy service.
+// TODO(allow-net): This is hardcoded to the default tentacular-system namespace.
+// Once the module proxy config is plumbed through to DeriveDenoFlags, this should
+// be derived from ModuleProxyConfig. The broader issue is that --allow-net scoping
+// does not currently account for the proxy host at all — workflow pods using jsr/npm
+// deps will have their imports rewritten to the proxy URL but the scoped --allow-net
+// won't include it, blocking the connection. Fix: pass proxyHost into DeriveDenoFlags
+// and add it to the scoped allow list. Tracked as known issue: "Deno allow-net broken
+// for module proxy deps".
+const moduleProxyHost = "esm-sh.tentacular-system.svc.cluster.local:8080"
+
 // DeriveDenoFlags returns the complete Deno command with permission flags based on contract dependencies.
 // Returns nil if contract is nil or has no dependencies.
 // When any dependency has type "dynamic-target", returns broad --allow-net.
 // When all dependencies are fixed-host, returns scoped --allow-net=host1:port,host2:port,...
 // Always includes 0.0.0.0:8080 in scoped mode for internal health endpoints.
+// When jsr/npm deps are present, adds the module proxy host to the scoped allow list.
 // Scopes --allow-env to DENO_DIR,HOME only.
 func DeriveDenoFlags(c *Contract) []string {
 	if c == nil || len(c.Dependencies) == 0 {
 		return nil
 	}
 
-	// Check if any dependency is dynamic-target
+	// Check if any dependency is dynamic-target or uses the module proxy (jsr/npm)
 	hasDynamic := false
+	hasModuleProxyDeps := false
 	var allowedHosts []string
 	for _, dep := range c.Dependencies {
 		if dep.Type == "dynamic-target" {
 			hasDynamic = true
 			break
+		}
+		if dep.Protocol == "jsr" || dep.Protocol == "npm" {
+			hasModuleProxyDeps = true
 		}
 	}
 
@@ -246,6 +281,10 @@ func DeriveDenoFlags(c *Contract) []string {
 		// Build scoped network access list
 		seen := make(map[string]bool)
 		for _, dep := range c.Dependencies {
+			// jsr/npm deps are served by the module proxy — add proxy host, not the package host
+			if dep.Protocol == "jsr" || dep.Protocol == "npm" {
+				continue
+			}
 			if dep.Host != "" {
 				port := dep.Port
 				if port == 0 {
@@ -264,6 +303,12 @@ func DeriveDenoFlags(c *Contract) []string {
 			}
 		}
 
+		// Add module proxy host when jsr/npm deps are present
+		if hasModuleProxyDeps && !seen[moduleProxyHost] {
+			allowedHosts = append(allowedHosts, moduleProxyHost)
+			seen[moduleProxyHost] = true
+		}
+
 		// Always include localhost:8080 for health endpoints
 		if !seen["0.0.0.0:8080"] {
 			allowedHosts = append(allowedHosts, "0.0.0.0:8080")
@@ -274,7 +319,7 @@ func DeriveDenoFlags(c *Contract) []string {
 		allowNetFlag = "--allow-net=" + strings.Join(allowedHosts, ",")
 	}
 
-	return []string{
+	flags := []string{
 		"deno",
 		"run",
 		"--no-lock",
@@ -283,10 +328,20 @@ func DeriveDenoFlags(c *Contract) []string {
 		"--allow-read=/app,/var/run/secrets",
 		"--allow-write=/tmp",
 		"--allow-env=DENO_DIR,HOME",
+	}
+
+	// Add import map when module proxy deps (jsr/npm) are present.
+	// The import map ConfigMap is mounted at /app/workflow/import_map.json by the Deployment.
+	if hasModuleProxyDeps {
+		flags = append(flags, "--import-map=/app/workflow/import_map.json")
+	}
+
+	flags = append(flags,
 		"engine/main.ts",
 		"--workflow",
 		"/app/workflow/workflow.yaml",
 		"--port",
 		"8080",
-	}
+	)
+	return flags
 }

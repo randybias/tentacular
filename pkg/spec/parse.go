@@ -28,6 +28,8 @@ var validProtocols = map[string]bool{
 	"postgresql": true,
 	"nats":       true,
 	"blob":       true,
+	"jsr":        true, // Deno/JSR package — resolved via in-cluster module proxy
+	"npm":        true, // npm package — resolved via in-cluster module proxy
 }
 
 var protocolDefaultPorts = map[string]int{
@@ -249,6 +251,12 @@ func ValidateContract(c *Contract) []string {
 
 		// Protocol-specific field validation
 		switch dep.Protocol {
+		case "jsr", "npm":
+			// jsr/npm deps are resolved via the in-cluster module proxy (esm.sh).
+			// They do not generate NetworkPolicy egress rules — the proxy handles external access.
+			if dep.Host == "" {
+				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: %s requires host (package name, e.g. \"@db/postgres\")", name, dep.Protocol))
+			}
 		case "https":
 			if dep.Host == "" {
 				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: https requires host", name))

@@ -78,8 +78,9 @@ type Dependency struct {
 	CIDR     string          `yaml:"cidr,omitempty"`     // required when type=dynamic-target
 	DynPorts []string        `yaml:"dynPorts,omitempty"` // required when type=dynamic-target, e.g. ["443/TCP"]
 	// Protocol-specific fields
-	Host       string                 `yaml:"host,omitempty"`      // https, postgresql, nats, blob
+	Host       string                 `yaml:"host,omitempty"`      // https, postgresql, nats, blob, jsr, npm
 	Port       int                    `yaml:"port,omitempty"`      // https, postgresql, nats
+	Version    string                 `yaml:"version,omitempty"`   // jsr, npm: semver range e.g. "^0.4", "3.x"
 	Database   string                 `yaml:"database,omitempty"`  // postgresql
 	User       string                 `yaml:"user,omitempty"`      // postgresql
 	Subject    string                 `yaml:"subject,omitempty"`   // nats
