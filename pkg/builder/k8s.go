@@ -159,9 +159,12 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	importMapVolumeMount := ""
 	importMapVolume := ""
 	if spec.HasModuleProxyDeps(wf) {
+		// Mount the merged deno.json (engine + workflow deps) at /app/deno.json.
+		// This overrides the image-baked deno.json so Deno auto-discovers it
+		// without needing --import-map (which would break engine import aliases).
 		importMapVolumeMount = `            - name: import-map
-              mountPath: /app/workflow/import_map.json
-              subPath: import_map.json
+              mountPath: /app/deno.json
+              subPath: deno.json
               readOnly: true
 `
 		importMapVolume = fmt.Sprintf(`        - name: import-map

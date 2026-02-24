@@ -14,8 +14,27 @@ import (
 // Installed by `tntc cluster install` in the tentacular-system namespace.
 const DefaultModuleProxyURL = "http://esm-sh.tentacular-system.svc.cluster.local:8080"
 
-// GenerateImportMap produces a ConfigMap manifest containing a Deno import_map.json
-// that rewrites all jsr: and npm: specifiers to the in-cluster module proxy URL.
+// engineDenoImports holds the engine's base import map entries from engine/deno.json.
+// These are merged with workflow jsr/npm entries in the generated deno.json ConfigMap.
+// TODO: auto-sync from engine/deno.json at build time instead of hardcoding here.
+// Keep in sync with engine/deno.json whenever engine deps change.
+var engineDenoImports = map[string]string{
+	"tentacular":              "./engine/mod.ts",
+	"std/":                    "https://deno.land/std@0.224.0/",
+	"std/yaml":                "https://deno.land/std@0.224.0/yaml/mod.ts",
+	"std/path":                "https://deno.land/std@0.224.0/path/mod.ts",
+	"std/flags":               "https://deno.land/std@0.224.0/flags/mod.ts",
+	"std/assert":              "https://deno.land/std@0.224.0/assert/mod.ts",
+	"@nats-io/transport-deno": "jsr:@nats-io/transport-deno@3.3.0",
+	"@std/fmt/colors":         "https://deno.land/std@0.224.0/fmt/colors.ts",
+	"@std/io":                 "https://deno.land/std@0.224.0/io/mod.ts",
+	"@std/bytes":              "https://deno.land/std@0.224.0/bytes/mod.ts",
+}
+
+// GenerateImportMap produces a ConfigMap manifest containing a merged deno.json that
+// combines engine import entries with jsr:/npm: rewrites pointing to the in-cluster
+// module proxy. Mounted at /app/deno.json, it overrides the image-baked deno.json so
+// Deno auto-discovers it without needing --import-map (which would break engine imports).
 // Returns nil if the workflow has no jsr/npm dependencies.
 func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 	if wf.Contract == nil || len(wf.Contract.Dependencies) == 0 {
@@ -27,13 +46,13 @@ func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 	}
 	proxyURL = strings.TrimRight(proxyURL, "/")
 
-	// Collect jsr/npm deps in sorted order for deterministic output
-	type entry struct {
-		specifier string
-		url       string
+	// Build merged imports: engine entries + workflow jsr/npm entries
+	imports := make(map[string]string, len(engineDenoImports))
+	for k, v := range engineDenoImports {
+		imports[k] = v
 	}
-	var entries []entry
 
+	hasProxyDeps := false
 	for _, dep := range wf.Contract.Dependencies {
 		if dep.Protocol != "jsr" && dep.Protocol != "npm" {
 			continue
@@ -45,42 +64,42 @@ func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 		var specifier, proxyPath string
 		switch dep.Protocol {
 		case "jsr":
-			// jsr:@scope/package → proxy/jsr/@scope/package[@version]
 			specifier = "jsr:" + dep.Host
 			proxyPath = "/jsr/" + dep.Host
 		case "npm":
-			// npm:package → proxy/package[@version]
 			specifier = "npm:" + dep.Host
 			proxyPath = "/" + dep.Host
 		}
-
 		if dep.Version != "" {
 			proxyPath += "@" + dep.Version
 		}
-
-		entries = append(entries, entry{
-			specifier: specifier,
-			url:       proxyURL + proxyPath,
-		})
+		imports[specifier] = proxyURL + proxyPath
+		hasProxyDeps = true
 	}
 
-	if len(entries) == 0 {
+	if !hasProxyDeps {
 		return nil
 	}
 
-	sort.Slice(entries, func(i, j int) bool {
-		return entries[i].specifier < entries[j].specifier
-	})
-
-	imports := make(map[string]string, len(entries))
-	for _, e := range entries {
-		imports[e.specifier] = e.url
+	// Build sorted imports for deterministic output
+	keys := make([]string, 0, len(imports))
+	for k := range imports {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	orderedImports := make(map[string]string, len(imports))
+	for _, k := range keys {
+		orderedImports[k] = imports[k]
 	}
 
-	importMap := map[string]interface{}{
-		"imports": imports,
+	denoConfig := map[string]interface{}{
+		"compilerOptions": map[string]interface{}{
+			"strict":                 true,
+			"noUncheckedIndexedAccess": true,
+		},
+		"imports": orderedImports,
 	}
-	importMapJSON, err := json.MarshalIndent(importMap, "", "  ")
+	denoConfigJSON, err := json.MarshalIndent(denoConfig, "", "  ")
 	if err != nil {
 		return nil
 	}
@@ -96,14 +115,14 @@ metadata:
   annotations:
     tentacular.dev/proxy-url: %s
 data:
-  import_map.json: |
+  deno.json: |
 %s
 `,
 		wf.Name,
-		"__NAMESPACE__", // replaced by caller with actual namespace
+		"__NAMESPACE__",
 		wf.Name,
 		proxyURL,
-		indentLines(string(importMapJSON), "    "),
+		indentLines(string(denoConfigJSON), "    "),
 	)
 
 	return &builder.Manifest{

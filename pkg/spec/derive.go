@@ -330,11 +330,9 @@ func DeriveDenoFlags(c *Contract) []string {
 		"--allow-env=DENO_DIR,HOME",
 	}
 
-	// Add import map when module proxy deps (jsr/npm) are present.
-	// The import map ConfigMap is mounted at /app/workflow/import_map.json by the Deployment.
-	if hasModuleProxyDeps {
-		flags = append(flags, "--import-map=/app/workflow/import_map.json")
-	}
+	// Note: when jsr/npm deps are present, the Deployment mounts a merged deno.json
+	// (engine imports + workflow proxy rewrites) at /app/deno.json. Deno auto-discovers
+	// this config — no --import-map flag needed (which would override and break engine deps).
 
 	flags = append(flags,
 		"engine/main.ts",

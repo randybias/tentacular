@@ -151,6 +151,37 @@ func TestGenerateImportMapWithNamespace(t *testing.T) {
 	})
 }
 
+func TestGenerateImportMapContainsEngineEntries(t *testing.T) {
+	// The generated deno.json must include engine import entries so that
+	// engine deps (std/path, tentacular, etc.) still resolve when the ConfigMap
+	// overrides /app/deno.json. This prevents --import-map from breaking the engine.
+	wf := &spec.Workflow{
+		Name: "my-wf",
+		Contract: &spec.Contract{
+			Version: "1",
+			Dependencies: map[string]spec.Dependency{
+				"pg": {Protocol: "jsr", Host: "@db/postgres", Version: "^0.4"},
+			},
+		},
+	}
+	got := GenerateImportMapWithNamespace(wf, "default", "")
+	if got == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+
+	// Engine entries must be present
+	for _, entry := range []string{"std/path", "std/yaml", "tentacular", "@nats-io/transport-deno"} {
+		if !strings.Contains(got.Content, entry) {
+			t.Errorf("expected engine entry %q in merged deno.json, missing from:\n%s", entry, got.Content)
+		}
+	}
+
+	// Workflow entry must also be present
+	if !strings.Contains(got.Content, "jsr:@db/postgres") {
+		t.Error("expected workflow jsr entry in merged deno.json")
+	}
+}
+
 func TestHasModuleProxyDeps(t *testing.T) {
 	tests := []struct {
 		name string
