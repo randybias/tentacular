@@ -1,6 +1,8 @@
 package k8s
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -302,5 +304,99 @@ func TestGenerateModuleProxyManifests(t *testing.T) {
 			}
 		}
 		t.Error("no Deployment manifest found")
+	})
+
+	t.Run("Deployment uses /esmd mount (no leading dot) and no runAsNonRoot", func(t *testing.T) {
+		manifests := GenerateModuleProxyManifests("", "tentacular-system", "", "")
+		for _, m := range manifests {
+			if m.Kind == "Deployment" {
+				if !strings.Contains(m.Content, "mountPath: /esmd") {
+					t.Error("expected mountPath: /esmd (no leading dot) in Deployment")
+				}
+				if strings.Contains(m.Content, "/.esmd") {
+					t.Error("unexpected /.esmd (with leading dot) in Deployment")
+				}
+				if strings.Contains(m.Content, "runAsNonRoot") {
+					t.Error("unexpected runAsNonRoot in Deployment — esm-sh needs to run as root")
+				}
+				return
+			}
+		}
+		t.Error("no Deployment manifest found")
+	})
+}
+
+func TestScanNodeImports(t *testing.T) {
+	t.Run("returns nil for non-existent dir", func(t *testing.T) {
+		deps, err := ScanNodeImports("/no/such/dir")
+		if err != nil {
+			t.Errorf("expected nil error for missing dir, got %v", err)
+		}
+		if deps != nil {
+			t.Errorf("expected nil deps for missing dir, got %v", deps)
+		}
+	})
+
+	t.Run("detects jsr and npm imports from TypeScript", func(t *testing.T) {
+		dir := t.TempDir()
+		nodesDir := filepath.Join(dir, "nodes")
+		if err := os.Mkdir(nodesDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		src := `import { Client } from "jsr:@db/postgres@0.19.5";
+import { z } from "npm:zod@3.22.0";
+import { join } from "std/path"; // not jsr/npm, should be ignored
+const x = await import("jsr:@std/encoding@1.0.0/base64");
+`
+		if err := os.WriteFile(filepath.Join(nodesDir, "main.ts"), []byte(src), 0644); err != nil {
+			t.Fatal(err)
+		}
+
+		deps, err := ScanNodeImports(nodesDir)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if len(deps) != 3 {
+			t.Fatalf("expected 3 deps, got %d: %+v", len(deps), deps)
+		}
+
+		byHost := make(map[string]spec.Dependency)
+		for _, d := range deps {
+			byHost[d.Host] = d
+		}
+
+		pg := byHost["@db/postgres"]
+		if pg.Protocol != "jsr" || pg.Version != "0.19.5" {
+			t.Errorf("@db/postgres: got protocol=%s version=%s", pg.Protocol, pg.Version)
+		}
+		zod := byHost["zod"]
+		if zod.Protocol != "npm" || zod.Version != "3.22.0" {
+			t.Errorf("zod: got protocol=%s version=%s", zod.Protocol, zod.Version)
+		}
+		enc := byHost["@std/encoding"]
+		if enc.Protocol != "jsr" || enc.Version != "1.0.0/base64" {
+			t.Errorf("@std/encoding: got protocol=%s version=%s", enc.Protocol, enc.Version)
+		}
+	})
+
+	t.Run("deduplicates repeated imports across files", func(t *testing.T) {
+		dir := t.TempDir()
+		nodesDir := filepath.Join(dir, "nodes")
+		if err := os.Mkdir(nodesDir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		for _, name := range []string{"a.ts", "b.ts"} {
+			if err := os.WriteFile(filepath.Join(nodesDir, name),
+				[]byte(`import { x } from "jsr:@db/postgres@0.19.5";`), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		deps, err := ScanNodeImports(nodesDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(deps) != 1 {
+			t.Errorf("expected 1 dep (deduped), got %d", len(deps))
+		}
 	})
 }
