@@ -167,9 +167,10 @@ func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
 
 	flagStr := strings.Join(flags, " ")
 
-	// Should include import map flag
-	if !strings.Contains(flagStr, "--import-map=/app/workflow/import_map.json") {
-		t.Errorf("expected --import-map flag, got: %s", flagStr)
+	// Should NOT include --import-map flag — the merged deno.json is auto-discovered
+	// at /app/deno.json via ConfigMap mount, no flag needed.
+	if strings.Contains(flagStr, "--import-map") {
+		t.Errorf("expected no --import-map flag (auto-discovered deno.json), got: %s", flagStr)
 	}
 
 	// Should include proxy host in --allow-net
