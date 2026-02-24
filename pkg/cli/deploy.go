@@ -325,6 +325,41 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 		imageTag = "tentacular-engine:latest"
 	}
 
+	// Scan TypeScript node files for jsr:/npm: imports and auto-wire the module proxy.
+	// This catches jsr/npm usage in code even when not yet declared in the contract.
+	// Scanned deps are merged into the contract so that DeriveDenoFlags,
+	// GenerateNetworkPolicy, and GenerateImportMap all pick them up automatically.
+	nodesDir := filepath.Join(workflowDir, "nodes")
+	if scanned, scanErr := k8s.ScanNodeImports(nodesDir); scanErr == nil && len(scanned) > 0 {
+		if wf.Contract == nil {
+			wf.Contract = &spec.Contract{Dependencies: make(map[string]spec.Dependency)}
+		}
+		if wf.Contract.Dependencies == nil {
+			wf.Contract.Dependencies = make(map[string]spec.Dependency)
+		}
+		for _, sd := range scanned {
+			// Check if already in contract by protocol+host
+			alreadyDeclared := false
+			for _, d := range wf.Contract.Dependencies {
+				if d.Protocol == sd.Protocol && d.Host == sd.Host {
+					alreadyDeclared = true
+					break
+				}
+			}
+			if !alreadyDeclared {
+				// Synthetic key: won't collide with user-defined keys
+				key := fmt.Sprintf("__scanned__%s__%s", sd.Protocol, strings.ReplaceAll(sd.Host, "/", "_"))
+				wf.Contract.Dependencies[key] = sd
+				versionHint := ""
+				if sd.Version != "" {
+					versionHint = "@" + sd.Version
+				}
+				fmt.Fprintf(w, "  Module proxy: auto-detected %s:%s%s from TypeScript (declare in contract to pin version)\n",
+					sd.Protocol, sd.Host, versionHint)
+			}
+		}
+	}
+
 	// Generate ConfigMap for workflow code
 	configMap, err := builder.GenerateCodeConfigMap(wf, workflowDir, namespace)
 	if err != nil {

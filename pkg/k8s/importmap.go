@@ -3,6 +3,9 @@ package k8s
 import (
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -171,6 +174,90 @@ func indentLines(s, prefix string) string {
 	return strings.Join(lines, "\n")
 }
 
+// jsrImportRE matches any quoted jsr: or npm: specifier in TypeScript source.
+// Catches static imports (from "jsr:..."), side-effect imports (import "jsr:..."),
+// and dynamic imports (import("jsr:...")) without false-positives on non-specifier strings.
+var jsrImportRE = regexp.MustCompile(`["']((?:jsr|npm):[^"'\s]+)["']`)
+
+// ScanNodeImports scans *.ts files in nodesDir for jsr: and npm: import specifiers.
+// Returns a Dependency for each unique specifier found, with Protocol/Host/Version populated.
+// Used by tntc deploy to auto-wire the module proxy for workflows whose TypeScript code
+// uses jsr:/npm: imports even if they haven't been declared in the workflow contract.
+func ScanNodeImports(nodesDir string) ([]spec.Dependency, error) {
+	entries, err := os.ReadDir(nodesDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("reading nodes dir: %w", err)
+	}
+
+	seen := make(map[string]bool)
+	var deps []spec.Dependency
+
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ts") {
+			continue
+		}
+		content, err := os.ReadFile(filepath.Join(nodesDir, entry.Name()))
+		if err != nil {
+			return nil, fmt.Errorf("reading %s: %w", entry.Name(), err)
+		}
+
+		for _, m := range jsrImportRE.FindAllSubmatch(content, -1) {
+			raw := string(m[1]) // e.g. "jsr:@db/postgres@0.19.5"
+			if seen[raw] {
+				continue
+			}
+			seen[raw] = true
+
+			var protocol, rest string
+			switch {
+			case strings.HasPrefix(raw, "jsr:"):
+				protocol, rest = "jsr", raw[4:]
+			case strings.HasPrefix(raw, "npm:"):
+				protocol, rest = "npm", raw[4:]
+			default:
+				continue
+			}
+
+			host, version := parseModuleSpecifier(rest)
+			if host != "" {
+				deps = append(deps, spec.Dependency{
+					Protocol: protocol,
+					Host:     host,
+					Version:  version,
+				})
+			}
+		}
+	}
+	return deps, nil
+}
+
+// parseModuleSpecifier splits "[@scope/]pkg[@version]" into (host, version).
+func parseModuleSpecifier(s string) (host, version string) {
+	if strings.HasPrefix(s, "@") {
+		// Scoped: @scope/pkg[@version]
+		slashIdx := strings.Index(s, "/")
+		if slashIdx < 0 {
+			return s, ""
+		}
+		// Look for @ after the slash (version separator)
+		rest := s[slashIdx+1:]
+		atIdx := strings.Index(rest, "@")
+		if atIdx < 0 {
+			return s, "" // no version
+		}
+		return s[:slashIdx+1+atIdx], rest[atIdx+1:]
+	}
+	// Unscoped: pkg[@version]
+	atIdx := strings.Index(s, "@")
+	if atIdx < 0 {
+		return s, ""
+	}
+	return s[:atIdx], s[atIdx+1:]
+}
+
 // GenerateModuleProxyManifests returns the set of K8s manifests for the esm.sh
 // module proxy service, deployed into tentacular-system by `tntc cluster install`.
 func GenerateModuleProxyManifests(image, namespace, storage, pvcSize string) []builder.Manifest {
@@ -193,7 +280,7 @@ func GenerateModuleProxyManifests(image, namespace, storage, pvcSize string) []b
             claimName: esm-sh-cache`
 		volumeMountSpec = `          volumeMounts:
             - name: cache
-              mountPath: /.esmd`
+              mountPath: /esmd`
 		pvcManifest = fmt.Sprintf(`---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -212,15 +299,14 @@ spec:
 `, namespace, pvcSize)
 	} else {
 		// emptyDir (default) — cache is lost on pod restart but no PVC needed.
-		// Mounted at /.esmd so esm.sh (v136+) can write its data directory even
-		// as runAsUser: 65534 (nobody), since emptyDir is world-writable on creation.
+		// Mounted at /esmd (esm.sh v136 data directory — no leading dot).
 		volumeSpec = `      volumes:
         - name: cache
           emptyDir:
             sizeLimit: 2Gi`
 		volumeMountSpec = `          volumeMounts:
             - name: cache
-              mountPath: /.esmd`
+              mountPath: /esmd`
 	}
 
 	deployment := fmt.Sprintf(`apiVersion: apps/v1
@@ -241,9 +327,6 @@ spec:
       labels:
         app.kubernetes.io/name: esm-sh
     spec:
-      securityContext:
-        runAsNonRoot: true
-        runAsUser: 65534
       containers:
         - name: esm-sh
           image: %s
