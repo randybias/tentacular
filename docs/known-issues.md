@@ -1,5 +1,32 @@
 # Known Issues
 
+---
+
+## Module Proxy
+
+### Deno `--allow-net` Scoping Broken for Module Proxy Deps
+
+**Status:** Known issue — deferred fix  
+**File:** `pkg/spec/derive.go` (`DeriveDenoFlags`, `moduleProxyHost`)
+
+When a workflow has `jsr` or `npm` dependencies, the engine runs with a scoped
+`--allow-net=esm-sh.tentacular-system.svc.cluster.local:8080,...` that includes the
+module proxy host. This works for the current hardcoded `tentacular-system` namespace
+but has two problems:
+
+1. **Hardcoded namespace:** `moduleProxyHost` in `derive.go` is a constant. If the module
+   proxy is installed in a non-default namespace, the `--allow-net` flag will still reference
+   `tentacular-system` and block the connection.
+2. **No config plumbing:** `DeriveDenoFlags` takes only a `*Contract` — it has no access to
+   `ModuleProxyConfig`. Passing the proxy URL through requires a new function signature or
+   a context struct.
+
+**Fix (deferred):** Change `DeriveDenoFlags` to accept a `proxyURL string` parameter (or a
+`DenoFlagOptions` struct). Update all callers. Pass `cfg.ModuleProxy` through the builder
+pipeline so the correct proxy host is used in `--allow-net`.
+
+---
+
 Detailed investigation notes for open bugs and gaps discovered during workflow development (Feb 2026). The [roadmap](roadmap.md) references these items by number for the fixes.
 
 ---

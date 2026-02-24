@@ -829,3 +829,31 @@ func (c *Client) GetCronJobs(namespace string, labelSelector string) ([]unstruct
 
 	return list.Items, nil
 }
+
+// EnsureNamespace creates the given namespace if it does not already exist.
+func (c *Client) EnsureNamespace(name string) error {
+	ctx, cancel := context.WithTimeout(context.Background(), k8sTimeout)
+	defer cancel()
+
+	_, err := c.clientset.CoreV1().Namespaces().Get(ctx, name, metav1.GetOptions{})
+	if err == nil {
+		return nil // already exists
+	}
+	if !errors.IsNotFound(err) {
+		return fmt.Errorf("checking namespace %s: %w", name, err)
+	}
+
+	ns := &corev1.Namespace{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"app.kubernetes.io/managed-by": "tentacular",
+			},
+		},
+	}
+	_, err = c.clientset.CoreV1().Namespaces().Create(ctx, ns, metav1.CreateOptions{})
+	if err != nil {
+		return fmt.Errorf("creating namespace %s: %w", name, err)
+	}
+	return nil
+}

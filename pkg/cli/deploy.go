@@ -356,6 +356,18 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 		manifests = append(manifests, *netpol)
 	}
 
+	// Add import map ConfigMap when workflow has jsr/npm module proxy dependencies
+	if cfg := LoadConfig(); k8s.HasModuleProxyDeps(wf) {
+		proxyURL := k8s.DefaultModuleProxyURL
+		if cfg.ModuleProxy.Namespace != "" {
+			proxyURL = fmt.Sprintf("http://esm-sh.%s.svc.cluster.local:8080", cfg.ModuleProxy.Namespace)
+		}
+		if importMap := k8s.GenerateImportMapWithNamespace(wf, namespace, proxyURL); importMap != nil {
+			manifests = append(manifests, *importMap)
+			fmt.Fprintf(w, "  Module proxy: import map generated (%d jsr/npm deps)\n", countModuleProxyDeps(wf))
+		}
+	}
+
 	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, namespace)
 
 	// Create K8s client (with optional kubeconfig file and/or context override)
@@ -564,4 +576,18 @@ stringData:
 	return &builder.Manifest{
 		Kind: "Secret", Name: secretName, Content: manifest,
 	}, nil
+}
+
+// countModuleProxyDeps returns the number of jsr/npm dependencies in the workflow contract.
+func countModuleProxyDeps(wf *spec.Workflow) int {
+	if wf.Contract == nil {
+		return 0
+	}
+	n := 0
+	for _, dep := range wf.Contract.Dependencies {
+		if dep.Protocol == "jsr" || dep.Protocol == "npm" {
+			n++
+		}
+	}
+	return n
 }

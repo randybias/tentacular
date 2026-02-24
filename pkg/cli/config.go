@@ -7,12 +7,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// ModuleProxyConfig configures the in-cluster esm.sh module proxy for jsr/npm deps.
+type ModuleProxyConfig struct {
+	Enabled   bool   `yaml:"enabled,omitempty"`
+	Namespace string `yaml:"namespace,omitempty"` // default: tentacular-system
+	Image     string `yaml:"image,omitempty"`     // default: ghcr.io/esm-dev/esm.sh:v135
+	Storage   string `yaml:"storage,omitempty"`   // "emptydir" (default) or "pvc"
+	PVCSize   string `yaml:"pvcSize,omitempty"`   // default: 5Gi (only when storage: pvc)
+}
+
 // TentacularConfig holds default configuration values.
 type TentacularConfig struct {
-	Registry     string                          `yaml:"registry,omitempty"`
-	Namespace    string                          `yaml:"namespace,omitempty"`
-	RuntimeClass string                          `yaml:"runtime_class,omitempty"`
-	Environments map[string]EnvironmentConfig    `yaml:"environments,omitempty"`
+	Registry     string                       `yaml:"registry,omitempty"`
+	Namespace    string                       `yaml:"namespace,omitempty"`
+	RuntimeClass string                       `yaml:"runtime_class,omitempty"`
+	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
+	ModuleProxy  ModuleProxyConfig            `yaml:"moduleProxy,omitempty"`
 }
 
 // LoadConfig returns merged config: project > user > defaults.
@@ -57,5 +67,20 @@ func mergeConfig(base, override *TentacularConfig) {
 		for k, v := range override.Environments {
 			base.Environments[k] = v
 		}
+	}
+	if override.ModuleProxy.Enabled {
+		base.ModuleProxy.Enabled = true
+	}
+	if override.ModuleProxy.Namespace != "" {
+		base.ModuleProxy.Namespace = override.ModuleProxy.Namespace
+	}
+	if override.ModuleProxy.Image != "" {
+		base.ModuleProxy.Image = override.ModuleProxy.Image
+	}
+	if override.ModuleProxy.Storage != "" {
+		base.ModuleProxy.Storage = override.ModuleProxy.Storage
+	}
+	if override.ModuleProxy.PVCSize != "" {
+		base.ModuleProxy.PVCSize = override.ModuleProxy.PVCSize
 	}
 }
