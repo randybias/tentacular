@@ -376,10 +376,19 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 		}
 	}
 
+	// Resolve module proxy URL before manifest generation so the Deployment's
+	// pre-warm initContainer and --allow-import flags are wired correctly.
+	cfg := LoadConfig()
+	proxyURL := k8s.DefaultModuleProxyURL
+	if cfg.ModuleProxy.Namespace != "" {
+		proxyURL = fmt.Sprintf("http://esm-sh.%s.svc.cluster.local:8080", cfg.ModuleProxy.Namespace)
+	}
+
 	// Generate K8s manifests
 	buildOpts := builder.DeployOptions{
 		RuntimeClassName: runtimeClass,
 		ImagePullPolicy:  imagePullPolicy,
+		ModuleProxyURL:   proxyURL, // triggers pre-warm initContainer when jsr/npm deps present
 	}
 	manifests := builder.GenerateK8sManifests(wf, imageTag, namespace, buildOpts)
 
@@ -392,11 +401,7 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	}
 
 	// Add import map ConfigMap when workflow has jsr/npm module proxy dependencies
-	if cfg := LoadConfig(); k8s.HasModuleProxyDeps(wf) {
-		proxyURL := k8s.DefaultModuleProxyURL
-		if cfg.ModuleProxy.Namespace != "" {
-			proxyURL = fmt.Sprintf("http://esm-sh.%s.svc.cluster.local:8080", cfg.ModuleProxy.Namespace)
-		}
+	if k8s.HasModuleProxyDeps(wf) {
 		if importMap := k8s.GenerateImportMapWithNamespace(wf, namespace, proxyURL); importMap != nil {
 			manifests = append(manifests, *importMap)
 			fmt.Fprintf(w, "  Module proxy: import map generated (%d jsr/npm deps)\n", countModuleProxyDeps(wf))

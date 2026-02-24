@@ -330,9 +330,16 @@ func DeriveDenoFlags(c *Contract) []string {
 		"--allow-env=DENO_DIR,HOME",
 	}
 
+	// Deno 2 requires explicit --allow-import permission for any host from which
+	// modules are imported. The in-cluster module proxy is not on Deno's built-in
+	// allowlist, so workflow pods that use jsr:/npm: deps must explicitly allow it.
+	if hasModuleProxyDeps {
+		flags = append(flags, "--allow-import="+moduleProxyHost)
+	}
+
 	// Note: when jsr/npm deps are present, the Deployment mounts a merged deno.json
-	// (engine imports + workflow proxy rewrites) at /app/deno.json. Deno auto-discovers
-	// this config — no --import-map flag needed (which would override and break engine deps).
+	// (engine imports + workflow proxy rewrites) at /app/engine/deno.json. Deno
+	// auto-discovers this config — no --import-map flag needed.
 
 	flags = append(flags,
 		"engine/main.ts",

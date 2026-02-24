@@ -782,3 +782,104 @@ func TestDeploymentNoArgsWithoutContract(t *testing.T) {
 		t.Error("expected NO args field when contract is nil")
 	}
 }
+
+func TestDeploymentDENODIRAlwaysSet(t *testing.T) {
+	// DENO_DIR=/tmp/deno-cache must be in every Deployment so Deno's cache
+	// stays in /tmp (writable even with gVisor's read-only /deno-dir).
+	wf := makeTestWorkflow("deno-dir-test")
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+	if !strings.Contains(dep, "DENO_DIR") {
+		t.Error("expected DENO_DIR env var in Deployment")
+	}
+	if !strings.Contains(dep, "/tmp/deno-cache") {
+		t.Error("expected DENO_DIR=/tmp/deno-cache in Deployment")
+	}
+}
+
+func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "prewarm-test",
+		Version: "1.0",
+		Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Triggers: []spec.Trigger{{Type: "manual"}},
+		Contract: &spec.Contract{
+			Version: "1",
+			Dependencies: map[string]spec.Dependency{
+				"pg": {Protocol: "jsr", Host: "@db/postgres", Version: "0.19.5"},
+			},
+		},
+	}
+
+	t.Run("initContainer present when ModuleProxyURL set and jsr deps exist", func(t *testing.T) {
+		opts := DeployOptions{
+			ModuleProxyURL: "http://esm-sh.tentacular-system.svc.cluster.local:8080",
+		}
+		manifests := GenerateK8sManifests(wf, "test:latest", "default", opts)
+		dep := manifests[0].Content
+		if !strings.Contains(dep, "initContainers:") {
+			t.Error("expected initContainers block when ModuleProxyURL set")
+		}
+		if !strings.Contains(dep, "proxy-prewarm") {
+			t.Error("expected proxy-prewarm initContainer name")
+		}
+		if !strings.Contains(dep, "/jsr/@db/postgres@0.19.5") {
+			t.Error("expected jsr dep URL in prewarm curl command")
+		}
+	})
+
+	t.Run("no initContainer when ModuleProxyURL empty", func(t *testing.T) {
+		manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+		dep := manifests[0].Content
+		if strings.Contains(dep, "initContainers:") {
+			t.Error("expected no initContainers block when ModuleProxyURL not set")
+		}
+	})
+
+	t.Run("no initContainer when no jsr/npm deps", func(t *testing.T) {
+		httpOnly := &spec.Workflow{
+			Name:    "http-only",
+			Version: "1.0",
+			Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+			Triggers: []spec.Trigger{{Type: "manual"}},
+			Contract: &spec.Contract{
+				Version: "1",
+				Dependencies: map[string]spec.Dependency{
+					"api": {Protocol: "https", Host: "api.example.com", Port: 443},
+				},
+			},
+		}
+		opts := DeployOptions{ModuleProxyURL: "http://esm-sh.tentacular-system.svc.cluster.local:8080"}
+		manifests := GenerateK8sManifests(httpOnly, "test:latest", "default", opts)
+		dep := manifests[0].Content
+		if strings.Contains(dep, "initContainers:") {
+			t.Error("expected no initContainers block when no jsr/npm deps")
+		}
+	})
+}
+
+func TestDeploymentImportMapMountPath(t *testing.T) {
+	// deno.json must be mounted at /app/engine/deno.json (not /app/deno.json)
+	// because Deno's config discovery finds /app/engine/deno.json first when
+	// the entrypoint is engine/main.ts.
+	wf := &spec.Workflow{
+		Name:    "mount-path-test",
+		Version: "1.0",
+		Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Triggers: []spec.Trigger{{Type: "manual"}},
+		Contract: &spec.Contract{
+			Version: "1",
+			Dependencies: map[string]spec.Dependency{
+				"pg": {Protocol: "jsr", Host: "@db/postgres", Version: "0.19.5"},
+			},
+		},
+	}
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
+	dep := manifests[0].Content
+	if !strings.Contains(dep, "/app/engine/deno.json") {
+		t.Error("expected import map mounted at /app/engine/deno.json")
+	}
+	if strings.Contains(dep, "mountPath: /app/deno.json") {
+		t.Error("unexpected mount at /app/deno.json — should be /app/engine/deno.json")
+	}
+}
