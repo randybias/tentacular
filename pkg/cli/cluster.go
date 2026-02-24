@@ -32,7 +32,7 @@ func NewClusterCmd() *cobra.Command {
 	install.Flags().String("proxy-namespace", "", "Namespace for module proxy (default: tentacular-system)")
 	install.Flags().String("proxy-storage", "", "Module proxy cache storage: emptydir (default) or pvc")
 	install.Flags().String("proxy-pvc-size", "", "PVC size when storage=pvc (default: 5Gi)")
-	install.Flags().String("proxy-image", "", "Module proxy image (default: ghcr.io/esm-dev/esm.sh:v135)")
+	install.Flags().String("proxy-image", "", "Module proxy image (default: ghcr.io/esm-dev/esm.sh:v136)")
 
 	cluster.AddCommand(check)
 	cluster.AddCommand(install)
@@ -57,6 +57,14 @@ func runClusterCheck(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("preflight check failed: %w", err)
 	}
+
+	// Append module proxy check (informational: not installed = warning, not failure)
+	cfg := LoadConfig()
+	proxyNS := cfg.ModuleProxy.Namespace
+	if proxyNS == "" {
+		proxyNS = "tentacular-system"
+	}
+	results = append(results, client.CheckModuleProxy(proxyNS))
 
 	// JSON output
 	if output == "json" {
