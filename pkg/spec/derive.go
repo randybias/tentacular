@@ -325,7 +325,7 @@ func DeriveDenoFlags(c *Contract) []string {
 		"--no-lock",
 		"--unstable-net",
 		allowNetFlag,
-		"--allow-read=/app,/var/run/secrets",
+		"--allow-read=/app",
 		"--allow-write=/tmp",
 		"--allow-env=DENO_DIR,HOME",
 	}
