@@ -236,16 +236,6 @@ func HasModuleProxyDeps(wf *Workflow) bool {
 	return false
 }
 
-// moduleProxyHost is the in-cluster hostname:port of the esm.sh module proxy service.
-// TODO(allow-net): This is hardcoded to the default tentacular-system namespace.
-// Once the module proxy config is plumbed through to DeriveDenoFlags, this should
-// be derived from ModuleProxyConfig. The broader issue is that --allow-net scoping
-// does not currently account for the proxy host at all — workflow pods using jsr/npm
-// deps will have their imports rewritten to the proxy URL but the scoped --allow-net
-// won't include it, blocking the connection. Fix: pass proxyHost into DeriveDenoFlags
-// and add it to the scoped allow list. Tracked as known issue: "Deno allow-net broken
-// for module proxy deps".
-const moduleProxyHost = "esm-sh.tentacular-system.svc.cluster.local:8080"
 
 // DeriveDenoFlags returns the complete Deno command with permission flags based on contract dependencies.
 // Returns nil if contract is nil or has no dependencies.
@@ -254,7 +244,7 @@ const moduleProxyHost = "esm-sh.tentacular-system.svc.cluster.local:8080"
 // Always includes 0.0.0.0:8080 in scoped mode for internal health endpoints.
 // When jsr/npm deps are present, adds the module proxy host to the scoped allow list.
 // Scopes --allow-env to DENO_DIR,HOME only.
-func DeriveDenoFlags(c *Contract) []string {
+func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 	if c == nil || len(c.Dependencies) == 0 {
 		return nil
 	}
@@ -304,9 +294,9 @@ func DeriveDenoFlags(c *Contract) []string {
 		}
 
 		// Add module proxy host when jsr/npm deps are present
-		if hasModuleProxyDeps && !seen[moduleProxyHost] {
-			allowedHosts = append(allowedHosts, moduleProxyHost)
-			seen[moduleProxyHost] = true
+		if hasModuleProxyDeps && !seen[proxyHost] {
+			allowedHosts = append(allowedHosts, proxyHost)
+			seen[proxyHost] = true
 		}
 
 		// Always include localhost:8080 for health endpoints
@@ -341,7 +331,7 @@ func DeriveDenoFlags(c *Contract) []string {
 	//     1000 / deno user; pod runs as uid 65534 / nobody so the image-baked
 	//     cache at ~/.cache/deno is not readable), forcing Deno to re-fetch.
 	if hasModuleProxyDeps {
-		flags = append(flags, "--allow-import=deno.land,"+moduleProxyHost)
+		flags = append(flags, "--allow-import=deno.land:443,"+proxyHost)
 	}
 
 	// Note: when jsr/npm deps are present, the Deployment mounts a merged deno.json

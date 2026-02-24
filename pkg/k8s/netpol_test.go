@@ -17,7 +17,7 @@ func TestGenerateNetworkPolicyNilContract(t *testing.T) {
 		// No contract
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest != nil {
 		t.Error("expected nil manifest for workflow without contract")
@@ -35,7 +35,7 @@ func TestGenerateNetworkPolicyEmptyContract(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest for empty contract")
@@ -72,7 +72,7 @@ func TestGenerateNetworkPolicySingleHTTPSDependency(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -129,7 +129,7 @@ func TestGenerateNetworkPolicyPostgreSQLDependency(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "pd-test")
+	manifest := GenerateNetworkPolicy(wf, "pd-test", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -176,7 +176,7 @@ func TestGenerateNetworkPolicyMultipleDependencies(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -211,7 +211,7 @@ func TestGenerateNetworkPolicyWebhookTriggerIngress(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -256,7 +256,7 @@ func TestGenerateNetworkPolicyNonWebhookTriggerNoIngress(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -279,7 +279,7 @@ func TestGenerateNetworkPolicyLabels(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -310,7 +310,7 @@ func TestGenerateNetworkPolicyPolicyTypes(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -363,7 +363,7 @@ func TestGenerateNetworkPolicyDNSAlwaysIncluded(t *testing.T) {
 				},
 			}
 
-			manifest := GenerateNetworkPolicy(wf, "default")
+			manifest := GenerateNetworkPolicy(wf, "default", "")
 
 			if manifest == nil {
 				t.Fatal("expected non-nil manifest")
@@ -393,7 +393,7 @@ func TestGenerateNetworkPolicyValidYAML(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -429,7 +429,7 @@ func TestGenerateNetworkPolicyNamespacing(t *testing.T) {
 				},
 			}
 
-			manifest := GenerateNetworkPolicy(wf, ns)
+			manifest := GenerateNetworkPolicy(wf, ns, "")
 
 			if manifest == nil {
 				t.Fatal("expected non-nil manifest")
@@ -462,7 +462,7 @@ func TestGenerateNetworkPolicyAdditionalEgressOverride(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -511,7 +511,7 @@ func TestGenerateNetworkPolicyDefaultPortApplication(t *testing.T) {
 		},
 	}
 
-	manifest := GenerateNetworkPolicy(wf, "default")
+	manifest := GenerateNetworkPolicy(wf, "default", "")
 
 	if manifest == nil {
 		t.Fatal("expected non-nil manifest")
@@ -650,7 +650,7 @@ contract:
 	}
 
 	// Step 6: Generate NetworkPolicy
-	manifest := GenerateNetworkPolicy(wf, "tentacular-test")
+	manifest := GenerateNetworkPolicy(wf, "tentacular-test", "")
 	if manifest == nil {
 		t.Fatal("expected non-nil NetworkPolicy manifest")
 	}

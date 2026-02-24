@@ -396,7 +396,8 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	manifests = append([]builder.Manifest{configMap}, manifests...)
 
 	// Add NetworkPolicy if contract present
-	if netpol := k8s.GenerateNetworkPolicy(wf, namespace); netpol != nil {
+	proxyNamespace := cfg.ModuleProxy.Namespace
+	if netpol := k8s.GenerateNetworkPolicy(wf, namespace, proxyNamespace); netpol != nil {
 		manifests = append(manifests, *netpol)
 	}
 

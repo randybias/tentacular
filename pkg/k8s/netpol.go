@@ -13,7 +13,7 @@ import (
 // Returns nil if workflow has no contract (contract-less workflows skip NetworkPolicy).
 // When the workflow has jsr/npm dependencies, an egress rule to the in-cluster module
 // proxy (esm.sh in tentacular-system) is automatically added.
-func GenerateNetworkPolicy(wf *spec.Workflow, namespace string) *builder.Manifest {
+func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace string) *builder.Manifest {
 	if wf.Contract == nil {
 		return nil
 	}
@@ -45,12 +45,12 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string) *builder.Manifes
 	// Add module proxy egress rule when workflow has jsr/npm dependencies.
 	// Workflow pods route all jsr:/npm: imports through the in-cluster esm.sh service.
 	if HasModuleProxyDeps(wf) {
-		proxyEgress := `  # Module proxy (esm.sh): resolves jsr: and npm: imports
+		proxyEgress := fmt.Sprintf(`  # Module proxy (esm.sh): resolves jsr: and npm: imports
   - to:
     - namespaceSelector:
         matchLabels:
-          kubernetes.io/metadata.name: tentacular-system
-      podSelector:
+          kubernetes.io/metadata.name: %s
+      podSelector:`, proxyNamespace) + `
         matchLabels:
           app.kubernetes.io/name: esm-sh
     ports:

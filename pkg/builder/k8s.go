@@ -177,7 +177,14 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 
 	// Build command/args block for Deno permission flags (10-space indent for container-level)
 	commandArgsBlock := ""
-	denoFlags := spec.DeriveDenoFlags(wf.Contract)
+	// Extract host:port from ModuleProxyURL for DeriveDenoFlags scoping.
+	// If empty, DeriveDenoFlags falls back to the default constant.
+	proxyHost := ""
+	if opts.ModuleProxyURL != "" {
+		proxyHost = strings.TrimPrefix(opts.ModuleProxyURL, "http://")
+		proxyHost = strings.TrimRight(proxyHost, "/")
+	}
+	denoFlags := spec.DeriveDenoFlags(wf.Contract, proxyHost)
 	if denoFlags != nil && len(denoFlags) > 0 {
 		var lines []string
 		lines = append(lines, "          command:")
