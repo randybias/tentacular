@@ -77,7 +77,7 @@ contract:
 	}
 
 	// Step 3: Verify DeriveDenoFlags returns broad --allow-net (dynamic-target present)
-	denoFlags := spec.DeriveDenoFlags(wf.Contract)
+	denoFlags := spec.DeriveDenoFlags(wf.Contract, "")
 	if denoFlags == nil {
 		t.Fatal("expected non-nil DeriveDenoFlags result for contract with dependencies")
 	}
@@ -166,7 +166,7 @@ contract:
 	}
 
 	// Step 6: Generate NetworkPolicy
-	manifest := GenerateNetworkPolicy(wf, "tentacular-dev")
+	manifest := GenerateNetworkPolicy(wf, "tentacular-dev", "")
 	if manifest == nil {
 		t.Fatal("expected non-nil NetworkPolicy manifest")
 	}
@@ -251,7 +251,7 @@ contract:
 	}
 
 	// DeriveDenoFlags should return scoped --allow-net= with specific hosts
-	denoFlags := spec.DeriveDenoFlags(wf.Contract)
+	denoFlags := spec.DeriveDenoFlags(wf.Contract, "")
 	if denoFlags == nil {
 		t.Fatal("expected non-nil DeriveDenoFlags result")
 	}
@@ -270,7 +270,7 @@ contract:
 	}
 
 	// NetworkPolicy should have host-specific egress only (no CIDR wildcard)
-	manifest := GenerateNetworkPolicy(wf, "tentacular-dev")
+	manifest := GenerateNetworkPolicy(wf, "tentacular-dev", "")
 	if manifest == nil {
 		t.Fatal("expected non-nil NetworkPolicy manifest")
 	}
@@ -326,13 +326,13 @@ edges: []
 	}
 
 	// DeriveDenoFlags should return nil
-	denoFlags := spec.DeriveDenoFlags(wf.Contract)
+	denoFlags := spec.DeriveDenoFlags(wf.Contract, "")
 	if denoFlags != nil {
 		t.Errorf("expected nil DeriveDenoFlags for nil contract, got %v", denoFlags)
 	}
 
 	// NetworkPolicy should not be generated
-	manifest := GenerateNetworkPolicy(wf, "tentacular-dev")
+	manifest := GenerateNetworkPolicy(wf, "tentacular-dev", "")
 	if manifest != nil {
 		t.Error("expected nil NetworkPolicy for workflow without contract")
 	}
@@ -390,7 +390,7 @@ contract:
 	}
 
 	// Generate NetworkPolicy and verify ingress section
-	manifest := GenerateNetworkPolicy(wf, "tentacular-dev")
+	manifest := GenerateNetworkPolicy(wf, "tentacular-dev", "")
 	if manifest == nil {
 		t.Fatal("expected non-nil NetworkPolicy manifest")
 	}

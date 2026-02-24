@@ -271,7 +271,7 @@ func TestGetSecretKeyName(t *testing.T) {
 }
 
 func TestDeriveDenoFlagsNilContract(t *testing.T) {
-	flags := DeriveDenoFlags(nil)
+	flags := DeriveDenoFlags(nil, "")
 	if flags != nil {
 		t.Errorf("expected nil flags for nil contract, got %v", flags)
 	}
@@ -281,7 +281,7 @@ func TestDeriveDenoFlagsEmptyDependencies(t *testing.T) {
 	contract := &Contract{
 		Dependencies: map[string]Dependency{},
 	}
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags != nil {
 		t.Errorf("expected nil flags for empty dependencies, got %v", flags)
 	}
@@ -298,7 +298,7 @@ func TestDeriveDenoFlagsFixedHostScoped(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags == nil {
 		t.Fatal("expected non-nil flags for fixed-host dependency")
 	}
@@ -342,7 +342,7 @@ func TestDeriveDenoFlagsDynamicTargetBroad(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags == nil {
 		t.Fatal("expected non-nil flags for dynamic-target dependency")
 	}
@@ -377,7 +377,7 @@ func TestDeriveDenoFlagsMixedDependenciesBroad(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags == nil {
 		t.Fatal("expected non-nil flags for mixed dependencies")
 	}
@@ -411,7 +411,7 @@ func TestDeriveDenoFlagsDefaultPortResolution(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags == nil {
 		t.Fatal("expected non-nil flags for fixed-host dependencies")
 	}
@@ -450,7 +450,7 @@ func TestDeriveDenoFlagsMultipleFixedSorted(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags == nil {
 		t.Fatal("expected non-nil flags for multiple fixed-host dependencies")
 	}
@@ -480,7 +480,7 @@ func TestDeriveDenoFlagsAlwaysIncludesLocalhost(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags == nil {
 		t.Fatal("expected non-nil flags")
 	}
@@ -509,7 +509,7 @@ func TestDeriveDenoFlagsScopedAllowEnv(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(contract)
+	flags := DeriveDenoFlags(contract, "")
 	if flags == nil {
 		t.Fatal("expected non-nil flags")
 	}

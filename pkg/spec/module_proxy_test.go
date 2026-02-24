@@ -152,6 +152,7 @@ func TestDeriveEgressRulesSkipsJSRNPM(t *testing.T) {
 
 // TestDeriveDenoFlagsModuleProxy verifies proxy host, --allow-import, and no --import-map for jsr/npm deps.
 func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
+	const proxyHost = "esm-sh.tentacular-support.svc.cluster.local:8080"
 	c := &Contract{
 		Version: "1",
 		Dependencies: map[string]Dependency{
@@ -160,7 +161,7 @@ func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(c)
+	flags := DeriveDenoFlags(c, proxyHost)
 	if flags == nil {
 		t.Fatal("expected non-nil flags")
 	}
@@ -174,15 +175,15 @@ func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
 	}
 
 	// Should include proxy host in --allow-net
-	if !strings.Contains(flagStr, moduleProxyHost) {
-		t.Errorf("expected module proxy host %s in --allow-net, got: %s", moduleProxyHost, flagStr)
+	if !strings.Contains(flagStr, proxyHost) {
+		t.Errorf("expected module proxy host %s in --allow-net, got: %s", proxyHost, flagStr)
 	}
 
-	// --allow-import must include BOTH deno.land (engine std lib, re-fetched
+	// --allow-import must include BOTH deno.land:443 (engine std lib, re-fetched
 	// because DENO_DIR=/tmp/deno-cache is empty at pod start) AND the proxy host.
 	// Setting --allow-import replaces Deno's built-in allowlist, so both must
 	// be listed explicitly or deno.land imports fail at engine startup.
-	wantImport := "--allow-import=deno.land," + moduleProxyHost
+	wantImport := "--allow-import=deno.land:443," + proxyHost
 	if !strings.Contains(flagStr, wantImport) {
 		t.Errorf("expected %s in flags, got: %s", wantImport, flagStr)
 	}
@@ -207,13 +208,13 @@ func TestDeriveDenoFlagsNoModuleProxy(t *testing.T) {
 		},
 	}
 
-	flags := DeriveDenoFlags(c)
+	flags := DeriveDenoFlags(c, "some-proxy:8080")
 	flagStr := strings.Join(flags, " ")
 
 	if strings.Contains(flagStr, "--import-map") {
 		t.Errorf("expected no --import-map flag when no jsr/npm deps, got: %s", flagStr)
 	}
-	if strings.Contains(flagStr, moduleProxyHost) {
+	if strings.Contains(flagStr, "some-proxy:8080") {
 		t.Errorf("expected no proxy host when no jsr/npm deps, got: %s", flagStr)
 	}
 	if strings.Contains(flagStr, "--allow-import") {
