@@ -16,6 +16,9 @@ import (
 
 // bootstrapHosts lists Deno/npm registries used to fetch dependencies at runtime.
 // These should be removed from the NetworkPolicy once dependencies are cached locally.
+// Note: lock only strips entries from contract.dependencies. If bootstrap hosts were
+// added via contract.networkPolicy.additionalEgress (CIDR-based), they must be removed
+// manually from workflow.yaml before redeploying.
 var bootstrapHosts = map[string]bool{
 	"jsr.io":             true,
 	"deno.land":          true,
@@ -24,6 +27,7 @@ var bootstrapHosts = map[string]bool{
 }
 
 // isBootstrapHost returns true if the host is a known Deno/npm bootstrap registry.
+// Comparison is case- and whitespace-insensitive.
 func isBootstrapHost(host string) bool {
 	return bootstrapHosts[strings.ToLower(strings.TrimSpace(host))]
 }
@@ -47,6 +51,7 @@ func NewContractStatusCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runContractStatus,
 	}
+	// --namespace is inherited from the global persistent flag on the root command.
 	cmd.Flags().String("env", "", "Target environment from config (resolves kubeconfig, namespace)")
 	return cmd
 }
@@ -59,13 +64,14 @@ func NewContractLockCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runContractLock,
 	}
+	// --namespace is inherited from the global persistent flag on the root command.
 	cmd.Flags().String("env", "", "Target environment from config (resolves kubeconfig, namespace)")
 	cmd.Flags().Bool("dry-run", false, "Show what would change without applying")
 	return cmd
 }
 
 func runContractStatus(cmd *cobra.Command, args []string) error {
-	dir, envName, namespace, _, err := contractCmdArgs(cmd, args)
+	dir, envName, namespace, err := contractStatusArgs(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -104,7 +110,7 @@ func runContractStatus(cmd *cobra.Command, args []string) error {
 }
 
 func runContractLock(cmd *cobra.Command, args []string) error {
-	dir, envName, namespace, dryRun, err := contractCmdArgs(cmd, args)
+	dir, envName, namespace, dryRun, err := contractLockArgs(cmd, args)
 	if err != nil {
 		return err
 	}
@@ -155,7 +161,8 @@ func runContractLock(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Build a clean workflow copy with bootstrap dependencies filtered out
+	// Build a clean workflow copy with bootstrap dependencies filtered out,
+	// then regenerate the NetworkPolicy from the clean contract.
 	cleanWf := filterBootstrapDeps(wf)
 	manifest := k8s.GenerateNetworkPolicy(cleanWf, namespace)
 	if manifest == nil {
@@ -173,6 +180,7 @@ func runContractLock(cmd *cobra.Command, args []string) error {
 }
 
 // loadWorkflow reads and parses workflow.yaml from the given directory.
+// All validation errors are surfaced, not just the first.
 func loadWorkflow(dir string) (*spec.Workflow, error) {
 	specPath := filepath.Join(dir, "workflow.yaml")
 	data, err := os.ReadFile(specPath)
@@ -181,13 +189,30 @@ func loadWorkflow(dir string) (*spec.Workflow, error) {
 	}
 	wf, errs := spec.Parse(data)
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("workflow spec has %d validation error(s): %s", len(errs), errs[0])
+		msgs := make([]string, len(errs))
+		copy(msgs, errs)
+		return nil, fmt.Errorf("workflow spec has %d validation error(s):\n  - %s",
+			len(errs), strings.Join(msgs, "\n  - "))
 	}
 	return wf, nil
 }
 
-// contractCmdArgs parses common arguments for contract subcommands.
-func contractCmdArgs(cmd *cobra.Command, args []string) (dir, envName, namespace string, dryRun bool, err error) {
+// contractStatusArgs parses arguments for `contract status` (no --dry-run).
+func contractStatusArgs(cmd *cobra.Command, args []string) (dir, envName, namespace string, err error) {
+	dir = "."
+	if len(args) > 0 {
+		dir, err = filepath.Abs(args[0])
+		if err != nil {
+			return "", "", "", fmt.Errorf("resolving path: %w", err)
+		}
+	}
+	envName, _ = cmd.Flags().GetString("env")
+	namespace, _ = cmd.Flags().GetString("namespace")
+	return dir, envName, namespace, nil
+}
+
+// contractLockArgs parses arguments for `contract lock` (includes --dry-run).
+func contractLockArgs(cmd *cobra.Command, args []string) (dir, envName, namespace string, dryRun bool, err error) {
 	dir = "."
 	if len(args) > 0 {
 		dir, err = filepath.Abs(args[0])
@@ -201,7 +226,8 @@ func contractCmdArgs(cmd *cobra.Command, args []string) (dir, envName, namespace
 	return dir, envName, namespace, dryRun, nil
 }
 
-// resolveContractNamespace picks namespace from env config, workflow deployment config, or defaults.
+// resolveContractNamespace picks namespace from env config, workflow deployment config,
+// global tentacular config, or falls back to "default".
 func resolveContractNamespace(wf *spec.Workflow, envName string) string {
 	if envName != "" {
 		env, err := LoadEnvironment(envName)
@@ -237,17 +263,17 @@ func contractK8sClient(envName string) (*k8s.Client, error) {
 }
 
 // contractEgressHosts returns external hosts (host:port) declared in the workflow contract.
-// DNS and cluster-internal hosts are excluded.
+// DNS (port 53) and cluster-internal (.svc.cluster.local) hosts are excluded.
 func contractEgressHosts(wf *spec.Workflow) []string {
 	rules := spec.DeriveEgressRules(wf.Contract)
 	seen := make(map[string]bool)
 	var hosts []string
 	for _, r := range rules {
 		if r.Port == 53 {
-			continue // skip DNS
+			continue
 		}
 		if strings.HasSuffix(r.Host, ".svc.cluster.local") {
-			continue // skip cluster-internal
+			continue
 		}
 		key := fmt.Sprintf("%s:%d", r.Host, r.Port)
 		if !seen[key] {
@@ -259,6 +285,7 @@ func contractEgressHosts(wf *spec.Workflow) []string {
 }
 
 // liveEgressHosts parses the tentacular.dev/intended-hosts annotation from a live NetworkPolicy.
+// The annotation value is a comma-separated list of external hostnames set by GenerateNetworkPolicy.
 func liveEgressHosts(netpol *unstructured.Unstructured) []string {
 	if netpol == nil {
 		return nil
@@ -278,22 +305,28 @@ func liveEgressHosts(netpol *unstructured.Unstructured) []string {
 	return hosts
 }
 
-// filterBootstrapDeps returns a deep copy of the workflow with bootstrap dependency hosts removed.
+// filterBootstrapDeps returns a shallow copy of the workflow with bootstrap dependency
+// hosts removed from contract.dependencies. AdditionalEgress entries (CIDR-based) are
+// not modified here — if bootstrap hosts were added via additionalEgress, remove them
+// from workflow.yaml manually before redeploying.
 func filterBootstrapDeps(wf *spec.Workflow) *spec.Workflow {
 	clean := *wf
-	cleanDeps := make(map[string]spec.Dependency)
+	cleanContract := *wf.Contract
+
+	// Filter bootstrap hosts from named dependencies
+	cleanDeps := make(map[string]spec.Dependency, len(wf.Contract.Dependencies))
 	for name, dep := range wf.Contract.Dependencies {
 		if !isBootstrapHost(dep.Host) {
 			cleanDeps[name] = dep
 		}
 	}
-	cleanContract := *wf.Contract
 	cleanContract.Dependencies = cleanDeps
 	clean.Contract = &cleanContract
 	return &clean
 }
 
 // printContractStatusText renders the contract status in human-readable format.
+// Uses UTF-8 check (✓) and warning (⚠) symbols; ensure terminal encoding supports UTF-8.
 func printContractStatusText(workflowName, namespace, netpolName string, contractHosts, liveHosts []string) error {
 	fmt.Printf("Workflow:  %s\n", workflowName)
 	fmt.Printf("Namespace: %s\n\n", namespace)
@@ -301,7 +334,7 @@ func printContractStatusText(workflowName, namespace, netpolName string, contrac
 	if len(contractHosts) > 0 {
 		fmt.Println("CONTRACT EGRESS (from workflow.yaml):")
 		for _, h := range contractHosts {
-			fmt.Printf("  ✓ %s\n", h)
+			fmt.Printf("  \u2713 %s\n", h)
 		}
 		fmt.Println()
 	}
@@ -313,17 +346,17 @@ func printContractStatusText(workflowName, namespace, netpolName string, contrac
 	} else {
 		for _, h := range liveHosts {
 			if isBootstrapHost(h) {
-				fmt.Printf("  ⚠ %s  [bootstrap — removable with: tntc contract lock]\n", h)
+				fmt.Printf("  \u26a0 %s  [bootstrap \u2014 removable with: tntc contract lock]\n", h)
 				bootstrapCount++
 			} else {
-				fmt.Printf("  ✓ %s\n", h)
+				fmt.Printf("  \u2713 %s\n", h)
 			}
 		}
 	}
 	fmt.Println()
 
 	if bootstrapCount == 0 {
-		fmt.Println("STATUS: Clean — no bootstrap egress rules present.")
+		fmt.Println("STATUS: Clean \u2014 no bootstrap egress rules present.")
 	} else {
 		fmt.Printf("STATUS: %d bootstrap egress rule(s) present. Run `tntc contract lock` to remove.\n", bootstrapCount)
 	}
