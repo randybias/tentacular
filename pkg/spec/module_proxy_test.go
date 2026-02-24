@@ -178,9 +178,13 @@ func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
 		t.Errorf("expected module proxy host %s in --allow-net, got: %s", moduleProxyHost, flagStr)
 	}
 
-	// Should include --allow-import for the proxy host (Deno 2 requires explicit import permission)
-	if !strings.Contains(flagStr, "--allow-import="+moduleProxyHost) {
-		t.Errorf("expected --allow-import=%s, got: %s", moduleProxyHost, flagStr)
+	// --allow-import must include BOTH deno.land (engine std lib, re-fetched
+	// because DENO_DIR=/tmp/deno-cache is empty at pod start) AND the proxy host.
+	// Setting --allow-import replaces Deno's built-in allowlist, so both must
+	// be listed explicitly or deno.land imports fail at engine startup.
+	wantImport := "--allow-import=deno.land," + moduleProxyHost
+	if !strings.Contains(flagStr, wantImport) {
+		t.Errorf("expected %s in flags, got: %s", wantImport, flagStr)
 	}
 
 	// Should still include the https dep host

@@ -331,10 +331,17 @@ func DeriveDenoFlags(c *Contract) []string {
 	}
 
 	// Deno 2 requires explicit --allow-import permission for any host from which
-	// modules are imported. The in-cluster module proxy is not on Deno's built-in
-	// allowlist, so workflow pods that use jsr:/npm: deps must explicitly allow it.
+	// modules are imported. When this flag is set it REPLACES Deno's built-in
+	// allowlist (which includes deno.land, esm.sh, jsr.io, etc.) rather than
+	// extending it, so we must enumerate every host the engine needs.
+	//
+	// We always need deno.land because:
+	//   - The engine's std lib imports resolve to https://deno.land/std@...
+	//   - DENO_DIR=/tmp/deno-cache is empty at pod start (image is built as uid
+	//     1000 / deno user; pod runs as uid 65534 / nobody so the image-baked
+	//     cache at ~/.cache/deno is not readable), forcing Deno to re-fetch.
 	if hasModuleProxyDeps {
-		flags = append(flags, "--allow-import="+moduleProxyHost)
+		flags = append(flags, "--allow-import=deno.land,"+moduleProxyHost)
 	}
 
 	// Note: when jsr/npm deps are present, the Deployment mounts a merged deno.json
