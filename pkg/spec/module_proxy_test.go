@@ -150,7 +150,7 @@ func TestDeriveEgressRulesSkipsJSRNPM(t *testing.T) {
 	}
 }
 
-// TestDeriveDenoFlagsModuleProxy verifies --import-map and proxy host are added for jsr/npm deps.
+// TestDeriveDenoFlagsModuleProxy verifies proxy host, --allow-import, and no --import-map for jsr/npm deps.
 func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
 	c := &Contract{
 		Version: "1",
@@ -168,7 +168,7 @@ func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
 	flagStr := strings.Join(flags, " ")
 
 	// Should NOT include --import-map flag — the merged deno.json is auto-discovered
-	// at /app/deno.json via ConfigMap mount, no flag needed.
+	// at /app/engine/deno.json via ConfigMap mount, no flag needed.
 	if strings.Contains(flagStr, "--import-map") {
 		t.Errorf("expected no --import-map flag (auto-discovered deno.json), got: %s", flagStr)
 	}
@@ -176,6 +176,11 @@ func TestDeriveDenoFlagsModuleProxy(t *testing.T) {
 	// Should include proxy host in --allow-net
 	if !strings.Contains(flagStr, moduleProxyHost) {
 		t.Errorf("expected module proxy host %s in --allow-net, got: %s", moduleProxyHost, flagStr)
+	}
+
+	// Should include --allow-import for the proxy host (Deno 2 requires explicit import permission)
+	if !strings.Contains(flagStr, "--allow-import="+moduleProxyHost) {
+		t.Errorf("expected --allow-import=%s, got: %s", moduleProxyHost, flagStr)
 	}
 
 	// Should still include the https dep host
@@ -206,5 +211,8 @@ func TestDeriveDenoFlagsNoModuleProxy(t *testing.T) {
 	}
 	if strings.Contains(flagStr, moduleProxyHost) {
 		t.Errorf("expected no proxy host when no jsr/npm deps, got: %s", flagStr)
+	}
+	if strings.Contains(flagStr, "--allow-import") {
+		t.Errorf("expected no --allow-import when no jsr/npm deps, got: %s", flagStr)
 	}
 }

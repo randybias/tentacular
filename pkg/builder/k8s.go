@@ -21,6 +21,7 @@ type Manifest struct {
 type DeployOptions struct {
 	RuntimeClassName string // If empty, omit runtimeClassName from pod spec
 	ImagePullPolicy  string // If empty, defaults to "Always"
+	ModuleProxyURL   string // If set and workflow has jsr/npm deps, generates a proxy pre-warm initContainer
 }
 
 // GenerateCodeConfigMap produces a ConfigMap containing workflow code (workflow.yaml + nodes/*.ts).
@@ -159,11 +160,11 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	importMapVolumeMount := ""
 	importMapVolume := ""
 	if spec.HasModuleProxyDeps(wf) {
-		// Mount the merged deno.json (engine + workflow deps) at /app/deno.json.
-		// This overrides the image-baked deno.json so Deno auto-discovers it
-		// without needing --import-map (which would break engine import aliases).
+		// Mount the merged deno.json (engine + workflow deps) at /app/engine/deno.json.
+		// Deno's config discovery walks up from the entrypoint (engine/main.ts) and
+		// finds /app/engine/deno.json before /app/deno.json, so we must mount here.
 		importMapVolumeMount = `            - name: import-map
-              mountPath: /app/deno.json
+              mountPath: /app/engine/deno.json
               subPath: deno.json
               readOnly: true
 `
@@ -195,6 +196,56 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		commandArgsBlock = strings.Join(lines, "\n") + "\n"
 	}
 
+	// Build proxy pre-warm initContainer when module proxy deps are present.
+	// The initContainer runs in-cluster before the engine starts, triggering esm.sh
+	// to build and cache each jsr/npm module. This prevents cold-start timeouts where
+	// the first build exceeds esm.sh's 60s context deadline at pod startup.
+	initContainerBlock := ""
+	if opts.ModuleProxyURL != "" && spec.HasModuleProxyDeps(wf) {
+		proxyBase := strings.TrimRight(opts.ModuleProxyURL, "/")
+		seenURLs := make(map[string]bool)
+		var curlURLs []string
+		for _, dep := range wf.Contract.Dependencies {
+			if dep.Protocol != "jsr" && dep.Protocol != "npm" {
+				continue
+			}
+			var url string
+			switch dep.Protocol {
+			case "jsr":
+				url = proxyBase + "/jsr/" + dep.Host
+			case "npm":
+				url = proxyBase + "/" + dep.Host
+			}
+			if dep.Version != "" {
+				url += "@" + dep.Version
+			}
+			if !seenURLs[url] {
+				curlURLs = append(curlURLs, url)
+				seenURLs[url] = true
+			}
+		}
+		sort.Strings(curlURLs)
+		if len(curlURLs) > 0 {
+			var cmds []string
+			for _, url := range curlURLs {
+				cmds = append(cmds, fmt.Sprintf("curl -sf --retry 3 --retry-delay 10 --max-time 120 %s > /dev/null || echo 'prewarm non-fatal: %s'", url, url))
+			}
+			shellScript := strings.Join(cmds, "; ")
+			initContainerBlock = fmt.Sprintf(`      initContainers:
+        - name: proxy-prewarm
+          image: curlimages/curl:latest
+          command:
+            - /bin/sh
+            - -c
+            - %s
+          resources:
+            limits:
+              memory: "32Mi"
+              cpu: "100m"
+`, shellScript)
+		}
+	}
+
 	// Deployment with security hardening
 	deployment := fmt.Sprintf(`apiVersion: apps/v1
 kind: Deployment
@@ -221,11 +272,14 @@ spec:
         runAsUser: 65534
         seccompProfile:
           type: RuntimeDefault
-      containers:
+%s      containers:
         - name: engine
           image: %s
           imagePullPolicy: %s
-%s          ports:
+%s          env:
+            - name: DENO_DIR
+              value: /tmp/deno-cache
+          ports:
             - containerPort: 8080
               protocol: TCP
           securityContext:
@@ -275,7 +329,7 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
-%s`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
+%s`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, initContainerBlock, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
