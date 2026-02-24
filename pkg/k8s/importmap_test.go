@@ -55,8 +55,13 @@ func TestGenerateImportMapWithNamespace(t *testing.T) {
 		if !strings.Contains(got.Content, "namespace: prod") {
 			t.Error("expected namespace prod in manifest")
 		}
-		if !strings.Contains(got.Content, "jsr:@db/postgres") {
-			t.Error("expected jsr specifier in import map")
+		// Both the versioned key (for code that imports with @version) and the
+		// unversioned key (fallback for bare imports) must be present.
+		if !strings.Contains(got.Content, "jsr:@db/postgres@^0.4") {
+			t.Error("expected versioned jsr specifier key (e.g. jsr:@db/postgres@^0.4) in import map")
+		}
+		if !strings.Contains(got.Content, "\"jsr:@db/postgres\"") {
+			t.Error("expected unversioned jsr specifier key (fallback) in import map")
 		}
 		if !strings.Contains(got.Content, "/jsr/@db/postgres@^0.4") {
 			t.Error("expected proxy path with version in import map")
@@ -77,8 +82,13 @@ func TestGenerateImportMapWithNamespace(t *testing.T) {
 		if got == nil {
 			t.Fatal("expected non-nil manifest")
 		}
-		if !strings.Contains(got.Content, "npm:zod") {
-			t.Error("expected npm specifier in import map")
+		// Versioned key for code using "npm:zod@^3"
+		if !strings.Contains(got.Content, "npm:zod@^3") {
+			t.Error("expected versioned npm specifier key (npm:zod@^3) in import map")
+		}
+		// Unversioned fallback key for code using "npm:zod"
+		if !strings.Contains(got.Content, "\"npm:zod\"") {
+			t.Error("expected unversioned npm specifier key (fallback) in import map")
 		}
 		if !strings.Contains(got.Content, "/zod@^3") {
 			t.Error("expected proxy path with version in import map")

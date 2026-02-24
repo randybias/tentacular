@@ -61,19 +61,31 @@ func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 			continue
 		}
 
-		var specifier, proxyPath string
 		switch dep.Protocol {
 		case "jsr":
-			specifier = "jsr:" + dep.Host
-			proxyPath = "/jsr/" + dep.Host
+			// Emit two keys when a version is specified:
+			//   "jsr:@scope/pkg@version" (exact match for versioned imports in code)
+			//   "jsr:@scope/pkg"         (fallback for bare/unversioned imports)
+			// Both point to the versioned proxy URL to keep the pinned version.
+			// Deno's import map does exact-key lookup — the unversioned key alone
+			// would never intercept "jsr:@db/postgres@0.19.5".
+			baseSpec := "jsr:" + dep.Host
+			proxyPath := "/jsr/" + dep.Host
+			if dep.Version != "" {
+				proxyPath += "@" + dep.Version
+				imports[baseSpec+"@"+dep.Version] = proxyURL + proxyPath
+			}
+			imports[baseSpec] = proxyURL + proxyPath
 		case "npm":
-			specifier = "npm:" + dep.Host
-			proxyPath = "/" + dep.Host
+			// Same dual-key strategy for npm: specifiers.
+			baseSpec := "npm:" + dep.Host
+			proxyPath := "/" + dep.Host
+			if dep.Version != "" {
+				proxyPath += "@" + dep.Version
+				imports[baseSpec+"@"+dep.Version] = proxyURL + proxyPath
+			}
+			imports[baseSpec] = proxyURL + proxyPath
 		}
-		if dep.Version != "" {
-			proxyPath += "@" + dep.Version
-		}
-		imports[specifier] = proxyURL + proxyPath
 		hasProxyDeps = true
 	}
 
@@ -163,7 +175,7 @@ func indentLines(s, prefix string) string {
 // module proxy service, deployed into tentacular-system by `tntc cluster install`.
 func GenerateModuleProxyManifests(image, namespace, storage, pvcSize string) []builder.Manifest {
 	if image == "" {
-		image = "ghcr.io/esm-dev/esm.sh:v135"
+		image = "ghcr.io/esm-dev/esm.sh:v136"
 	}
 	if namespace == "" {
 		namespace = "tentacular-system"
@@ -181,7 +193,7 @@ func GenerateModuleProxyManifests(image, namespace, storage, pvcSize string) []b
             claimName: esm-sh-cache`
 		volumeMountSpec = `          volumeMounts:
             - name: cache
-              mountPath: /esm.sh/cache`
+              mountPath: /.esmd`
 		pvcManifest = fmt.Sprintf(`---
 apiVersion: v1
 kind: PersistentVolumeClaim
@@ -199,14 +211,16 @@ spec:
       storage: %s
 `, namespace, pvcSize)
 	} else {
-		// emptyDir (default) — cache is lost on pod restart but no PVC needed
+		// emptyDir (default) — cache is lost on pod restart but no PVC needed.
+		// Mounted at /.esmd so esm.sh (v136+) can write its data directory even
+		// as runAsUser: 65534 (nobody), since emptyDir is world-writable on creation.
 		volumeSpec = `      volumes:
         - name: cache
           emptyDir:
             sizeLimit: 2Gi`
 		volumeMountSpec = `          volumeMounts:
             - name: cache
-              mountPath: /esm.sh/cache`
+              mountPath: /.esmd`
 	}
 
 	deployment := fmt.Sprintf(`apiVersion: apps/v1

@@ -178,6 +178,45 @@ func (c *Client) checkRBACPermissions(ctx context.Context, namespace string) Che
 	return CheckResult{Name: "RBAC permissions", Passed: true}
 }
 
+// CheckModuleProxy checks whether the esm.sh module proxy Deployment is installed and
+// ready in the given namespace. Returns a non-blocking CheckResult so that
+// `tntc cluster check` stays informational for clusters that don't use jsr/npm deps:
+//   - Not installed → Passed=true with a Warning hint
+//   - Installed but not ready → Passed=false with a Remediation hint
+//   - Installed and ready → Passed=true
+func (c *Client) CheckModuleProxy(namespace string) CheckResult {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	dep, err := c.clientset.AppsV1().Deployments(namespace).Get(ctx, "esm-sh", metav1.GetOptions{})
+	if err != nil {
+		// Not installed: informational warning only — no jsr/npm workflows = not needed.
+		return CheckResult{
+			Name:    "Module proxy (esm.sh)",
+			Passed:  true,
+			Warning: "not installed in " + namespace + " \u2014 run `tntc cluster install` to enable jsr/npm dep support",
+		}
+	}
+
+	replicas := int32(1)
+	if dep.Spec.Replicas != nil {
+		replicas = *dep.Spec.Replicas
+	}
+	if dep.Status.ReadyReplicas < replicas {
+		return CheckResult{
+			Name:    "Module proxy (esm.sh)",
+			Passed:  false,
+			Warning: fmt.Sprintf("not ready (%d/%d replicas ready)", dep.Status.ReadyReplicas, replicas),
+			Remediation: fmt.Sprintf(
+				"check pod logs: kubectl logs -n %s -l app.kubernetes.io/name=esm-sh",
+				namespace,
+			),
+		}
+	}
+
+	return CheckResult{Name: "Module proxy (esm.sh)", Passed: true}
+}
+
 // checkSecretReferences verifies that each named secret exists in the target namespace.
 func (c *Client) checkSecretReferences(ctx context.Context, namespace string, secretNames []string) CheckResult {
 	var missing []string
