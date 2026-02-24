@@ -1,6 +1,7 @@
 package builder
 
 import (
+	"encoding/base64"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -21,11 +22,14 @@ type Manifest struct {
 type DeployOptions struct {
 	RuntimeClassName string // If empty, omit runtimeClassName from pod spec
 	ImagePullPolicy  string // If empty, defaults to "Always"
+	HasVendor        bool   // If true, mount vendor.tar.gz from ConfigMap
 }
 
 // GenerateCodeConfigMap produces a ConfigMap containing workflow code (workflow.yaml + nodes/*.ts).
+// If vendorTarball is non-nil, it is stored in binaryData as vendor.tar.gz so the
+// engine can extract it to /tmp/vendor/ at startup (zero outbound network for imports).
 // Returns error if total data size exceeds 900KB limit.
-func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Manifest, error) {
+func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string, vendorTarball []byte) (Manifest, error) {
 	data := make(map[string]string)
 	var totalSize int
 
@@ -60,10 +64,14 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 		return Manifest{}, fmt.Errorf("reading nodes directory: %w", err)
 	}
 
-	// Check size limit (900KB = 921600 bytes)
+	// Check size limit (900KB = 921600 bytes); vendor tarball counted separately
 	const maxSize = 921600
-	if totalSize > maxSize {
-		return Manifest{}, fmt.Errorf("workflow code size (%d bytes) exceeds ConfigMap limit of %d bytes (900KB)", totalSize, maxSize)
+	vendorSize := len(vendorTarball)
+	if totalSize+vendorSize > maxSize {
+		return Manifest{}, fmt.Errorf(
+			"workflow code + vendor size (%d bytes) exceeds ConfigMap limit of %d bytes (900KB).\n"+
+				"Reduce the number of remote dependencies or pre-bundle them into the engine image.",
+			totalSize+vendorSize, maxSize)
 	}
 
 	// Build data section with sorted keys for deterministic output
@@ -80,6 +88,13 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 		dataEntries = append(dataEntries, fmt.Sprintf("  %s: |\n%s", k, indentString(v, 4)))
 	}
 
+	// binaryData section for vendor tarball (avoids ConfigMap key restrictions on @ and /)
+	binaryDataSection := ""
+	if len(vendorTarball) > 0 {
+		b64 := base64.StdEncoding.EncodeToString(vendorTarball)
+		binaryDataSection = fmt.Sprintf("\nbinaryData:\n  vendor.tar.gz: %s\n", b64)
+	}
+
 	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
     app.kubernetes.io/version: "%s"
     app.kubernetes.io/managed-by: tentacular`, wf.Name, wf.Version)
@@ -92,8 +107,7 @@ metadata:
   labels:
     %s
 data:
-%s
-`, wf.Name, namespace, labels, strings.Join(dataEntries, "\n"))
+%s%s`, wf.Name, namespace, labels, strings.Join(dataEntries, "\n"), binaryDataSection)
 
 	return Manifest{
 		Kind:    "ConfigMap",
@@ -153,6 +167,11 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		flatKey := "nodes__" + filename
 		targetPath := "nodes/" + filename
 		configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
+	}
+
+	// Include vendor.tar.gz in the volume mount when vendoring is enabled
+	if opts.HasVendor {
+		configMapItems = append(configMapItems, "              - key: vendor.tar.gz\n                path: vendor.tar.gz")
 	}
 
 	// Build command/args block for Deno permission flags (10-space indent for container-level)

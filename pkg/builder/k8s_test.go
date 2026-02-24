@@ -506,7 +506,7 @@ nodes:
 	}
 
 	wf := makeTestWorkflow("test-workflow")
-	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default", nil)
 	if err != nil {
 		t.Fatalf("GenerateCodeConfigMap failed: %v", err)
 	}
@@ -547,7 +547,7 @@ func TestConfigMapSizeValidation(t *testing.T) {
 	}
 
 	wf := makeTestWorkflow("test")
-	_, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	_, err := GenerateCodeConfigMap(wf, tmpDir, "default", nil)
 	if err == nil {
 		t.Error("expected error for oversized ConfigMap")
 	}
@@ -568,7 +568,7 @@ triggers:
 	}
 
 	wf := makeTestWorkflow("test-workflow")
-	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default", nil)
 	if err != nil {
 		t.Fatalf("GenerateCodeConfigMap failed when nodes/ missing: %v", err)
 	}
@@ -607,7 +607,7 @@ triggers:
 	}
 
 	wf := makeTestWorkflow("test")
-	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default")
+	cm, err := GenerateCodeConfigMap(wf, tmpDir, "default", nil)
 	if err != nil {
 		t.Fatalf("GenerateCodeConfigMap failed: %v", err)
 	}

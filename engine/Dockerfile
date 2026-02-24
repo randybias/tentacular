@@ -1,4 +1,4 @@
-FROM denoland/deno:distroless
+FROM denoland/deno:alpine
 
 WORKDIR /app
 
@@ -12,8 +12,12 @@ COPY engine/deno.json /app/deno.json
 COPY engine/deno.lock /app/deno.lock
 
 # Cache engine dependencies at build time (locked)
-RUN ["deno", "cache", "--lock=deno.lock", "engine/main.ts"]
+RUN deno cache --lock=deno.lock engine/main.ts
+
+# Copy startup script
+COPY engine/start.sh /app/start.sh
+RUN chmod +x /app/start.sh
 
 EXPOSE 8080
 
-ENTRYPOINT ["deno", "run", "--no-lock", "--unstable-net", "--allow-net", "--allow-read=/app,/var/run/secrets", "--allow-write=/tmp", "--allow-env", "engine/main.ts", "--workflow", "/app/workflow/workflow.yaml", "--port", "8080"]
+ENTRYPOINT ["/bin/sh", "/app/start.sh"]

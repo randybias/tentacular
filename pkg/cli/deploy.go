@@ -13,6 +13,7 @@ import (
 	"github.com/randybias/tentacular/pkg/builder"
 	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/randybias/tentacular/pkg/spec"
+	"github.com/randybias/tentacular/pkg/denovendor"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
@@ -325,8 +326,21 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 		imageTag = "tentacular-engine:latest"
 	}
 
-	// Generate ConfigMap for workflow code
-	configMap, err := builder.GenerateCodeConfigMap(wf, workflowDir, namespace)
+	// Vendor remote imports so pod startup requires zero outbound network access.
+	// Failure is non-fatal when deno is unavailable (emits a warning instead).
+	var vendorTarball []byte
+	vendorResult, vendorErr := denovendor.Run(workflowDir, w)
+	if vendorErr != nil {
+		return nil, fmt.Errorf("vendoring dependencies: %w", vendorErr)
+	}
+	if vendorResult.Skipped {
+		fmt.Fprintf(w, "  ⚠ Vendor step skipped: %s\n", vendorResult.SkipReason)
+	} else {
+		vendorTarball = vendorResult.TarballBytes
+	}
+
+	// Generate ConfigMap for workflow code (includes vendor.tar.gz when present)
+	configMap, err := builder.GenerateCodeConfigMap(wf, workflowDir, namespace, vendorTarball)
 	if err != nil {
 		return nil, fmt.Errorf("generating ConfigMap: %w", err)
 	}
@@ -345,6 +359,7 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	buildOpts := builder.DeployOptions{
 		RuntimeClassName: runtimeClass,
 		ImagePullPolicy:  imagePullPolicy,
+		HasVendor:        len(vendorTarball) > 0,
 	}
 	manifests := builder.GenerateK8sManifests(wf, imageTag, namespace, buildOpts)
 
