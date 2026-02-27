@@ -813,7 +813,7 @@ func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
 
 	t.Run("initContainer present when ModuleProxyURL set and jsr deps exist", func(t *testing.T) {
 		opts := DeployOptions{
-			ModuleProxyURL: "http://esm-sh.tentacular-system.svc.cluster.local:8080",
+			ModuleProxyURL: "http://esm-sh.tentacular-support.svc.cluster.local:8080",
 		}
 		manifests := GenerateK8sManifests(wf, "test:latest", "default", opts)
 		dep := manifests[0].Content
@@ -841,7 +841,7 @@ func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
 		// '> /dev/null' and '||' are not parsed as YAML fold/literal scalars,
 		// and echo text with ': ' doesn't create a spurious map key:value.
 		opts := DeployOptions{
-			ModuleProxyURL: "http://esm-sh.tentacular-system.svc.cluster.local:8080",
+			ModuleProxyURL: "http://esm-sh.tentacular-support.svc.cluster.local:8080",
 		}
 		manifests := GenerateK8sManifests(wf, "test:latest", "default", opts)
 		dep := manifests[0].Content
@@ -865,7 +865,7 @@ func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
 				},
 			},
 		}
-		opts := DeployOptions{ModuleProxyURL: "http://esm-sh.tentacular-system.svc.cluster.local:8080"}
+		opts := DeployOptions{ModuleProxyURL: "http://esm-sh.tentacular-support.svc.cluster.local:8080"}
 		manifests := GenerateK8sManifests(httpOnly, "test:latest", "default", opts)
 		dep := manifests[0].Content
 		if strings.Contains(dep, "initContainers:") {
