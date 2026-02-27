@@ -23,7 +23,7 @@ Deploy a single in-cluster **esm.sh** instance as a cluster-level service during
 workflow pod
   └─ Deno import("jsr:@db/postgres")
        └─► import_map.json (ConfigMap-mounted)
-             └─► http://esm-sh.tentacular-system.svc.cluster.local
+             └─► http://esm-sh.tentacular-support.svc.cluster.local
                    └─► jsr.io / registry.npmjs.org  (first fetch only)
                          └─► cached in emptyDir / PVC
 ```
@@ -34,11 +34,11 @@ workflow pod
 
 ### 1. esm.sh Deployment (`tntc cluster install`)
 
-A cluster-level Deployment in the `tentacular-system` namespace:
+A cluster-level Deployment in the `tentacular-support` namespace:
 
 ```
 Deployment: esm-sh
-Namespace:  tentacular-system
+Namespace:  tentacular-support
 Image:      ghcr.io/esm-dev/esm.sh:latest (pinned version)
 Port:       8080
 Storage:    emptyDir (default) or PVC (opt-in via config)
@@ -59,8 +59,8 @@ the internal esm.sh URL, then stores it as a ConfigMap:
 ```json
 {
   "imports": {
-    "jsr:@db/postgres": "http://esm-sh.tentacular-system.svc.cluster.local/jsr/@db/postgres@^0.4",
-    "npm:zod": "http://esm-sh.tentacular-system.svc.cluster.local/zod@^3"
+    "jsr:@db/postgres": "http://esm-sh.tentacular-support.svc.cluster.local/jsr/@db/postgres@^0.4",
+    "npm:zod": "http://esm-sh.tentacular-support.svc.cluster.local/zod@^3"
   }
 }
 ```
@@ -91,7 +91,7 @@ Workflow pods with a contract get this egress rule added automatically:
 - to:
   - namespaceSelector:
       matchLabels:
-        kubernetes.io/metadata.name: tentacular-system
+        kubernetes.io/metadata.name: tentacular-support
     podSelector:
       matchLabels:
         app.kubernetes.io/name: esm-sh
@@ -130,7 +130,7 @@ moduleProxy:
 
 Once the module proxy is installed and a workflow is deployed with `jsr`/`npm` deps, the
 generated NetworkPolicy for that workflow pod contains **no egress to `jsr.io` or
-`registry.npmjs.org`**. The only dep-related egress is to `esm-sh.tentacular-system:8080`.
+`registry.npmjs.org`**. The only dep-related egress is to `esm-sh.tentacular-support:8080`.
 
 External package fetches are isolated to the module proxy pod, which has its own
 NetworkPolicy allowing outbound 443 to the public internet.

@@ -12,7 +12,7 @@ import (
 // GenerateNetworkPolicy creates a K8s NetworkPolicy manifest from workflow contract.
 // Returns nil if workflow has no contract (contract-less workflows skip NetworkPolicy).
 // When the workflow has jsr/npm dependencies, an egress rule to the in-cluster module
-// proxy (esm.sh in tentacular-system) is automatically added.
+// proxy (esm.sh in tentacular-support) is automatically added.
 func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace string) *builder.Manifest {
 	if wf.Contract == nil {
 		return nil

@@ -44,7 +44,7 @@ func TestGenerateImportMapWithNamespace(t *testing.T) {
 				},
 			},
 		}
-		got := GenerateImportMapWithNamespace(wf, "prod", "http://esm-sh.tentacular-system.svc.cluster.local:8080")
+		got := GenerateImportMapWithNamespace(wf, "prod", "http://esm-sh.tentacular-support.svc.cluster.local:8080")
 		if got == nil {
 			t.Fatal("expected non-nil manifest")
 		}
@@ -246,7 +246,7 @@ func TestHasModuleProxyDeps(t *testing.T) {
 
 func TestGenerateModuleProxyManifests(t *testing.T) {
 	t.Run("emptydir produces 3 manifests", func(t *testing.T) {
-		manifests := GenerateModuleProxyManifests("", "tentacular-system", "emptydir", "")
+		manifests := GenerateModuleProxyManifests("", "tentacular-support", "emptydir", "")
 		if len(manifests) != 3 {
 			t.Errorf("got %d manifests, want 3 (Deployment+Service+NetworkPolicy)", len(manifests))
 		}
@@ -262,7 +262,7 @@ func TestGenerateModuleProxyManifests(t *testing.T) {
 	})
 
 	t.Run("pvc produces 4 manifests", func(t *testing.T) {
-		manifests := GenerateModuleProxyManifests("", "tentacular-system", "pvc", "10Gi")
+		manifests := GenerateModuleProxyManifests("", "tentacular-support", "pvc", "10Gi")
 		if len(manifests) != 4 {
 			t.Errorf("got %d manifests, want 4 (Deployment+Service+NetworkPolicy+PVC)", len(manifests))
 		}
@@ -281,7 +281,7 @@ func TestGenerateModuleProxyManifests(t *testing.T) {
 	})
 
 	t.Run("NetworkPolicy allows egress to jsr.io and npm on 443", func(t *testing.T) {
-		manifests := GenerateModuleProxyManifests("", "tentacular-system", "", "")
+		manifests := GenerateModuleProxyManifests("", "tentacular-support", "", "")
 		for _, m := range manifests {
 			if m.Kind == "NetworkPolicy" {
 				if !strings.Contains(m.Content, "port: 443") {
@@ -294,7 +294,7 @@ func TestGenerateModuleProxyManifests(t *testing.T) {
 	})
 
 	t.Run("uses default image when empty", func(t *testing.T) {
-		manifests := GenerateModuleProxyManifests("", "tentacular-system", "", "")
+		manifests := GenerateModuleProxyManifests("", "tentacular-support", "", "")
 		for _, m := range manifests {
 			if m.Kind == "Deployment" {
 				if !strings.Contains(m.Content, "esm-dev/esm.sh") {
@@ -307,7 +307,7 @@ func TestGenerateModuleProxyManifests(t *testing.T) {
 	})
 
 	t.Run("Deployment uses /esmd mount (no leading dot) and no runAsNonRoot", func(t *testing.T) {
-		manifests := GenerateModuleProxyManifests("", "tentacular-system", "", "")
+		manifests := GenerateModuleProxyManifests("", "tentacular-support", "", "")
 		for _, m := range manifests {
 			if m.Kind == "Deployment" {
 				if !strings.Contains(m.Content, "mountPath: /esmd") {

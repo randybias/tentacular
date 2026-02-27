@@ -10,7 +10,7 @@ import (
 // ModuleProxyConfig configures the in-cluster esm.sh module proxy for jsr/npm deps.
 type ModuleProxyConfig struct {
 	Enabled   bool   `yaml:"enabled,omitempty"`
-	Namespace string `yaml:"namespace,omitempty"` // default: tentacular-system
+	Namespace string `yaml:"namespace,omitempty"` // default: tentacular-support
 	Image     string `yaml:"image,omitempty"`     // default: ghcr.io/esm-dev/esm.sh:v135
 	Storage   string `yaml:"storage,omitempty"`   // "emptydir" (default) or "pvc"
 	PVCSize   string `yaml:"pvcSize,omitempty"`   // default: 5Gi (only when storage: pvc)

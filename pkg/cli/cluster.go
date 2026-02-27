@@ -39,7 +39,8 @@ After install, the MCP endpoint and token are saved to ~/.tentacular/config.yaml
 so subsequent tntc commands automatically find and use the MCP server.`,
 		RunE: runClusterInstall,
 	}
-	install.Flags().String("namespace", "tentacular-system", "Namespace to install into")
+	install.Flags().String("namespace", "tentacular-system", "Namespace to install MCP server into")
+	install.Flags().String("proxy-namespace", k8s.DefaultProxyNamespace, "Namespace to install module proxy into")
 	install.Flags().String("image", "", "MCP server image (default: "+k8s.DefaultMCPImage+")")
 	install.Flags().Bool("module-proxy", true, "Install esm.sh module proxy for jsr/npm dep resolution")
 	install.Flags().String("proxy-storage", "", "Module proxy cache storage: emptydir (default) or pvc")
@@ -114,6 +115,10 @@ func runClusterInstall(cmd *cobra.Command, args []string) error {
 	if namespace == "" {
 		namespace = k8s.DefaultMCPNamespace
 	}
+	proxyNamespace, _ := cmd.Flags().GetString("proxy-namespace")
+	if proxyNamespace == "" {
+		proxyNamespace = k8s.DefaultProxyNamespace
+	}
 	mcpImage, _ := cmd.Flags().GetString("image")
 	installProxy, _ := cmd.Flags().GetBool("module-proxy")
 	proxyStorage, _ := cmd.Flags().GetString("proxy-storage")
@@ -166,17 +171,22 @@ func runClusterInstall(cmd *cobra.Command, args []string) error {
 
 	// Step 5: Optionally install module proxy
 	if installProxy {
-		fmt.Printf("Installing module proxy (esm.sh) in namespace %s...\n", namespace)
+		fmt.Printf("Installing module proxy (esm.sh) in namespace %s...\n", proxyNamespace)
+		fmt.Printf("Ensuring namespace %s...\n", proxyNamespace)
+		if err := client.EnsureNamespace(proxyNamespace); err != nil {
+			return fmt.Errorf("ensuring namespace %s: %w", proxyNamespace, err)
+		}
+		fmt.Printf("  \u2713 Namespace %s ready\n", proxyNamespace)
 		if proxyStorage == "pvc" {
 			fmt.Printf("  Storage: PVC (%s)\n", pvcSize)
 		} else {
 			fmt.Println("  Storage: emptyDir (cache lost on pod restart -- use --proxy-storage=pvc for production)")
 		}
-		proxyManifests := k8s.GenerateModuleProxyManifests(proxyImage, namespace, proxyStorage, pvcSize)
-		if err := client.Apply(namespace, proxyManifests); err != nil {
+		proxyManifests := k8s.GenerateModuleProxyManifests(proxyImage, proxyNamespace, proxyStorage, pvcSize)
+		if err := client.Apply(proxyNamespace, proxyManifests); err != nil {
 			return fmt.Errorf("applying module proxy manifests: %w", err)
 		}
-		fmt.Printf("  \u2713 Module proxy installed: http://esm-sh.%s.svc.cluster.local:8080\n", namespace)
+		fmt.Printf("  \u2713 Module proxy installed: http://esm-sh.%s.svc.cluster.local:8080\n", proxyNamespace)
 	}
 
 	// Step 6: Wait for MCP server to be ready
