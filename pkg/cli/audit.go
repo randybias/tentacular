@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
 )
@@ -81,12 +80,6 @@ Reports discrepancies and validates that deployed state matches contract intent.
 			expectedEgress := spec.DeriveEgressRules(wf.Contract)
 			expectedIngress := spec.DeriveIngressRules(wf)
 
-			// Phase 2: Fetch - get actual deployed resources
-			client, err := k8s.NewClient()
-			if err != nil {
-				return fmt.Errorf("creating k8s client: %w", err)
-			}
-
 			// Use deployment namespace from workflow config or flag
 			if namespace == "" {
 				namespace = wf.Deployment.Namespace
@@ -95,100 +88,57 @@ Reports discrepancies and validates that deployed state matches contract intent.
 				return fmt.Errorf("namespace required (use --namespace or set deployment.namespace in workflow)")
 			}
 
-			workflowName := wf.Name
+			// Count expected cron triggers
+			expectedCronCount := 0
+			for _, trigger := range wf.Triggers {
+				if trigger.Type == "cron" {
+					expectedCronCount++
+				}
+			}
+
+			// Phase 2: Fetch via MCP
+			mcpClient, err := requireMCPClient(cmd)
+			if err != nil {
+				return err
+			}
+
+			expected := map[string]interface{}{
+				"secrets":           expectedSecrets,
+				"egressRuleCount":   len(expectedEgress),
+				"ingressRuleCount":  len(expectedIngress),
+				"cronJobCount":      expectedCronCount,
+			}
+
+			mcpResult, err := mcpClient.AuditResources(cmd.Context(), namespace, wf.Name, expected)
+			if err != nil {
+				if hint := mcpErrorHint(err); hint != "" {
+					return fmt.Errorf("audit failed: %w\n  hint: %s", err, hint)
+				}
+				return fmt.Errorf("audit failed: %w", err)
+			}
+
+			// Map MCP result back to AuditResult for output compatibility
 			result := AuditResult{
-				Overall: "pass",
-			}
-
-			// Fetch NetworkPolicy
-			netpolName := workflowName + "-netpol"
-			netpol, err := client.GetNetworkPolicy(namespace, netpolName)
-			if err != nil {
-				result.NetworkPolicy.Status = "missing"
-				result.NetworkPolicy.Details = append(result.NetworkPolicy.Details, fmt.Sprintf("NetworkPolicy not found: %v", err))
-				result.Overall = "fail"
-			} else {
-				// Compare NetworkPolicy (detailed comparison TBD)
-				result.NetworkPolicy.Expected = map[string]interface{}{
-					"egressRuleCount":  len(expectedEgress),
-					"ingressRuleCount": len(expectedIngress),
-				}
-				result.NetworkPolicy.Actual = netpol.Object
-				result.NetworkPolicy.Status = "found"
-				// Detailed comparison logic to be added
-			}
-
-			// Fetch Secret
-			secretName := workflowName + "-secrets"
-			if len(expectedSecrets) == 0 {
-				// No secrets expected — no K8s Secret needed
-				result.Secrets.Status = "match"
-				result.Secrets.ExpectedKeys = nil
-				result.Secrets.ActualKeys = nil
-			} else {
-				// Convert expected dotted keys to service names for comparison
-				expectedServiceNames := make([]string, 0, len(expectedSecrets))
-				seen := make(map[string]bool)
-				for _, key := range expectedSecrets {
-					svcName := spec.GetSecretServiceName(key)
-					if svcName != "" && !seen[svcName] {
-						expectedServiceNames = append(expectedServiceNames, svcName)
-						seen[svcName] = true
-					}
-				}
-
-				secret, err := client.GetSecret(namespace, secretName)
-				if err != nil {
-					result.Secrets.Status = "missing"
-					result.Secrets.ExpectedKeys = expectedSecrets
-					result.Overall = "fail"
-				} else {
-					result.Secrets.ExpectedKeys = expectedSecrets
-					var actualKeys []string
-					for key := range secret.Data {
-						actualKeys = append(actualKeys, key)
-					}
-					result.Secrets.ActualKeys = actualKeys
-
-					// Compare at service-name level
-					missing, extra := compareSecretKeys(expectedServiceNames, actualKeys)
-					result.Secrets.Missing = missing
-					result.Secrets.Extra = extra
-
-					if len(missing) > 0 || len(extra) > 0 {
-						result.Secrets.Status = "mismatch"
-						result.Overall = "fail"
-					} else {
-						result.Secrets.Status = "match"
-					}
-				}
-			}
-
-			// Fetch CronJobs
-			cronJobs, err := client.GetCronJobs(namespace, "app.kubernetes.io/name="+workflowName+",app.kubernetes.io/managed-by=tentacular")
-			if err != nil {
-				result.CronJobs.Details = append(result.CronJobs.Details, fmt.Sprintf("Error fetching CronJobs: %v", err))
-				result.Overall = "fail"
-			} else {
-				// Count expected cron triggers
-				expectedCronCount := 0
-				for _, trigger := range wf.Triggers {
-					if trigger.Type == "cron" {
-						expectedCronCount++
-					}
-				}
-
-				result.CronJobs.ExpectedCount = expectedCronCount
-				result.CronJobs.ActualCount = len(cronJobs)
-
-				if expectedCronCount != len(cronJobs) {
-					result.CronJobs.Status = "mismatch"
-					result.CronJobs.Details = append(result.CronJobs.Details,
-						fmt.Sprintf("Expected %d CronJobs, found %d", expectedCronCount, len(cronJobs)))
-					result.Overall = "fail"
-				} else {
-					result.CronJobs.Status = "match"
-				}
+				Overall: mcpResult.Overall,
+				NetworkPolicy: NetworkPolicyAudit{
+					Status:  mcpResult.NetworkPolicy.Status,
+					Details: mcpResult.NetworkPolicy.Details,
+					Expected: map[string]interface{}{
+						"egressRuleCount":  len(expectedEgress),
+						"ingressRuleCount": len(expectedIngress),
+					},
+				},
+				Secrets: SecretsAudit{
+					Status:       mcpResult.Secrets.Status,
+					ExpectedKeys: expectedSecrets,
+					Missing:      mcpResult.Secrets.Missing,
+					Extra:        mcpResult.Secrets.Extra,
+				},
+				CronJobs: CronJobsAudit{
+					Status:        mcpResult.CronJobs.Status,
+					ExpectedCount: expectedCronCount,
+					Details:       mcpResult.CronJobs.Details,
+				},
 			}
 
 			// Phase 3: Output results
@@ -199,12 +149,10 @@ Reports discrepancies and validates that deployed state matches contract intent.
 			}
 
 			// Text output
-			fmt.Fprintf(cmd.OutOrStdout(), "Audit Report: %s (namespace: %s)\n", workflowName, namespace)
+			fmt.Fprintf(cmd.OutOrStdout(), "Audit Report: %s (namespace: %s)\n", wf.Name, namespace)
 			fmt.Fprintf(cmd.OutOrStdout(), "\nNetworkPolicy: %s\n", result.NetworkPolicy.Status)
-			if len(result.NetworkPolicy.Details) > 0 {
-				for _, detail := range result.NetworkPolicy.Details {
-					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", detail)
-				}
+			for _, detail := range result.NetworkPolicy.Details {
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", detail)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "\nSecrets: %s\n", result.Secrets.Status)
@@ -218,10 +166,8 @@ Reports discrepancies and validates that deployed state matches contract intent.
 
 			fmt.Fprintf(cmd.OutOrStdout(), "\nCronJobs: %s\n", result.CronJobs.Status)
 			fmt.Fprintf(cmd.OutOrStdout(), "  Expected: %d, Actual: %d\n", result.CronJobs.ExpectedCount, result.CronJobs.ActualCount)
-			if len(result.CronJobs.Details) > 0 {
-				for _, detail := range result.CronJobs.Details {
-					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", detail)
-				}
+			for _, detail := range result.CronJobs.Details {
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", detail)
 			}
 
 			fmt.Fprintf(cmd.OutOrStdout(), "\nOverall: %s\n", result.Overall)
@@ -238,33 +184,4 @@ Reports discrepancies and validates that deployed state matches contract intent.
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text or json)")
 
 	return cmd
-}
-
-// compareSecretKeys returns missing and extra keys.
-func compareSecretKeys(expected, actual []string) (missing, extra []string) {
-	expectedSet := make(map[string]bool)
-	for _, key := range expected {
-		expectedSet[key] = true
-	}
-
-	actualSet := make(map[string]bool)
-	for _, key := range actual {
-		actualSet[key] = true
-	}
-
-	// Find missing keys (in expected but not in actual)
-	for _, key := range expected {
-		if !actualSet[key] {
-			missing = append(missing, key)
-		}
-	}
-
-	// Find extra keys (in actual but not in expected)
-	for _, key := range actual {
-		if !expectedSet[key] {
-			extra = append(extra, key)
-		}
-	}
-
-	return missing, extra
 }

@@ -12,10 +12,12 @@ import (
 
 	"github.com/randybias/tentacular/pkg/builder"
 	"github.com/randybias/tentacular/pkg/k8s"
+	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
 )
+
 
 func NewDeployCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -41,8 +43,8 @@ type InternalDeployOptions struct {
 	Image           string
 	RuntimeClass    string
 	ImagePullPolicy string
-	Kubeconfig      string    // explicit kubeconfig file path
-	Context         string    // kubeconfig context override
+	Kubeconfig      string    // explicit kubeconfig file path (bootstrap-only)
+	Context         string    // kubeconfig context override (bootstrap-only)
 	StatusOut       io.Writer // writer for progress messages (nil defaults to os.Stdout)
 }
 
@@ -50,7 +52,7 @@ type InternalDeployOptions struct {
 type DeployResult struct {
 	WorkflowName string
 	Namespace    string
-	Client       *k8s.Client
+	MCPClient    *mcp.Client
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -90,15 +92,11 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Resolve --env: environment config provides context, namespace, runtime-class defaults.
 	// CLI flags still override environment values.
-	var envContext string
-	var envKubeconfig string
 	if envName != "" {
 		env, envErr := cfg.LoadEnvironment(envName)
 		if envErr != nil {
 			return fmt.Errorf("loading environment %q: %w", envName, envErr)
 		}
-		envContext = env.Context
-		envKubeconfig = env.Kubeconfig
 		if !cmd.Flags().Changed("namespace") && env.Namespace != "" {
 			namespace = env.Namespace
 		}
@@ -129,13 +127,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		contractErrs := spec.ValidateContract(wf.Contract)
 		if len(contractErrs) > 0 {
 			if warnMode {
-				fmt.Fprintf(os.Stderr, "⚠️  WARNING: Contract validation failed with %d error(s):\n", len(contractErrs))
+				fmt.Fprintf(os.Stderr, "WARNING: Contract validation failed with %d error(s):\n", len(contractErrs))
 				for _, e := range contractErrs {
 					fmt.Fprintf(os.Stderr, "  - %s\n", e)
 				}
 				fmt.Fprintf(os.Stderr, "Proceeding with deploy in audit mode (use strict mode in production)\n\n")
 			} else {
-				fmt.Fprintf(os.Stderr, "❌ Contract validation failed with %d error(s):\n", len(contractErrs))
+				fmt.Fprintf(os.Stderr, "Contract validation failed with %d error(s):\n", len(contractErrs))
 				for _, e := range contractErrs {
 					fmt.Fprintf(os.Stderr, "  - %s\n", e)
 				}
@@ -171,6 +169,12 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Determine status output writer (stderr when -o json)
 	w := StatusWriter(cmd)
 
+	// Resolve MCP client once; it's used for apply, pre-deploy test, and verify.
+	mcpClient, err := requireMCPClient(cmd)
+	if err != nil {
+		return emitDeployResult(cmd, "fail", err.Error(), nil, startedAt)
+	}
+
 	// Pre-deploy live test gate: if dev environment is configured and --force is not set,
 	// run a live test first to catch issues before deploying.
 	if !force {
@@ -181,35 +185,23 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 				Namespace:    devEnv.Namespace,
 				Image:        imageTag,
 				RuntimeClass: devEnv.RuntimeClass,
-				Kubeconfig:   devEnv.Kubeconfig,
-				Context:      devEnv.Context,
 				StatusOut:    w,
 			}
-			liveResult, liveErr := deployWorkflow(absDir, liveOpts)
+			liveResult, liveErr := deployWorkflow(absDir, liveOpts, mcpClient)
 			if liveErr != nil {
 				return fmt.Errorf("pre-deploy live test failed (use --force to skip): %w", liveErr)
 			}
 
-			// Wait for ready and run once
-			liveCtx, liveCancel := context.WithTimeout(context.Background(), 120*time.Second)
-			defer liveCancel()
-
-			if waitErr := liveResult.Client.WaitForReady(liveCtx, liveResult.Namespace, liveResult.WorkflowName); waitErr != nil {
-				// Clean up before failing
-				liveResult.Client.DeleteResources(liveResult.Namespace, liveResult.WorkflowName)
-				return fmt.Errorf("pre-deploy live test: deployment not ready (use --force to skip): %w", waitErr)
-			}
-
-			runOutput, runErr := liveResult.Client.RunWorkflow(liveCtx, liveResult.Namespace, liveResult.WorkflowName)
-			// Clean up the dev deployment
-			liveResult.Client.DeleteResources(liveResult.Namespace, liveResult.WorkflowName)
+			runResult, runErr := liveResult.MCPClient.WfRun(cmd.Context(), liveResult.Namespace, liveResult.WorkflowName, nil, 120)
+			// Clean up the dev deployment regardless of run outcome
+			liveResult.MCPClient.WfRemove(cmd.Context(), liveResult.Namespace, liveResult.WorkflowName)
 
 			if runErr != nil {
 				return fmt.Errorf("pre-deploy live test: workflow run failed (use --force to skip): %w", runErr)
 			}
 
 			var execResult map[string]interface{}
-			if json.Unmarshal([]byte(runOutput), &execResult) == nil {
+			if json.Unmarshal(runResult.Output, &execResult) == nil {
 				if success, ok := execResult["success"].(bool); ok && !success {
 					return fmt.Errorf("pre-deploy live test: workflow returned success=false (use --force to skip)")
 				}
@@ -223,12 +215,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		Namespace:    namespace,
 		Image:        imageTag,
 		RuntimeClass: runtimeClass,
-		Kubeconfig:   envKubeconfig,
-		Context:      envContext,
 		StatusOut:    w,
 	}
 
-	deployResult, err := deployWorkflow(absDir, deployOpts)
+	deployResult, err := deployWorkflow(absDir, deployOpts, mcpClient)
 	if err != nil {
 		return emitDeployResult(cmd, "fail", "deploy failed: "+err.Error(), nil, startedAt)
 	}
@@ -236,20 +226,13 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Post-deploy verification
 	if verify {
 		fmt.Fprintln(w, "Verifying deployment...")
-		verifyCtx, verifyCancel := context.WithTimeout(context.Background(), 120*time.Second)
-		defer verifyCancel()
-
-		if waitErr := deployResult.Client.WaitForReady(verifyCtx, deployResult.Namespace, deployResult.WorkflowName); waitErr != nil {
-			return emitDeployResult(cmd, "fail", "verification: deployment not ready: "+waitErr.Error(), nil, startedAt)
-		}
-
-		runOutput, runErr := deployResult.Client.RunWorkflow(verifyCtx, deployResult.Namespace, deployResult.WorkflowName)
+		runResult, runErr := deployResult.MCPClient.WfRun(cmd.Context(), deployResult.Namespace, deployResult.WorkflowName, nil, 120)
 		if runErr != nil {
 			return emitDeployResult(cmd, "fail", "verification: workflow run failed: "+runErr.Error(), nil, startedAt)
 		}
 
 		var execResult map[string]interface{}
-		if json.Unmarshal([]byte(runOutput), &execResult) == nil {
+		if json.Unmarshal(runResult.Output, &execResult) == nil {
 			if success, ok := execResult["success"].(bool); ok && !success {
 				return emitDeployResult(cmd, "fail", "verification: workflow returned success=false", execResult, startedAt)
 			}
@@ -290,30 +273,12 @@ func emitDeployResult(cmd *cobra.Command, status, summary string, execution inte
 	return nil
 }
 
-// deployWorkflow is the internal deployment function used by both `tntc deploy` and `tntc test --live`.
-func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResult, error) {
+// buildManifests generates all K8s manifests locally from the workflow spec.
+// This is the local/pure-Go phase of deployment — no K8s or MCP calls.
+func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOptions) ([]builder.Manifest, error) {
 	w := opts.StatusOut
 	if w == nil {
 		w = os.Stdout
-	}
-
-	specPath := filepath.Join(workflowDir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
-	if err != nil {
-		return nil, fmt.Errorf("reading workflow spec: %w", err)
-	}
-
-	wf, errs := spec.Parse(data)
-	if len(errs) > 0 {
-		return nil, fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
-	}
-
-	// Contract preflight gate: validate contract before deploy (strict mode for internal calls)
-	if wf.Contract != nil {
-		contractErrs := spec.ValidateContract(wf.Contract)
-		if len(contractErrs) > 0 {
-			return nil, fmt.Errorf("deploy aborted: contract validation failed with %d error(s)", len(contractErrs))
-		}
 	}
 
 	namespace := opts.Namespace
@@ -326,9 +291,6 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	}
 
 	// Scan TypeScript node files for jsr:/npm: imports and auto-wire the module proxy.
-	// This catches jsr/npm usage in code even when not yet declared in the contract.
-	// Scanned deps are merged into the contract so that DeriveDenoFlags,
-	// GenerateNetworkPolicy, and GenerateImportMap all pick them up automatically.
 	nodesDir := filepath.Join(workflowDir, "nodes")
 	if scanned, scanErr := k8s.ScanNodeImports(nodesDir); scanErr == nil && len(scanned) > 0 {
 		if wf.Contract == nil {
@@ -338,7 +300,6 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 			wf.Contract.Dependencies = make(map[string]spec.Dependency)
 		}
 		for _, sd := range scanned {
-			// Check if already in contract by protocol+host
 			alreadyDeclared := false
 			for _, d := range wf.Contract.Dependencies {
 				if d.Protocol == sd.Protocol && d.Host == sd.Host {
@@ -347,7 +308,6 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 				}
 			}
 			if !alreadyDeclared {
-				// Synthetic key: won't collide with user-defined keys
 				key := fmt.Sprintf("__scanned__%s__%s", sd.Protocol, strings.ReplaceAll(sd.Host, "/", "_"))
 				wf.Contract.Dependencies[key] = sd
 				versionHint := ""
@@ -376,8 +336,7 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 		}
 	}
 
-	// Resolve module proxy URL before manifest generation so the Deployment's
-	// pre-warm initContainer and --allow-import flags are wired correctly.
+	// Resolve module proxy URL
 	cfg := LoadConfig()
 	proxyURL := k8s.DefaultModuleProxyURL
 	if cfg.ModuleProxy.Namespace != "" {
@@ -388,11 +347,9 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 	buildOpts := builder.DeployOptions{
 		RuntimeClassName: runtimeClass,
 		ImagePullPolicy:  imagePullPolicy,
-		ModuleProxyURL:   proxyURL, // triggers pre-warm initContainer when jsr/npm deps present
+		ModuleProxyURL:   proxyURL,
 	}
 	manifests := builder.GenerateK8sManifests(wf, imageTag, namespace, buildOpts)
-
-	// Prepend ConfigMap to manifest list
 	manifests = append([]builder.Manifest{configMap}, manifests...)
 
 	// Add NetworkPolicy if contract present
@@ -409,104 +366,91 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions) (*DeployResu
 		}
 	}
 
-	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, namespace)
-
-	// Create K8s client (with optional kubeconfig file and/or context override)
-	var client *k8s.Client
-	if opts.Kubeconfig != "" {
-		client, err = k8s.NewClientFromConfig(opts.Kubeconfig, opts.Context)
-	} else if opts.Context != "" {
-		client, err = k8s.NewClientWithContext(opts.Context)
-	} else {
-		client, err = k8s.NewClient()
-	}
-	if err != nil {
-		return nil, fmt.Errorf("creating k8s client: %w", err)
-	}
-
-	// Build secret manifest first to validate local secrets before preflight
+	// Build secret manifest from local secrets
 	secretManifest, err := buildSecretManifest(workflowDir, wf.Name, namespace)
 	if err != nil {
 		return nil, fmt.Errorf("building secret manifest: %w", err)
 	}
-	hasLocalSecrets := secretManifest != nil
-
-	// Auto-preflight checks
-	var secretNames []string
-	if hasLocalSecrets {
-		fmt.Fprintf(w, "  Found local secrets -- will provision %s-secrets\n", wf.Name)
-	} else {
-		secretNames = []string{wf.Name + "-secrets"}
-	}
-	results, err := client.PreflightCheck(namespace, false, secretNames)
-	if err != nil {
-		return nil, fmt.Errorf("preflight check failed: %w", err)
-	}
-	if failed := evaluatePreflightResults(w, results, hasLocalSecrets); failed {
-		return nil, fmt.Errorf("preflight checks failed -- fix the issues above and retry")
-	}
-	fmt.Fprintln(w, "  Preflight checks passed")
-
 	if secretManifest != nil {
+		fmt.Fprintf(w, "  Found local secrets -- will provision %s-secrets\n", wf.Name)
 		manifests = append(manifests, *secretManifest)
 	}
 
-	if err := client.ApplyWithStatus(w, namespace, manifests); err != nil {
-		return nil, fmt.Errorf("applying manifests: %w", err)
+	return manifests, nil
+}
+
+// deployWorkflow builds manifests locally and applies them via MCP.
+// Used by both `tntc deploy` and `tntc test --live`.
+func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *mcp.Client) (*DeployResult, error) {
+	w := opts.StatusOut
+	if w == nil {
+		w = os.Stdout
 	}
 
-	// Only rollout restart on updates (skip for fresh deployments to avoid
-	// double-pod creation and the associated readiness race condition).
-	if client.LastApplyHadUpdates() {
-		if err := client.RolloutRestart(namespace, wf.Name); err != nil {
-			return nil, fmt.Errorf("triggering rollout restart: %w", err)
+	specPath := filepath.Join(workflowDir, "workflow.yaml")
+	data, err := os.ReadFile(specPath)
+	if err != nil {
+		return nil, fmt.Errorf("reading workflow spec: %w", err)
+	}
+
+	wf, errs := spec.Parse(data)
+	if len(errs) > 0 {
+		return nil, fmt.Errorf("workflow spec has %d validation error(s)", len(errs))
+	}
+
+	// Contract preflight gate (strict mode for internal calls)
+	if wf.Contract != nil {
+		contractErrs := spec.ValidateContract(wf.Contract)
+		if len(contractErrs) > 0 {
+			return nil, fmt.Errorf("deploy aborted: contract validation failed with %d error(s)", len(contractErrs))
 		}
+	}
+
+	// Phase 1: Build manifests locally
+	manifests, err := buildManifests(workflowDir, wf, opts)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, opts.Namespace)
+
+	// Phase 2: Convert manifests to map[string]interface{} for MCP transport
+	mcpManifests := make([]map[string]interface{}, 0, len(manifests))
+	for _, m := range manifests {
+		var obj map[string]interface{}
+		if err := yaml.Unmarshal([]byte(m.Content), &obj); err != nil {
+			return nil, fmt.Errorf("serializing manifest %s/%s: %w", m.Kind, m.Name, err)
+		}
+		mcpManifests = append(mcpManifests, obj)
+	}
+
+	// Phase 3: Apply via MCP
+	applyResult, err := mcpClient.WfApply(context.Background(), opts.Namespace, wf.Name, mcpManifests)
+	if err != nil {
+		if hint := mcpErrorHint(err); hint != "" {
+			return nil, fmt.Errorf("applying via MCP: %w\n  hint: %s", err, hint)
+		}
+		return nil, fmt.Errorf("applying via MCP: %w", err)
+	}
+
+	for _, applied := range applyResult.Applied {
+		fmt.Fprintf(w, "  applied %s\n", applied)
+	}
+
+	if applyResult.Updated {
 		fmt.Fprintln(w, "  Triggered rollout restart")
 	}
 
-	fmt.Fprintf(w, "Deployed %s to %s\n", wf.Name, namespace)
+	fmt.Fprintf(w, "Deployed %s to %s\n", wf.Name, opts.Namespace)
 	return &DeployResult{
 		WorkflowName: wf.Name,
-		Namespace:    namespace,
-		Client:       client,
+		Namespace:    opts.Namespace,
+		MCPClient:    mcpClient,
 	}, nil
 }
 
-// evaluatePreflightResults displays preflight check results and returns true if
-// any check failed. When hasLocalSecrets is false, secret-reference failures are
-// downgraded to warnings since the Deployment mounts secrets with optional: true.
-func evaluatePreflightResults(w io.Writer, results []k8s.CheckResult, hasLocalSecrets bool) bool {
-	failed := false
-	for _, r := range results {
-		if r.Passed {
-			fmt.Fprintf(w, "  ✓ %s\n", r.Name)
-			if r.Warning != "" {
-				fmt.Fprintf(w, "    ⚠ %s\n", r.Warning)
-			}
-			continue
-		}
-		// When no local secrets, downgrade secret-reference failures to warnings
-		if !hasLocalSecrets && r.Name == "Secret references" {
-			fmt.Fprintf(w, "  ⚠ %s (no local secrets — secret volume is optional)\n", r.Name)
-			if r.Remediation != "" {
-				fmt.Fprintf(w, "    ℹ %s\n", r.Remediation)
-			}
-			continue
-		}
-		fmt.Fprintf(w, "  ✗ %s\n", r.Name)
-		if r.Warning != "" {
-			fmt.Fprintf(w, "    ⚠ %s\n", r.Warning)
-		}
-		if r.Remediation != "" {
-			fmt.Fprintf(w, "    → %s\n", r.Remediation)
-		}
-		failed = true
-	}
-	return failed
-}
-
 // buildSecretManifest creates a K8s Secret manifest from local secrets.
-// Cascade: .secrets/ directory → .secrets.yaml file
+// Cascade: .secrets/ directory -> .secrets.yaml file
 // Returns nil if no local secrets found.
 func buildSecretManifest(workflowDir, name, namespace string) (*builder.Manifest, error) {
 	secretName := name + "-secrets"
@@ -523,7 +467,7 @@ func buildSecretManifest(workflowDir, name, namespace string) (*builder.Manifest
 		return buildSecretFromYAML(secretsFile, secretName, namespace)
 	}
 
-	// No local secrets found — skip
+	// No local secrets found -- skip
 	return nil, nil
 }
 
@@ -567,8 +511,6 @@ stringData:
 }
 
 // buildSecretFromYAML creates a K8s Secret from a .secrets.yaml file.
-// Supports nested YAML maps: string values are used as-is, nested maps are
-// JSON-serialized (matching the engine's loadSecretsFromDir JSON parsing).
 func buildSecretFromYAML(filePath, secretName, namespace string) (*builder.Manifest, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -596,7 +538,8 @@ func buildSecretFromYAML(filePath, secretName, namespace string) (*builder.Manif
 		case string:
 			dataEntries = append(dataEntries, fmt.Sprintf("  %s: %q", k, val))
 		default:
-			jsonBytes, err := json.Marshal(val)
+			_ = val
+			jsonBytes, err := json.Marshal(v)
 			if err != nil {
 				return nil, fmt.Errorf("serializing secret %q to JSON: %w", k, err)
 			}

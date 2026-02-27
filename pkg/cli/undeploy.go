@@ -6,7 +6,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/spf13/cobra"
 )
 
@@ -37,20 +36,23 @@ func runUndeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	client, err := k8s.NewClient()
+	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
-		return fmt.Errorf("creating k8s client: %w", err)
+		return err
 	}
 
-	deleted, err := client.DeleteResources(namespace, name)
+	result, err := mcpClient.WfRemove(cmd.Context(), namespace, name)
 	if err != nil {
-		return fmt.Errorf("deleting resources: %w", err)
+		if hint := mcpErrorHint(err); hint != "" {
+			return fmt.Errorf("removing workflow: %w\n  hint: %s", err, hint)
+		}
+		return fmt.Errorf("removing workflow: %w", err)
 	}
 
-	if len(deleted) == 0 {
+	if len(result.Deleted) == 0 {
 		fmt.Printf("No resources found for %s in %s\n", name, namespace)
 	} else {
-		for _, d := range deleted {
+		for _, d := range result.Deleted {
 			fmt.Printf("  deleted %s\n", d)
 		}
 	}

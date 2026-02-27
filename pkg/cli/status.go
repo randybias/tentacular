@@ -1,9 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 
-	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/spf13/cobra"
 )
 
@@ -24,33 +24,57 @@ func runStatus(cmd *cobra.Command, args []string) error {
 	output, _ := cmd.Flags().GetString("output")
 	detail, _ := cmd.Flags().GetBool("detail")
 
-	client, err := k8s.NewClient()
+	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
-		return fmt.Errorf("creating k8s client: %w", err)
+		return err
 	}
 
-	if detail {
-		ds, err := client.GetDetailedStatus(namespace, name)
-		if err != nil {
-			return fmt.Errorf("getting detailed status: %w", err)
-		}
-		if output == "json" {
-			fmt.Println(ds.JSON())
-		} else {
-			fmt.Print(ds.Text())
-		}
-		return nil
-	}
-
-	status, err := client.GetStatus(namespace, name)
+	status, err := mcpClient.WfStatus(cmd.Context(), namespace, name, detail)
 	if err != nil {
+		if hint := mcpErrorHint(err); hint != "" {
+			return fmt.Errorf("getting status: %w\n  hint: %s", err, hint)
+		}
 		return fmt.Errorf("getting status: %w", err)
 	}
 
 	if output == "json" {
-		fmt.Println(status.JSON())
-	} else {
-		fmt.Println(status.Text())
+		data, err := json.MarshalIndent(status, "", "  ")
+		if err != nil {
+			return fmt.Errorf("marshaling JSON: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	// Text output
+	readyStr := "not ready"
+	if status.Ready {
+		readyStr = "ready"
+	}
+	fmt.Printf("Name:      %s\n", status.Name)
+	fmt.Printf("Namespace: %s\n", status.Namespace)
+	if status.Version != "" {
+		fmt.Printf("Version:   %s\n", status.Version)
+	}
+	fmt.Printf("Status:    %s\n", readyStr)
+	fmt.Printf("Replicas:  %d/%d\n", status.Available, status.Replicas)
+
+	if detail && len(status.Pods) > 0 {
+		fmt.Println("\nPods:")
+		for _, pod := range status.Pods {
+			podReady := "not ready"
+			if pod.Ready {
+				podReady = "ready"
+			}
+			fmt.Printf("  %-40s %-12s %s\n", pod.Name, pod.Phase, podReady)
+		}
+	}
+
+	if detail && len(status.Events) > 0 {
+		fmt.Println("\nEvents:")
+		for _, evt := range status.Events {
+			fmt.Printf("  [%s] %s: %s (x%d)\n", evt.Type, evt.Reason, evt.Message, evt.Count)
+		}
 	}
 
 	return nil

@@ -191,7 +191,7 @@ func TestDeployResultFields(t *testing.T) {
 	result := DeployResult{
 		WorkflowName: "sep-tracker",
 		Namespace:    "dev-ns",
-		Client:       nil, // nil is valid for unit test
+		MCPClient:    nil, // nil is valid for unit test
 	}
 	if result.WorkflowName != "sep-tracker" {
 		t.Errorf("expected sep-tracker, got %s", result.WorkflowName)
