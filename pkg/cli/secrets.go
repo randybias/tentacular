@@ -137,18 +137,17 @@ func resolveDir(args []string) string {
 	return "."
 }
 
-// scanRequiredSecrets reads all nodes/*.ts files and extracts secret service names.
+// scanRequiredSecrets reads all nodes/*.ts files and workflow.yaml contract
+// dependencies to extract required secret service names.
 func scanRequiredSecrets(workflowDir string) (map[string]bool, error) {
+	required := make(map[string]bool)
+
+	// Scan node TypeScript files for ctx.secrets?.XXX patterns
 	nodesDir := filepath.Join(workflowDir, "nodes")
 	entries, err := os.ReadDir(nodesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil, nil
-		}
+	if err != nil && !os.IsNotExist(err) {
 		return nil, fmt.Errorf("reading nodes directory: %w", err)
 	}
-
-	required := make(map[string]bool)
 	for _, entry := range entries {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ts") {
 			continue
@@ -161,6 +160,56 @@ func scanRequiredSecrets(workflowDir string) (map[string]bool, error) {
 		for _, m := range matches {
 			required[m[1]] = true
 		}
+	}
+
+	// Also scan workflow.yaml contract dependencies for auth.secret fields.
+	wfPath := filepath.Join(workflowDir, "workflow.yaml")
+	if data, err := os.ReadFile(wfPath); err == nil {
+		contractSecrets, scanErr := scanContractSecrets(data)
+		if scanErr == nil {
+			for k := range contractSecrets {
+				required[k] = true
+			}
+		}
+	}
+
+	return required, nil
+}
+
+// contractAuthStub is a minimal struct for YAML-parsing auth.secret from workflow.yaml.
+// Uses a lenient parse (not spec.Parse) so partial/invalid workflow YAML is tolerated.
+type contractAuthStub struct {
+	Contract *struct {
+		Dependencies map[string]*struct {
+			Auth *struct {
+				Secret string `yaml:"secret"`
+			} `yaml:"auth"`
+		} `yaml:"dependencies"`
+	} `yaml:"contract"`
+}
+
+// scanContractSecrets parses workflow YAML and extracts the service name from each
+// contract dependency's auth.secret field. Secret names are in "service.key" format;
+// only the service name (the part before the first dot) is returned, since that is the
+// top-level key in .secrets.yaml.
+func scanContractSecrets(yamlContent []byte) (map[string]bool, error) {
+	required := make(map[string]bool)
+
+	var stub contractAuthStub
+	if err := yaml.Unmarshal(yamlContent, &stub); err != nil {
+		return nil, fmt.Errorf("parsing workflow YAML: %w", err)
+	}
+
+	if stub.Contract == nil {
+		return required, nil
+	}
+
+	for _, dep := range stub.Contract.Dependencies {
+		if dep == nil || dep.Auth == nil || dep.Auth.Secret == "" {
+			continue
+		}
+		parts := strings.SplitN(dep.Auth.Secret, ".", 2)
+		required[parts[0]] = true
 	}
 
 	return required, nil

@@ -210,11 +210,11 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	importMapVolumeMount := ""
 	importMapVolume := ""
 	if spec.HasModuleProxyDeps(wf) {
-		// Mount the merged deno.json (engine + workflow deps) at /app/engine/deno.json.
-		// Deno's config discovery walks up from the entrypoint (engine/main.ts) and
-		// finds /app/engine/deno.json before /app/deno.json, so we must mount here.
+		// Mount the merged deno.json (engine + workflow deps) at /app/deno.json.
+		// Deno's config discovery walks up from the entrypoint (/app/mod.ts) and
+		// finds /app/deno.json, where "tentacular" resolves to "./mod.ts" (/app/mod.ts).
 		importMapVolumeMount = `            - name: import-map
-              mountPath: /app/engine/deno.json
+              mountPath: /app/deno.json
               subPath: deno.json
               readOnly: true
 `
@@ -299,6 +299,12 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
             - /bin/sh
             - -c
             - %q
+          securityContext:
+            readOnlyRootFilesystem: true
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
           resources:
             limits:
               memory: "32Mi"
@@ -434,6 +440,13 @@ metadata:
 		manifests = append(manifests, cronManifest)
 	}
 
+	// Trigger egress NetworkPolicy: allow trigger pods to reach the workflow Service and DNS.
+	// Generated whenever there are cron triggers (pods with tentacular.dev/role: trigger).
+	if len(cronTriggers) > 0 {
+		triggerNetpol := generateTriggerNetworkPolicy(wf.Name, namespace)
+		manifests = append(manifests, triggerNetpol)
+	}
+
 	return manifests
 }
 
@@ -470,6 +483,11 @@ spec:
             tentacular.dev/role: trigger
         spec:
           restartPolicy: OnFailure
+          securityContext:
+            runAsNonRoot: true
+            runAsUser: 65534
+            seccompProfile:
+              type: RuntimeDefault
           containers:
             - name: trigger
               image: curlimages/curl:latest
@@ -483,6 +501,12 @@ spec:
                 - -d
                 - "%s"
                 - %s
+              securityContext:
+                readOnlyRootFilesystem: true
+                allowPrivilegeEscalation: false
+                capabilities:
+                  drop:
+                    - ALL
               resources:
                 limits:
                   memory: "32Mi"
@@ -491,5 +515,55 @@ spec:
 
 	return Manifest{
 		Kind: "CronJob", Name: cronName, Content: content,
+	}
+}
+
+// generateTriggerNetworkPolicy creates a NetworkPolicy for trigger pods
+// (labeled tentacular.dev/role: trigger) that allows:
+//   - Egress to the workflow engine Service on port 8080 (same namespace)
+//   - Egress to kube-dns for DNS resolution (UDP/TCP 53)
+//
+// All other egress is blocked by default-deny.
+func generateTriggerNetworkPolicy(wfName, namespace string) Manifest {
+	content := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: %s-trigger-netpol
+  namespace: %s
+  labels:
+    app.kubernetes.io/name: %s
+    app.kubernetes.io/managed-by: tentacular
+spec:
+  podSelector:
+    matchLabels:
+      tentacular.dev/role: trigger
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: %s
+    ports:
+    - protocol: TCP
+      port: 8080
+  - to:
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+`, wfName, namespace, wfName, wfName)
+
+	return Manifest{
+		Kind:    "NetworkPolicy",
+		Name:    wfName + "-trigger-netpol",
+		Content: content,
 	}
 }

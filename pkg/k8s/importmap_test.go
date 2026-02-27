@@ -194,6 +194,35 @@ func TestGenerateImportMapContainsEngineEntries(t *testing.T) {
 	}
 }
 
+// TestEngineDenoImportsTentacularPath verifies that the "tentacular" engine entry
+// uses ./mod.ts (not ./engine/mod.ts) matching the actual file layout inside the
+// container image where the engine lives at /app/ not /app/engine/.
+func TestEngineDenoImportsTentacularPath(t *testing.T) {
+	wf := &spec.Workflow{
+		Name: "path-check",
+		Contract: &spec.Contract{
+			Version: "1",
+			Dependencies: map[string]spec.Dependency{
+				"pg": {Protocol: "jsr", Host: "@db/postgres", Version: "^0.4"},
+			},
+		},
+	}
+	got := GenerateImportMapWithNamespace(wf, "default", "")
+	if got == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+
+	// Must use ./mod.ts (the correct engine-root path inside the container)
+	if !strings.Contains(got.Content, `"tentacular": "./mod.ts"`) {
+		t.Errorf("expected tentacular engine entry to use ./mod.ts, got:\n%s", got.Content)
+	}
+
+	// Must NOT use the old wrong path ./engine/mod.ts
+	if strings.Contains(got.Content, "./engine/mod.ts") {
+		t.Errorf("tentacular engine entry must not use ./engine/mod.ts (wrong path), got:\n%s", got.Content)
+	}
+}
+
 func TestHasModuleProxyDeps(t *testing.T) {
 	tests := []struct {
 		name string
