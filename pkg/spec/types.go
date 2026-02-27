@@ -5,12 +5,21 @@ type Workflow struct {
 	Name        string              `yaml:"name"`
 	Version     string              `yaml:"version"`
 	Description string              `yaml:"description"`
+	Metadata    *WorkflowMetadata   `yaml:"metadata,omitempty"`
 	Triggers    []Trigger           `yaml:"triggers"`
 	Nodes       map[string]NodeSpec `yaml:"nodes"`
 	Edges       []Edge              `yaml:"edges"`
 	Config      WorkflowConfig      `yaml:"config"`
 	Deployment  DeploymentConfig    `yaml:"deployment,omitempty"`
 	Contract    *Contract           `yaml:"contract,omitempty"`
+}
+
+// WorkflowMetadata provides optional descriptive metadata for MCP reporting.
+type WorkflowMetadata struct {
+	Owner       string   `yaml:"owner,omitempty"`
+	Team        string   `yaml:"team,omitempty"`
+	Tags        []string `yaml:"tags,omitempty"`
+	Environment string   `yaml:"environment,omitempty"`
 }
 
 // DeploymentConfig holds deployment-specific settings embedded in workflow.yaml.

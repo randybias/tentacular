@@ -115,6 +115,56 @@ func indentString(s string, n int) string {
 	return strings.Join(lines, "\n")
 }
 
+// sanitizeAnnotationValue strips characters that could break YAML annotation
+// output when values are interpolated directly into a YAML template string.
+// Newlines and carriage returns are removed to prevent injection of additional
+// annotation keys; leading/trailing whitespace is trimmed.
+func sanitizeAnnotationValue(v string) string {
+	v = strings.ReplaceAll(v, "\n", "")
+	v = strings.ReplaceAll(v, "\r", "")
+	return strings.TrimSpace(v)
+}
+
+// buildDeployAnnotations converts workflow metadata into a YAML annotations block.
+// Returns empty string if metadata is nil or all fields are empty.
+// Values are sanitized to prevent YAML injection via newlines or special characters.
+func buildDeployAnnotations(meta *spec.WorkflowMetadata) string {
+	if meta == nil {
+		return ""
+	}
+	var lines []string
+	if meta.Owner != "" {
+		if v := sanitizeAnnotationValue(meta.Owner); v != "" {
+			lines = append(lines, fmt.Sprintf("    tentacular.dev/owner: %s", v))
+		}
+	}
+	if meta.Team != "" {
+		if v := sanitizeAnnotationValue(meta.Team); v != "" {
+			lines = append(lines, fmt.Sprintf("    tentacular.dev/team: %s", v))
+		}
+	}
+	if len(meta.Tags) > 0 {
+		var cleanTags []string
+		for _, tag := range meta.Tags {
+			if v := sanitizeAnnotationValue(tag); v != "" {
+				cleanTags = append(cleanTags, v)
+			}
+		}
+		if len(cleanTags) > 0 {
+			lines = append(lines, fmt.Sprintf("    tentacular.dev/tags: %s", strings.Join(cleanTags, ",")))
+		}
+	}
+	if meta.Environment != "" {
+		if v := sanitizeAnnotationValue(meta.Environment); v != "" {
+			lines = append(lines, fmt.Sprintf("    tentacular.dev/environment: %s", v))
+		}
+	}
+	if len(lines) == 0 {
+		return ""
+	}
+	return "  annotations:\n" + strings.Join(lines, "\n") + "\n"
+}
+
 // GenerateK8sManifests produces K8s manifests for deploying a workflow.
 func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts DeployOptions) []Manifest {
 	var manifests []Manifest
@@ -265,7 +315,7 @@ metadata:
   namespace: %s
   labels:
     %s
-spec:
+%sspec:
   replicas: 1
   strategy:
     type: Recreate
@@ -340,7 +390,7 @@ spec:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
-%s`, wf.Name, namespace, labels, wf.Name, labels, runtimeClassLine, initContainerBlock, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
+%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata), wf.Name, labels, runtimeClassLine, initContainerBlock, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
@@ -354,7 +404,7 @@ metadata:
   namespace: %s
   labels:
     %s
-spec:
+%sspec:
   type: ClusterIP
   selector:
     app.kubernetes.io/name: %s
@@ -362,7 +412,7 @@ spec:
     - port: 8080
       targetPort: 8080
       protocol: TCP
-`, wf.Name, namespace, labels, wf.Name)
+`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata), wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Service", Name: wf.Name, Content: service,

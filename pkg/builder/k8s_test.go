@@ -899,3 +899,133 @@ func TestDeploymentImportMapMountPath(t *testing.T) {
 		t.Error("unexpected mount at /app/deno.json — should be /app/engine/deno.json")
 	}
 }
+
+func TestBuildDeployAnnotationsNilMetadata(t *testing.T) {
+	result := buildDeployAnnotations(nil)
+	if result != "" {
+		t.Errorf("expected empty string for nil metadata, got %q", result)
+	}
+}
+
+func TestBuildDeployAnnotationsAllEmpty(t *testing.T) {
+	result := buildDeployAnnotations(&spec.WorkflowMetadata{})
+	if result != "" {
+		t.Errorf("expected empty string for empty metadata struct, got %q", result)
+	}
+}
+
+func TestBuildDeployAnnotationsFullMetadata(t *testing.T) {
+	meta := &spec.WorkflowMetadata{
+		Owner:       "platform-team",
+		Team:        "infra",
+		Tags:        []string{"production", "critical"},
+		Environment: "prod",
+	}
+	result := buildDeployAnnotations(meta)
+	if !strings.Contains(result, "tentacular.dev/owner: platform-team") {
+		t.Error("expected owner annotation")
+	}
+	if !strings.Contains(result, "tentacular.dev/team: infra") {
+		t.Error("expected team annotation")
+	}
+	if !strings.Contains(result, "tentacular.dev/tags: production,critical") {
+		t.Error("expected tags annotation")
+	}
+	if !strings.Contains(result, "tentacular.dev/environment: prod") {
+		t.Error("expected environment annotation")
+	}
+	if !strings.HasPrefix(result, "  annotations:\n") {
+		t.Error("expected result to start with annotations block")
+	}
+}
+
+func TestBuildDeployAnnotationsPartialMetadata(t *testing.T) {
+	meta := &spec.WorkflowMetadata{
+		Owner: "data-team",
+		// Team, Tags, Environment intentionally omitted
+	}
+	result := buildDeployAnnotations(meta)
+	if !strings.Contains(result, "tentacular.dev/owner: data-team") {
+		t.Error("expected owner annotation")
+	}
+	if strings.Contains(result, "tentacular.dev/team:") {
+		t.Error("expected no team annotation when Team is empty")
+	}
+	if strings.Contains(result, "tentacular.dev/tags:") {
+		t.Error("expected no tags annotation when Tags is nil")
+	}
+	if strings.Contains(result, "tentacular.dev/environment:") {
+		t.Error("expected no environment annotation when Environment is empty")
+	}
+}
+
+func TestBuildDeployAnnotationsNewlineInjectionBlocked(t *testing.T) {
+	meta := &spec.WorkflowMetadata{
+		Owner: "foo\n    injected.key: evil-value",
+		Team:  "bar\r\nbaz",
+	}
+	result := buildDeployAnnotations(meta)
+
+	// Verify no additional YAML lines were injected. After sanitization the
+	// newlines are removed, so the only annotation lines should be
+	// tentacular.dev/owner and tentacular.dev/team.
+	lines := strings.Split(strings.TrimSpace(result), "\n")
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" || trimmed == "annotations:" {
+			continue
+		}
+		if !strings.HasPrefix(trimmed, "tentacular.dev/") {
+			t.Errorf("unexpected annotation line (possible injection): %q", line)
+		}
+	}
+
+	// The tentacular.dev/owner line should still be present (value is sanitized but non-empty)
+	if !strings.Contains(result, "tentacular.dev/owner:") {
+		t.Error("expected tentacular.dev/owner annotation to be present")
+	}
+
+	// No bare newlines should appear inside an annotation value
+	if strings.Contains(result, "tentacular.dev/owner: foo\n") {
+		t.Error("expected no trailing newline within annotation value")
+	}
+}
+
+func TestK8sManifestMetadataAnnotations(t *testing.T) {
+	wf := makeTestWorkflow("meta-test")
+	wf.Metadata = &spec.WorkflowMetadata{
+		Owner: "platform-team",
+		Team:  "infra",
+		Tags:  []string{"production", "critical"},
+	}
+	manifests := GenerateK8sManifests(wf, "meta-test:1-0", "default", DeployOptions{})
+	dep := manifests[0].Content
+	svc := manifests[1].Content
+
+	if !strings.Contains(dep, "tentacular.dev/owner: platform-team") {
+		t.Error("expected owner annotation in Deployment")
+	}
+	if !strings.Contains(dep, "tentacular.dev/team: infra") {
+		t.Error("expected team annotation in Deployment")
+	}
+	if !strings.Contains(dep, "tentacular.dev/tags: production,critical") {
+		t.Error("expected tags annotation in Deployment")
+	}
+	if !strings.Contains(svc, "tentacular.dev/owner: platform-team") {
+		t.Error("expected owner annotation in Service")
+	}
+}
+
+func TestK8sManifestNoMetadataNoAnnotations(t *testing.T) {
+	wf := makeTestWorkflow("no-meta")
+	manifests := GenerateK8sManifests(wf, "no-meta:1-0", "default", DeployOptions{})
+	dep := manifests[0].Content
+	svc := manifests[1].Content
+
+	if strings.Contains(dep, "annotations:") {
+		t.Error("expected no annotations block in Deployment when metadata is nil")
+	}
+	if strings.Contains(svc, "annotations:") {
+		t.Error("expected no annotations block in Service when metadata is nil")
+	}
+}
