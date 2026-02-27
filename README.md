@@ -8,30 +8,37 @@ Tentacular is a secure workflow build and execution system for AI agents. Instea
 
 It runs those workflows on Kubernetes with defense-in-depth sandboxing: distroless runtime images, Deno permission locking, hardened pod security context, secrets as mounted files (not env vars), and optional gVisor kernel isolation.
 
-A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs inside hardened containers.
+Three components form the system: a Go CLI manages the full lifecycle, an in-cluster MCP server proxies all cluster operations through scoped RBAC, and a Deno engine executes workflow DAGs inside hardened containers.
 
 ## Overview
 
 ```
-                Developer Machine                          Kubernetes Cluster
-           ┌──────────────────────────┐          ┌────────────────────────────────┐
-           │                          │          │                                │
-           │  tntc CLI (Go)           │          │   ┌────────────────────────┐   │
-           │  ┌────────────────────┐  │  deploy  │   │  Pod (gVisor sandbox)  │   │
-           │  │ init / validate    │  │ ───────> │   │  ┌──────────────────┐  │   │
-           │  │ dev / test         │  │ (config  │   │  │ Deno Engine (TS) │  │   │
-           │  │ build / deploy     │  │  +code)  │   │  │ ┌──────────────┐ │  │   │
-           │  │ status / cluster   │  │  status  │   │  │ │ Workflow DAG │ │  │   │
-           │  │ visualize          │  │ <─────── │   │  │ └──────────────┘ │  │   │
-           │  └────────────────────┘  │          │   │  └──────────────────┘  │   │
-           │           │              │          │   │  /app/workflow (CM)    │   │
-           │      ┌────┴────┐         │          │   │  /app/secrets (vol)    │   │
-           │      │ Docker  │         │          │   └────────────────────────┘   │
-           │      │ Build   │         │          │   ConfigMap (code) ──┘         │
-           │      └─────────┘         │          │   K8s Secret                   │
-           │                          │          │   NetworkPolicy                │
-           └──────────────────────────┘          └────────────────────────────────┘
+     Developer Machine                          Kubernetes Cluster
+┌──────────────────────────┐     ┌──────────────────────────────────────────────┐
+│                          │     │  tentacular-system namespace                 │
+│  tntc CLI (Go)           │     │  ┌──────────────────────────────────────┐    │
+│  ┌────────────────────┐  │     │  │  tentacular-mcp (MCP Server)        │    │
+│  │ init / validate    │  │ MCP │  │  Bearer auth, scoped RBAC           │    │
+│  │ dev / test         │  │────>│  │  Streamable HTTP on :8080/mcp       │    │
+│  │ build / deploy     │  │     │  └──────────┬───────────────────────────┘    │
+│  │ status / cluster   │  │     │             │ K8s API                        │
+│  │ visualize          │  │     │             v                                │
+│  └────────────────────┘  │     │  ┌──────────────────────────┐                │
+│           │              │     │  │  Pod (gVisor sandbox)    │                │
+│      ┌────┴────┐        │     │  │  ┌──────────────────┐    │                │
+│      │ Docker   │        │     │  │  │ Deno Engine (TS) │    │                │
+│      │ Build    │        │     │  │  │ ┌──────────────┐ │    │                │
+│      └─────────┘        │     │  │  │ │ Workflow DAG │ │    │                │
+│                          │     │  │  │ └──────────────┘ │    │                │
+└──────────────────────────┘     │  │  └──────────────────┘    │                │
+                                 │  │  /app/workflow (CM)      │                │
+                                 │  │  /app/secrets (vol)      │                │
+                                 │  └──────────────────────────┘                │
+                                 │  ConfigMap, Secret, NetworkPolicy            │
+                                 └──────────────────────────────────────────────┘
 ```
+
+`tntc cluster install` bootstraps the MCP server and is the only CLI command that communicates directly with the Kubernetes API. All other cluster-facing commands route through MCP.
 
 ## Features
 
@@ -40,7 +47,7 @@ A Go CLI manages the full lifecycle while a Deno engine executes workflow DAGs i
 - **Local development** — hot-reload dev server with `tntc dev`
 - **Fixture-based testing** — test individual nodes or full pipelines against JSON fixtures
 - **One-command deploy** — build, push, and deploy to Kubernetes with automatic secret provisioning
-- **No kubectl required** — full operational lifecycle (deploy, status, run, logs, undeploy) through the CLI
+- **No kubectl required** — full operational lifecycle (deploy, status, run, logs, undeploy) through the CLI via in-cluster MCP server
 
 ## Prerequisites
 
@@ -82,14 +89,20 @@ tntc dev
 # POST http://localhost:8080/run to trigger, GET /health to check
 ```
 
-### 4. Build and deploy
+### 4. Bootstrap the cluster (one-time)
+
+```bash
+tntc cluster install
+```
+
+### 5. Build and deploy
 
 ```bash
 tntc build my-workflow -r registry.example.com --push
 tntc deploy my-workflow -n my-namespace -r registry.example.com
 ```
 
-### 5. Operate
+### 6. Operate
 
 ```bash
 tntc status my-workflow -n my-namespace
@@ -152,7 +165,7 @@ flowchart LR
 | Directory | Purpose |
 |-----------|---------|
 | `cmd/tntc/` | CLI entry point |
-| `pkg/` | Go packages: spec parser, builder, K8s client, CLI commands |
+| `pkg/` | Go packages: spec parser, builder, MCP client, CLI commands |
 | `engine/` | Deno TypeScript engine: compiler, executor, context, server |
 | `example-workflows/` | Runnable example workflows |
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |

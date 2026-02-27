@@ -46,6 +46,12 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 
 	fmt.Fprintf(w, "Live test: environment=%s, namespace=%s\n", envName, env.Namespace)
 
+	// Resolve MCP client
+	mcpClient, err := requireMCPClient(cmd)
+	if err != nil {
+		return emitLiveResult(cmd, "fail", "MCP client error: "+err.Error(), nil, startedAt)
+	}
+
 	// Resolve image
 	imageTag := env.Image
 	if imageTag == "" {
@@ -60,14 +66,14 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 
 	// Deploy
 	deployOpts := InternalDeployOptions{
-		Namespace:       env.Namespace,
-		Image:           imageTag,
-		RuntimeClass:    env.RuntimeClass,
-		Context:         env.Context,
-		StatusOut:       w,
+		Namespace:    env.Namespace,
+		Image:        imageTag,
+		RuntimeClass: env.RuntimeClass,
+		Context:      env.Context,
+		StatusOut:    w,
 	}
 
-	deployResult, err := deployWorkflow(absDir, deployOpts)
+	deployResult, err := deployWorkflow(absDir, deployOpts, mcpClient)
 	if err != nil {
 		return emitLiveResult(cmd, "fail", "deploy failed: "+err.Error(), nil, startedAt)
 	}
@@ -76,40 +82,30 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 	if !keep {
 		defer func() {
 			fmt.Fprintf(w, "Cleaning up %s from %s...\n", deployResult.WorkflowName, deployResult.Namespace)
-			deleted, delErr := deployResult.Client.DeleteResources(deployResult.Namespace, deployResult.WorkflowName)
+			removeResult, delErr := deployResult.MCPClient.WfRemove(context.Background(), deployResult.Namespace, deployResult.WorkflowName)
 			if delErr != nil {
 				fmt.Fprintf(os.Stderr, "Warning: cleanup failed: %v\n", delErr)
 			} else {
-				for _, d := range deleted {
+				for _, d := range removeResult.Deleted {
 					fmt.Fprintf(w, "  deleted %s\n", d)
 				}
 			}
 		}()
 	}
 
-	// Wait for ready
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel()
-
-	fmt.Fprintf(w, "Waiting for %s to become ready (timeout: %s)...\n", deployResult.WorkflowName, timeout)
-	if err := deployResult.Client.WaitForReady(ctx, deployResult.Namespace, deployResult.WorkflowName); err != nil {
-		return emitLiveResult(cmd, "fail", "deployment not ready: "+err.Error(), nil, startedAt)
-	}
-	fmt.Fprintln(w, "  Deployment ready")
-
-	// Trigger workflow run
-	fmt.Fprintf(w, "Running workflow %s...\n", deployResult.WorkflowName)
-	runResult, err := deployResult.Client.RunWorkflow(ctx, deployResult.Namespace, deployResult.WorkflowName)
+	// Trigger workflow run (MCP server handles readiness wait internally)
+	fmt.Fprintf(w, "Running workflow %s (timeout: %s)...\n", deployResult.WorkflowName, timeout)
+	runResult, err := deployResult.MCPClient.WfRun(cmd.Context(), deployResult.Namespace, deployResult.WorkflowName, nil, int(timeout.Seconds()))
 	if err != nil {
 		return emitLiveResult(cmd, "fail", "workflow run failed: "+err.Error(), nil, startedAt)
 	}
 
 	// Parse execution result
 	var execution map[string]interface{}
-	if err := json.Unmarshal([]byte(runResult), &execution); err != nil {
+	if err := json.Unmarshal(runResult.Output, &execution); err != nil {
 		// Not valid JSON -- still a pass if we got output
-		fmt.Printf("Workflow output (raw): %s\n", runResult)
-		return emitLiveResult(cmd, "pass", "workflow completed (raw output)", map[string]interface{}{"raw": runResult}, startedAt)
+		fmt.Printf("Workflow output (raw): %s\n", string(runResult.Output))
+		return emitLiveResult(cmd, "pass", "workflow completed (raw output)", map[string]interface{}{"raw": string(runResult.Output)}, startedAt)
 	}
 
 	// Check for success field in the execution result
@@ -127,11 +123,11 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 // emitLiveResult outputs the live test result in the appropriate format.
 func emitLiveResult(cmd *cobra.Command, status, summary string, execution interface{}, startedAt time.Time) error {
 	result := CommandResult{
-		Version:   "1",
-		Command:   "test",
-		Status:    status,
-		Summary:   summary,
-		Hints:     []string{},
+		Version: "1",
+		Command: "test",
+		Status:  status,
+		Summary: summary,
+		Hints:   []string{},
 		Timing: TimingInfo{
 			StartedAt:  startedAt.Format(time.RFC3339),
 			DurationMs: time.Since(startedAt).Milliseconds(),

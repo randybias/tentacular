@@ -2,6 +2,14 @@ name: sep-tracker
 version: "1.0"
 description: "Track MCP SEP proposals from GitHub PRs, diff changes, generate HTML reports, store to Postgres, notify Slack"
 
+metadata:
+  owner: platform-team
+  team: mcp-tracking
+  tags:
+    - production
+    - reporting
+  environment: dev
+
 deployment:
   namespace: pd-sep-tracker
 

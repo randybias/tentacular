@@ -58,7 +58,25 @@ kubectl patch deployment <name> -n <namespace> \
 
 ### ConfigMap Not Cleaned Up by Undeploy
 
-`tntc undeploy` deletes Service, Deployment, Secret, and CronJobs, but does NOT delete the ConfigMap (`<name>-code`). Manual cleanup required: `kubectl delete configmap <name>-code -n <namespace>`.
+**Status:** Resolved by MCP refactoring
+
+`tntc undeploy` now routes through the MCP server's `wf_remove` tool, which uses label-based resource discovery to delete all resources associated with a deployment name, including ConfigMaps. Manual cleanup is no longer required.
+
+---
+
+## MCP Server
+
+### Log Streaming Not Supported via MCP
+
+**Status:** By design
+
+`tntc logs --follow` is not supported when routing through the MCP server. The `wf_logs` MCP tool returns a snapshot of recent log lines. For real-time log streaming, use `kubectl logs -f` directly.
+
+### cluster check --fix Removed
+
+**Status:** By design
+
+The `--fix` flag for `tntc cluster check` has been removed. Namespace creation and other remediation is now handled through dedicated MCP tools (`ns_create`). Run `tntc cluster install` to bootstrap the cluster environment.
 
 ---
 

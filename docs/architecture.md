@@ -2,28 +2,35 @@
 
 ## 1. System Overview
 
-Tentacular is a workflow execution platform that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. A Go CLI manages the full lifecycle — scaffolding, validation, local dev, testing, container builds, and K8s deployments — while a Deno engine executes workflow DAGs inside hardened containers with gVisor kernel isolation.
+Tentacular is a workflow execution platform that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. Three components form the system: a Go CLI manages the full lifecycle, an in-cluster MCP server proxies all cluster operations through scoped RBAC, and a Deno engine executes workflow DAGs inside hardened containers with gVisor kernel isolation.
 
 ```
-                     Developer Machine                          Kubernetes Cluster
-                ┌──────────────────────────┐          ┌────────────────────────────────┐
-                │                          │          │                                │
-                │  tntc CLI (Go)           │          │   ┌────────────────────────┐   │
-                │  ┌────────────────────┐  │  deploy  │   │  Pod (gVisor sandbox)  │   │
-                │  │ init / validate    │  │ ───────> │   │  ┌──────────────────┐  │   │
-                │  │ dev / test         │  │ (config  │   │  │ Deno Engine (TS) │  │   │
-                │  │ build / deploy     │  │  +code)  │   │  │ ┌──────────────┐ │  │   │
-                │  │ status / cluster   │  │  status  │   │  │ │ Workflow DAG │ │  │   │
-                │  │ visualize          │  │ <─────── │   │  │ └──────────────┘ │  │   │
-                │  └────────────────────┘  │          │   │  └──────────────────┘  │   │
-                │           │              │          │   │  /app/workflow (CM)     │   │
-                │      ┌────┴────┐         │          │   │  /app/secrets (vol)     │   │
-                │      │ Docker  │         │          │   └────────────────────────┘   │
-                │      │ Build   │         │          │   ConfigMap (code) ──┘         │
-                │      └─────────┘         │          │   K8s Secret                   │
-                │                          │          │   NetworkPolicy                │
-                └──────────────────────────┘          └────────────────────────────────┘
+          Developer Machine                          Kubernetes Cluster
+     ┌──────────────────────────┐     ┌──────────────────────────────────────────────┐
+     │                          │     │  tentacular-system namespace                 │
+     │  tntc CLI (Go)           │     │  ┌──────────────────────────────────────┐    │
+     │  ┌────────────────────┐  │     │  │  tentacular-mcp (MCP Server)        │    │
+     │  │ init / validate    │  │ MCP │  │  Bearer auth, scoped RBAC           │    │
+     │  │ dev / test         │  │────>│  │  Streamable HTTP on :8080/mcp       │    │
+     │  │ build / deploy     │  │     │  └──────────┬───────────────────────────┘    │
+     │  │ status / cluster   │  │     │             │ K8s API                        │
+     │  │ visualize          │  │     │             v                                │
+     │  └────────────────────┘  │     │  ┌──────────────────────────┐                │
+     │           │              │     │  │  Pod (gVisor sandbox)    │                │
+     │      ┌────┴────┐        │     │  │  ┌──────────────────┐    │                │
+     │      │ Docker   │        │     │  │  │ Deno Engine (TS) │    │                │
+     │      │ Build    │        │     │  │  │ ┌──────────────┐ │    │                │
+     │      └─────────┘        │     │  │  │ │ Workflow DAG │ │    │                │
+     │                          │     │  │  │ └──────────────┘ │    │                │
+     └──────────────────────────┘     │  │  └──────────────────┘    │                │
+                                      │  │  /app/workflow (CM)      │                │
+                                      │  │  /app/secrets (vol)      │                │
+                                      │  └──────────────────────────┘                │
+                                      │  ConfigMap, Secret, NetworkPolicy            │
+                                      └──────────────────────────────────────────────┘
 ```
+
+**CLI-to-MCP Handoff:** `tntc cluster install` is the only CLI command that communicates directly with the Kubernetes API. It bootstraps the MCP server, generates a bearer token, and saves the MCP endpoint and token to `~/.tentacular/config.yaml`. All subsequent cluster-facing commands (deploy, run, list, status, logs, undeploy, audit, cluster check) route through the MCP server using JSON-RPC 2.0 over Streamable HTTP.
 
 | Directory | Purpose |
 |-----------|---------|
@@ -70,17 +77,21 @@ tntc
 ├── dev [dir]           Local dev server with hot-reload
 ├── test [dir/node]     Run node or pipeline tests
 ├── build [dir]         Build container image
-├── deploy [dir]        Deploy to Kubernetes
-├── status <name>       Check deployment health (--detail for extended info)
-├── run <name>          Trigger a deployed workflow
-├── logs <name>         View workflow pod logs (--follow to stream)
-├── list                List deployed workflows
-├── undeploy <name>     Remove a deployed workflow
-├── cluster check       Preflight cluster validation
+├── deploy [dir]        Deploy to Kubernetes (via MCP)
+├── status <name>       Check deployment health (via MCP, --detail for extended info)
+├── run <name>          Trigger a deployed workflow (via MCP)
+├── logs <name>         View workflow pod logs (via MCP, snapshot only)
+├── list                List deployed workflows (via MCP)
+├── undeploy <name>     Remove a deployed workflow (via MCP)
+├── audit <name>        Run security audit (via MCP: RBAC, netpol, PSA)
+├── cluster install     Bootstrap MCP server and module proxy (direct K8s API)
+├── cluster check       Preflight cluster validation (via MCP)
 └── visualize [dir]     Generate Mermaid DAG diagram
 ```
 
 Global flags: `--namespace`, `--registry`, `--output` (text|json)
+
+Commands marked "(via MCP)" require a running MCP server. Run `tntc cluster install` first to bootstrap. The `logs` command returns a snapshot of recent lines; real-time streaming (`--follow`) is not supported through MCP.
 
 ### Package Layout
 
@@ -98,26 +109,35 @@ pkg/
 │   ├── dev.go          Spawn Deno engine with --watch, graceful shutdown
 │   ├── test.go         Run Deno test runner against fixtures
 │   ├── build.go        Docker build with engine copy, tag derivation
-│   ├── deploy.go       Generate manifests, provision secrets, k8s.Apply()
-│   ├── status.go       Query deployment via k8s.GetStatus() (--detail for extended info)
-│   ├── run.go          Trigger deployed workflow via in-cluster curl pod
-│   ├── logs.go         Stream/tail pod logs via k8s.GetPodLogs()
-│   ├── list.go         List deployed workflows via k8s.ListWorkflows()
-│   ├── undeploy.go     Remove deployed workflow via k8s.DeleteResources()
-│   ├── cluster.go      Preflight checks with --fix auto-remediation
+│   ├── deploy.go       Generate manifests, provision secrets, deploy via MCP
+│   ├── status.go       Query deployment via MCP wf_status (--detail for extended info)
+│   ├── run.go          Trigger deployed workflow via MCP wf_run
+│   ├── logs.go         Tail pod logs via MCP wf_logs (snapshot, not streaming)
+│   ├── list.go         List deployed workflows via MCP wf_list
+│   ├── undeploy.go     Remove deployed workflow via MCP wf_remove
+│   ├── audit.go        Security audit via MCP audit_rbac, audit_netpol, audit_psa
+│   ├── cluster.go      cluster install (bootstrap) + cluster check (via MCP)
+│   ├── resolve.go      resolveMCPClient(), requireMCPClient(), mcpErrorHint()
 │   └── visualize.go    Mermaid graph output
-└── k8s/            Kubernetes client operations
-    ├── client.go       NewClient(), Apply(), GetStatus(), DeleteResources(),
-    │                   ListWorkflows(), GetPodLogs(), RunWorkflow(), GetDetailedStatus()
-    └── preflight.go    PreflightCheck(): API, gVisor, namespace, RBAC, secrets
+├── mcp/            MCP client (JSON-RPC 2.0 over Streamable HTTP)
+│   ├── client.go       Client struct, CallTool(), Ping()
+│   ├── tools.go        Typed tool methods: WfApply, WfRemove, WfStatus, WfList,
+│   │                   WfLogs, WfRun, ClusterPreflight, NsCreate, AuditResources
+│   └── auth.go         Config resolution, LoadConfigFromCluster(), SaveConfig()
+└── k8s/            Kubernetes client operations (bootstrap only)
+    ├── client.go       NewClient(), Apply() — used only by cluster install
+    ├── mcp_deploy.go   GenerateMCPServerManifests(), MCPEndpointInCluster()
+    ├── mcp_token.go    Token generation for MCP auth
+    └── preflight.go    PreflightCheck() — legacy, now proxied via MCP
 ```
 
 ### Dependencies
 
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML parsing for workflow specs and secrets
-- `k8s.io/client-go` — K8s API client (apply, status, preflight checks)
+- `k8s.io/client-go` — K8s API client (used only by `cluster install` bootstrap)
 - `k8s.io/apimachinery` — K8s types and API machinery
+- `net/http` — MCP client transport (JSON-RPC 2.0 over HTTP)
 
 ## 3. Deno Engine Architecture
 
@@ -321,36 +341,41 @@ tntc build [dir]
   8. Save image tag to .tentacular/base-image.txt for deploy cascade
 ```
 
-### Deploy Phase
+### Deploy Phase (via MCP)
 
 ```
 tntc deploy [dir]
   1. Parse workflow.yaml → validate spec
   2. Resolve base image tag via cascade:
-     --image flag > .tentacular/base-image.txt > tentacular-engine:latest
+     --image flag > env config image > .tentacular/base-image.txt > tentacular-engine:latest
   3. GenerateCodeConfigMap() → ConfigMap with workflow.yaml + nodes/*.ts
   4. GenerateK8sManifests() → Deployment + Service (+ CronJobs if cron triggers)
   5. buildSecretManifest() → K8s Secret from .secrets/ or .secrets.yaml
-  6. k8s.Client.Apply() → create-or-update ConfigMap, Deployment, Service, Secret
-  7. k8s.Client.RolloutRestart() → trigger pod restart to pick up new ConfigMap
+  6. MCP ns_create → ensure namespace exists with PSA labels and NetworkPolicy
+  7. MCP wf_apply → create-or-update all manifests via dynamic client
+  8. Rollout restart triggered automatically for updates (skipped on fresh deploy)
 ```
 
-### Operations Phase
+### Operations Phase (via MCP)
+
+All operations-phase commands route through the MCP server. The CLI
+resolves the MCP client from config (env vars > project config > user
+config) and fails with an actionable error if MCP is not configured.
 
 ```
-tntc status <name>        Query Deployment readiness/replicas
+tntc status <name>        Query Deployment readiness/replicas (MCP: wf_status)
   --detail                       Extended info: image, runtime, pods, events
-tntc run <name>           Trigger workflow via in-cluster curl pod, return JSON result
+tntc run <name>           Trigger workflow via MCP wf_run, return JSON result
   --timeout 30s                  Maximum wait time
-                                 Uses --retry/--retry-connrefused for NetworkPolicy ipset sync
-tntc logs <name>          View pod logs (last 100 lines by default)
-  --follow/-f                    Stream logs in real time
+tntc logs <name>          View pod logs (MCP: wf_logs, snapshot only)
   --tail N                       Number of recent lines
-tntc list                 List all tentacular-managed deployments
-tntc undeploy <name>      Remove Service, Deployment, and Secret
+                                 Note: --follow not supported through MCP
+tntc list                 List all tentacular-managed deployments (MCP: wf_list)
+tntc undeploy <name>      Remove all deployment resources (MCP: wf_remove)
   --yes                          Skip confirmation prompt
-tntc cluster check        Preflight: API, gVisor, namespace, RBAC, secrets
-  --fix                          Auto-create namespace if missing
+tntc audit <name>         Security audit (MCP: audit_rbac, audit_netpol, audit_psa)
+tntc cluster install      Bootstrap MCP server + module proxy (direct K8s API)
+tntc cluster check        Preflight validation (MCP: cluster_preflight)
 ```
 
 ### Generated K8s Resources
@@ -584,6 +609,8 @@ Preflight check: `tntc cluster check` validates RuntimeClass exists (warning if 
 
 ### Adding a Preflight Check
 
-1. Add check logic in `pkg/k8s/preflight.go` within `PreflightCheck()`
+Preflight checks are now executed by the MCP server's `cluster_preflight` tool. To add a new check:
+
+1. Add check logic in `tentacular-mcp/pkg/k8s/preflight.go`
 2. Return a `CheckResult` with Name, Passed, and optional Warning/Remediation
-3. If auto-fixable, add fix logic gated by the `autoFix` parameter
+3. The CLI invokes the check via MCP and displays results

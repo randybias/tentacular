@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/spf13/cobra"
 )
 
@@ -22,13 +21,16 @@ func runList(cmd *cobra.Command, args []string) error {
 	namespace, _ := cmd.Flags().GetString("namespace")
 	output, _ := cmd.Flags().GetString("output")
 
-	client, err := k8s.NewClient()
+	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
-		return fmt.Errorf("creating k8s client: %w", err)
+		return err
 	}
 
-	workflows, err := client.ListWorkflows(namespace)
+	workflows, err := mcpClient.WfList(cmd.Context(), namespace)
 	if err != nil {
+		if hint := mcpErrorHint(err); hint != "" {
+			return fmt.Errorf("listing workflows: %w\n  hint: %s", err, hint)
+		}
 		return fmt.Errorf("listing workflows: %w", err)
 	}
 
@@ -52,7 +54,12 @@ func runList(cmd *cobra.Command, args []string) error {
 		if w.Ready {
 			status = "ready"
 		}
-		age := formatAge(time.Since(w.Created))
+		age := ""
+		if w.CreatedAt != "" {
+			if t, err := time.Parse(time.RFC3339, w.CreatedAt); err == nil {
+				age = formatAge(time.Since(t))
+			}
+		}
 		fmt.Printf("%-24s %-8s %-16s %-10s %d/%d        %s\n", w.Name, w.Version, w.Namespace, status, w.Available, w.Replicas, age)
 	}
 

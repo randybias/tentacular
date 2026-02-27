@@ -16,6 +16,12 @@ type ModuleProxyConfig struct {
 	PVCSize   string `yaml:"pvcSize,omitempty"`   // default: 5Gi (only when storage: pvc)
 }
 
+// MCPConfig holds MCP server connection settings.
+type MCPConfig struct {
+	Endpoint  string `yaml:"endpoint,omitempty"`   // e.g. http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
+	TokenPath string `yaml:"token_path,omitempty"` // path to bearer token file
+}
+
 // TentacularConfig holds default configuration values.
 type TentacularConfig struct {
 	Registry     string                       `yaml:"registry,omitempty"`
@@ -23,6 +29,7 @@ type TentacularConfig struct {
 	RuntimeClass string                       `yaml:"runtime_class,omitempty"`
 	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
 	ModuleProxy  ModuleProxyConfig            `yaml:"moduleProxy,omitempty"`
+	MCP          MCPConfig                    `yaml:"mcp,omitempty"`
 }
 
 // LoadConfig returns merged config: project > user > defaults.
@@ -82,5 +89,11 @@ func mergeConfig(base, override *TentacularConfig) {
 	}
 	if override.ModuleProxy.PVCSize != "" {
 		base.ModuleProxy.PVCSize = override.ModuleProxy.PVCSize
+	}
+	if override.MCP.Endpoint != "" {
+		base.MCP.Endpoint = override.MCP.Endpoint
+	}
+	if override.MCP.TokenPath != "" {
+		base.MCP.TokenPath = override.MCP.TokenPath
 	}
 }

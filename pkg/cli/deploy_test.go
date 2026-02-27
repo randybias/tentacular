@@ -3,14 +3,13 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/randybias/tentacular/pkg/k8s"
+	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
 )
 
@@ -115,70 +114,6 @@ func TestBuildSecretManifestNameSuffix(t *testing.T) {
 	// Secret name should be <workflow-name>-secrets
 	if m.Name != "my-workflow-secrets" {
 		t.Errorf("expected name my-workflow-secrets, got %s", m.Name)
-	}
-}
-
-func TestEvaluatePreflightResultsDowngradesSecretWarning(t *testing.T) {
-	// When hasLocalSecrets=false and a secret-reference check fails,
-	// the failure should be downgraded to a warning (return false, not true)
-	results := []k8s.CheckResult{
-		{Name: "K8s API reachable", Passed: true},
-		{Name: "gVisor RuntimeClass", Passed: true},
-		{Name: "Namespace 'default'", Passed: true},
-		{Name: "RBAC permissions", Passed: true},
-		{Name: "Secret references", Passed: false, Remediation: "Missing secrets in namespace default: my-wf-secrets"},
-	}
-
-	failed := evaluatePreflightResults(io.Discard, results, false)
-	if failed {
-		t.Error("expected evaluatePreflightResults to return false (warning) when hasLocalSecrets=false and secret check fails")
-	}
-}
-
-func TestEvaluatePreflightResultsHardFailWithLocalSecrets(t *testing.T) {
-	// When hasLocalSecrets=true and a secret-reference check fails,
-	// it should remain a hard failure (return true)
-	results := []k8s.CheckResult{
-		{Name: "K8s API reachable", Passed: true},
-		{Name: "Secret references", Passed: false, Remediation: "Missing secrets"},
-	}
-
-	failed := evaluatePreflightResults(io.Discard, results, true)
-	if !failed {
-		t.Error("expected evaluatePreflightResults to return true (hard failure) when hasLocalSecrets=true and secret check fails")
-	}
-}
-
-func TestEvaluatePreflightResultsAllPass(t *testing.T) {
-	// When all checks pass, should return false regardless of hasLocalSecrets
-	results := []k8s.CheckResult{
-		{Name: "K8s API reachable", Passed: true},
-		{Name: "gVisor RuntimeClass", Passed: true},
-		{Name: "Namespace 'default'", Passed: true},
-		{Name: "RBAC permissions", Passed: true},
-		{Name: "Secret references", Passed: true},
-	}
-
-	if evaluatePreflightResults(io.Discard, results, false) {
-		t.Error("expected false when all checks pass (hasLocalSecrets=false)")
-	}
-	if evaluatePreflightResults(io.Discard, results, true) {
-		t.Error("expected false when all checks pass (hasLocalSecrets=true)")
-	}
-}
-
-func TestEvaluatePreflightResultsNonSecretFailure(t *testing.T) {
-	// Non-secret failures should always be hard failures
-	results := []k8s.CheckResult{
-		{Name: "K8s API reachable", Passed: true},
-		{Name: "RBAC permissions", Passed: false, Remediation: "Missing permissions"},
-	}
-
-	if !evaluatePreflightResults(io.Discard, results, false) {
-		t.Error("expected true for non-secret failure even when hasLocalSecrets=false")
-	}
-	if !evaluatePreflightResults(io.Discard, results, true) {
-		t.Error("expected true for non-secret failure when hasLocalSecrets=true")
 	}
 }
 
@@ -399,5 +334,80 @@ func TestDeployCmdDeprecatedClusterRegistryFlag(t *testing.T) {
 	f := cmd.Flags().Lookup("cluster-registry")
 	if f == nil {
 		t.Fatal("expected --cluster-registry flag on deploy command (deprecated)")
+	}
+}
+
+func TestCountModuleProxyDeps_NilContract(t *testing.T) {
+	wf := &spec.Workflow{Contract: nil}
+	if n := countModuleProxyDeps(wf); n != 0 {
+		t.Errorf("expected 0 for nil contract, got %d", n)
+	}
+}
+
+func TestCountModuleProxyDeps_NoJsrOrNpm(t *testing.T) {
+	wf := &spec.Workflow{
+		Contract: &spec.Contract{
+			Dependencies: map[string]spec.Dependency{
+				"pg":    {Protocol: "postgresql"},
+				"slack": {Protocol: "https"},
+			},
+		},
+	}
+	if n := countModuleProxyDeps(wf); n != 0 {
+		t.Errorf("expected 0 for non-jsr/npm deps, got %d", n)
+	}
+}
+
+func TestCountModuleProxyDeps_JsrOnly(t *testing.T) {
+	wf := &spec.Workflow{
+		Contract: &spec.Contract{
+			Dependencies: map[string]spec.Dependency{
+				"std":   {Protocol: "jsr"},
+				"fresh": {Protocol: "jsr"},
+			},
+		},
+	}
+	if n := countModuleProxyDeps(wf); n != 2 {
+		t.Errorf("expected 2 for 2 jsr deps, got %d", n)
+	}
+}
+
+func TestCountModuleProxyDeps_NpmOnly(t *testing.T) {
+	wf := &spec.Workflow{
+		Contract: &spec.Contract{
+			Dependencies: map[string]spec.Dependency{
+				"lodash": {Protocol: "npm"},
+			},
+		},
+	}
+	if n := countModuleProxyDeps(wf); n != 1 {
+		t.Errorf("expected 1 for 1 npm dep, got %d", n)
+	}
+}
+
+func TestCountModuleProxyDeps_Mixed(t *testing.T) {
+	wf := &spec.Workflow{
+		Contract: &spec.Contract{
+			Dependencies: map[string]spec.Dependency{
+				"lodash": {Protocol: "npm"},
+				"std":    {Protocol: "jsr"},
+				"pg":     {Protocol: "postgresql"},
+				"api":    {Protocol: "https"},
+			},
+		},
+	}
+	if n := countModuleProxyDeps(wf); n != 2 {
+		t.Errorf("expected 2 for mixed deps, got %d", n)
+	}
+}
+
+func TestCountModuleProxyDeps_EmptyDependencies(t *testing.T) {
+	wf := &spec.Workflow{
+		Contract: &spec.Contract{
+			Dependencies: map[string]spec.Dependency{},
+		},
+	}
+	if n := countModuleProxyDeps(wf); n != 0 {
+		t.Errorf("expected 0 for empty dependencies, got %d", n)
 	}
 }
