@@ -153,7 +153,7 @@ pkg/
 7.  Create base Context (fetch, log, config, secrets)
 8.  Create NodeRunner (per-node context creation)
 9.  Parse timeout/retry config
-10. Create TelemetrySink from TENTACULAR_TELEMETRY env var ("basic" default, "none" for noop)
+10. Create TelemetrySink from TELEMETRY_SINK env var ("basic" default, "noop" for noop)
 11. Start HTTP server on configured port (passes sink for /health?detail=1)
 12. Start NATS triggers if queue triggers defined (dynamic import, passes sink)
 13. Register signal handlers (SIGTERM/SIGINT) for graceful shutdown
@@ -291,14 +291,19 @@ The `/run` endpoint parses POST body as JSON and passes it as initial input to r
 
 ```json
 {
-  "uptimeSec": 120,
-  "totalRequests": 45,
-  "totalErrors": 2,
+  "totalEvents": 45,
+  "errorCount": 2,
   "errorRate": 0.044,
-  "lastErrorMs": 1709123456789,
-  "nodeStats": {
-    "fetch-repos": { "runs": 45, "errors": 2, "avgDurationMs": 310 }
-  }
+  "uptimeMs": 120000,
+  "lastError": "fetch failed: 503",
+  "lastErrorAt": 1709123456789,
+  "recentEvents": [
+    { "type": "request-in", "timestamp": 1709123456000 },
+    { "type": "node-start", "timestamp": 1709123456001, "metadata": { "nodeId": "fetch-repos" } }
+  ],
+  "status": "ok",
+  "lastRunFailed": false,
+  "inFlight": 0
 }
 ```
 

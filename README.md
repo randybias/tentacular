@@ -48,6 +48,7 @@ Three components form the system: a Go CLI manages the full lifecycle, an in-clu
 - **Fixture-based testing** — test individual nodes or full pipelines against JSON fixtures
 - **One-command deploy** — build, push, and deploy to Kubernetes with automatic secret provisioning
 - **No kubectl required** — full operational lifecycle (deploy, status, run, logs, undeploy) through the CLI via in-cluster MCP server
+- **Runtime telemetry** — in-memory event tracking with `GET /health?detail=1` for execution telemetry snapshots, used by MCP health tools for G/A/R classification
 
 ## Prerequisites
 
@@ -166,7 +167,7 @@ flowchart LR
 |-----------|---------|
 | `cmd/tntc/` | CLI entry point |
 | `pkg/` | Go packages: spec parser, builder, MCP client, CLI commands |
-| `engine/` | Deno TypeScript engine: compiler, executor, context, server |
+| `engine/` | Deno TypeScript engine: compiler, executor, context, server, telemetry |
 | `example-workflows/` | Runnable example workflows |
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |
 | `docs/` | Reference documentation |
