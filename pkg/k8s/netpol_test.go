@@ -245,7 +245,7 @@ func TestGenerateNetworkPolicyWebhookTriggerIngress(t *testing.T) {
 }
 
 func TestGenerateNetworkPolicyNonWebhookTriggerHasControlPlaneIngress(t *testing.T) {
-	// All workflows always get the control plane ingress rule for K8s API service proxy.
+	// All workflows always get the control plane ingress rule for wf_run from tentacular-system.
 	wf := &spec.Workflow{
 		Name:    "test-workflow",
 		Version: "1.0",
@@ -309,7 +309,7 @@ func TestGenerateNetworkPolicyControlPlaneIngressAlwaysPresent(t *testing.T) {
 
 	// Must have port 8080 in ingress
 	if !strings.Contains(manifest.Content, "port: 8080") {
-		t.Error("expected port 8080 in K8s API service proxy ingress rule")
+		t.Error("expected port 8080 in control plane ingress rule")
 	}
 
 	// Must be TCP
