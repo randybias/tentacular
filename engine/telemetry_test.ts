@@ -26,6 +26,8 @@ Deno.test("NoopSink: snapshot returns zeroed state", () => {
   assertEquals(snap.lastErrorAt, null);
   assertEquals(snap.recentEvents, []);
   assertEquals(snap.status, "ok");
+  assertEquals(snap.lastRunFailed, false);
+  assertEquals(snap.inFlight, 0);
 });
 
 // --- BasicSink ---
@@ -120,6 +122,82 @@ Deno.test("BasicSink: totalEvents reflects true total past ring capacity", () =>
   }
   assertEquals(sink.snapshot().totalEvents, 2000);
   assertEquals(sink.snapshot().recentEvents.length, 1000);
+});
+
+// --- BasicSink: inFlight and lastRunFailed ---
+
+Deno.test("BasicSink: inFlight starts at 0", () => {
+  const sink = new BasicSink();
+  assertEquals(sink.snapshot().inFlight, 0);
+});
+
+Deno.test("BasicSink: inFlight increments on request-in", () => {
+  const sink = new BasicSink();
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  assertEquals(sink.snapshot().inFlight, 1);
+});
+
+Deno.test("BasicSink: inFlight decrements on request-out", () => {
+  const sink = new BasicSink();
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  sink.record({ type: "request-out", timestamp: Date.now() });
+  assertEquals(sink.snapshot().inFlight, 0);
+});
+
+Deno.test("BasicSink: inFlight stays > 0 while second request still in flight", () => {
+  const sink = new BasicSink();
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  sink.record({ type: "request-out", timestamp: Date.now() });
+  assertEquals(sink.snapshot().inFlight, 1);
+});
+
+Deno.test("BasicSink: inFlight does not go below 0 on extra request-out", () => {
+  const sink = new BasicSink();
+  sink.record({ type: "request-out", timestamp: Date.now() });
+  assertEquals(sink.snapshot().inFlight, 0);
+});
+
+Deno.test("BasicSink: lastRunFailed is false with no completed runs", () => {
+  const sink = new BasicSink();
+  assertEquals(sink.snapshot().lastRunFailed, false);
+});
+
+Deno.test("BasicSink: lastRunFailed is false while first run is in flight", () => {
+  const sink = new BasicSink();
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  assertEquals(sink.snapshot().lastRunFailed, false);
+});
+
+Deno.test("BasicSink: lastRunFailed is false after successful run", () => {
+  const sink = new BasicSink();
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  sink.record({ type: "node-start", timestamp: Date.now(), metadata: { node: "a" } });
+  sink.record({ type: "node-complete", timestamp: Date.now(), metadata: { node: "a" } });
+  sink.record({ type: "request-out", timestamp: Date.now() });
+  assertEquals(sink.snapshot().lastRunFailed, false);
+});
+
+Deno.test("BasicSink: lastRunFailed is true after run with node-error", () => {
+  const sink = new BasicSink();
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  sink.record({ type: "node-error", timestamp: Date.now(), metadata: { node: "a", error: "boom" } });
+  sink.record({ type: "request-out", timestamp: Date.now() });
+  assertEquals(sink.snapshot().lastRunFailed, true);
+});
+
+Deno.test("BasicSink: lastRunFailed resets to false after subsequent successful run", () => {
+  const sink = new BasicSink();
+  // First run: fails
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  sink.record({ type: "node-error", timestamp: Date.now(), metadata: { node: "a", error: "e" } });
+  sink.record({ type: "request-out", timestamp: Date.now() });
+  assertEquals(sink.snapshot().lastRunFailed, true);
+  // Second run: succeeds
+  sink.record({ type: "request-in", timestamp: Date.now() });
+  sink.record({ type: "node-complete", timestamp: Date.now(), metadata: { node: "a" } });
+  sink.record({ type: "request-out", timestamp: Date.now() });
+  assertEquals(sink.snapshot().lastRunFailed, false);
 });
 
 // --- NewTelemetrySink factory ---

@@ -15,6 +15,12 @@ export class BasicSink implements TelemetrySink {
   private errorCount = 0;
   private lastError: string | null = null;
   private lastErrorAt: number | null = null;
+  // inFlightCount: incremented on request-in, decremented on request-out
+  private inFlightCount = 0;
+  // lastRunFailed: true if the most recently completed run had at least one node-error
+  private lastRunFailed = false;
+  // errorsInCurrentRun: node-error count since the last request-in
+  private errorsInCurrentRun = 0;
 
   // Ring buffer: fixed-capacity circular array
   private readonly buf: TelemetryEvent[];
@@ -34,6 +40,13 @@ export class BasicSink implements TelemetrySink {
       this.lastErrorAt = event.timestamp;
       const errMsg = event.metadata?.["error"];
       this.lastError = typeof errMsg === "string" ? errMsg : String(errMsg ?? "");
+      this.errorsInCurrentRun++;
+    } else if (event.type === "request-in") {
+      this.inFlightCount++;
+      this.errorsInCurrentRun = 0;
+    } else if (event.type === "request-out") {
+      if (this.inFlightCount > 0) this.inFlightCount--;
+      this.lastRunFailed = this.errorsInCurrentRun > 0;
     }
 
     // Write into ring buffer at head position
@@ -71,6 +84,8 @@ export class BasicSink implements TelemetrySink {
       lastErrorAt: this.lastErrorAt,
       recentEvents,
       status: "ok",
+      lastRunFailed: this.lastRunFailed,
+      inFlight: this.inFlightCount,
     };
   }
 }

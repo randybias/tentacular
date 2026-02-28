@@ -29,6 +29,17 @@ export interface TelemetrySnapshot {
   lastErrorAt: number | null; // epoch ms
   recentEvents: TelemetryEvent[];
   status: "ok";
+  /**
+   * True if the most recently completed execution had at least one node-error.
+   * Resets to false on the next successful run. False if no run has completed yet.
+   * Matches MCP Go struct tag `json:"lastRunFailed"`.
+   */
+  lastRunFailed: boolean;
+  /**
+   * Number of executions currently in flight (request-in without matching request-out).
+   * Matches MCP Go struct tag `json:"inFlight"`.
+   */
+  inFlight: number;
 }
 
 /** TelemetrySink — interface for recording events and reading snapshots. */

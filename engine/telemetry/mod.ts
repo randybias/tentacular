@@ -26,6 +26,8 @@ export class NoopSink implements TelemetrySink {
       lastErrorAt: null,
       recentEvents: [],
       status: "ok",
+      lastRunFailed: false,
+      inFlight: 0,
     };
   }
 }

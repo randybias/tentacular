@@ -109,6 +109,8 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
           headers: { "content-type": "application/json" },
         });
       } catch (err) {
+        // Always emit request-out on unhandled throw so inFlight does not stick.
+        sink.record({ type: "request-out", timestamp: Date.now(), metadata: { path: "/run" } });
         const msg = err instanceof Error ? err.message : String(err);
         return new Response(JSON.stringify({ error: msg }), {
           status: 500,
