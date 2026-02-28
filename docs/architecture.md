@@ -231,14 +231,17 @@ Triggers define how workflow execution is initiated. Each workflow specifies one
 
 | Type | Mechanism | Required Fields | K8s Resources | Status |
 |------|-----------|----------------|---------------|--------|
-| `manual` | HTTP POST `/run` | none | — | Implemented |
-| `cron` | K8s CronJob → curl POST `/run` | `schedule`, optional `name` | CronJob | Implemented |
+| `manual` | MCP server POSTs via K8s API service proxy | none | — | Implemented |
+| `cron` | MCP server internal scheduler reads annotation, calls wf_run | `schedule`, optional `name` | Deployment annotation | Implemented |
 | `queue` | NATS subscription → execute | `subject` | — | Implemented |
 | `webhook` | Future: gateway → NATS bridge | `path` | — | Roadmap |
 
 ### Named Triggers
 
-Triggers can have an optional `name` field for parameterized execution. CronJobs POST `{"trigger": "<name>"}` to `/run`, and root nodes receive this as input. This supports workflows with multiple cron schedules that branch behavior based on `input.trigger`.
+Triggers can have an optional `name` field for parameterized execution. The MCP
+server's internal cron scheduler POSTs `{"trigger": "<name>"}` to `/run`, and
+root nodes receive this as input. This supports workflows with multiple cron
+schedules that branch behavior based on `input.trigger`.
 
 ```yaml
 triggers:
@@ -252,13 +255,17 @@ triggers:
 
 ### Cron Triggers
 
-Cron triggers generate K8s CronJob manifests during `tntc deploy`. Each CronJob uses `curlimages/curl` to POST to the workflow's ClusterIP service at `http://{name}.{namespace}.svc.cluster.local:8080/run`.
+Cron trigger schedules are stored in a `tentacular.dev/cron-schedule` annotation
+on the Deployment during `tntc deploy`. No CronJob resources are created.
 
-- **Naming**: `{wf}-cron` (single trigger) or `{wf}-cron-0`, `{wf}-cron-1` (multiple)
-- **concurrencyPolicy**: `Forbid` (no overlapping runs)
-- **historyLimits**: 3 successful, 3 failed
-- **Labels**: `app.kubernetes.io/name` and `app.kubernetes.io/managed-by: tentacular`
-- **Cleanup**: `tntc undeploy` deletes CronJobs by label selector
+The MCP server's internal cron scheduler (`robfig/cron/v3`) reads this annotation
+on startup and after each `wf_apply`/`wf_remove`. It fires `wf_run` internally
+on schedule via the K8s API service proxy -- no ephemeral pods are created.
+
+- **Annotation**: `tentacular.dev/cron-schedule` on the Deployment
+- **Named trigger**: scheduler POSTs `{"trigger": "<name>"}` to `/run`
+- **Cleanup**: `tntc undeploy` removes the Deployment and annotation; cron entries
+  are dropped automatically on the MCP server's next sync
 
 ### Queue Triggers (NATS)
 
@@ -349,7 +356,7 @@ tntc deploy [dir]
   2. Resolve base image tag via cascade:
      --image flag > env config image > .tentacular/base-image.txt > tentacular-engine:latest
   3. GenerateCodeConfigMap() → ConfigMap with workflow.yaml + nodes/*.ts
-  4. GenerateK8sManifests() → Deployment + Service (+ CronJobs if cron triggers)
+  4. GenerateK8sManifests() → Deployment + Service + NetworkPolicy (cron schedules stored as annotation)
   5. buildSecretManifest() → K8s Secret from .secrets/ or .secrets.yaml
   6. MCP ns_create → ensure namespace exists with PSA labels and NetworkPolicy
   7. MCP wf_apply → create-or-update all manifests via dynamic client
@@ -386,7 +393,7 @@ tntc cluster check        Preflight validation (MCP: cluster_preflight)
 | Deployment | `{workflow-name}` | 1 replica, gVisor RuntimeClass, code volume mount at /app/workflow, security contexts, probes, resource limits |
 | Service | `{workflow-name}` | ClusterIP, port 8080 |
 | Secret | `{workflow-name}-secrets` | Opaque, stringData from .secrets/ or .secrets.yaml |
-| CronJob | `{wf}-cron` or `{wf}-cron-{i}` | Per cron trigger. curlimages/curl, concurrencyPolicy: Forbid, historyLimit: 3 |
+| NetworkPolicy | `{workflow-name}` | Default-deny + contract-derived egress + control-plane ingress (10.0.0.0/8:8080) |
 
 ### Build and Deployment Modes
 

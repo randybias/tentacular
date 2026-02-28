@@ -358,11 +358,6 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 		manifests = append(manifests, *netpol)
 	}
 
-	// Add trigger egress NetworkPolicy if workflow has cron triggers
-	if triggerNetpol := k8s.GenerateTriggerNetworkPolicy(wf, namespace); triggerNetpol != nil {
-		manifests = append(manifests, *triggerNetpol)
-	}
-
 	// Add import map ConfigMap when workflow has jsr/npm module proxy dependencies
 	if k8s.HasModuleProxyDeps(wf) {
 		if importMap := k8s.GenerateImportMapWithNamespace(wf, namespace, proxyURL); importMap != nil {

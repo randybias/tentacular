@@ -63,43 +63,52 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace s
 		egressYAML += proxyEgress
 	}
 
-	// Build ingress rules YAML
-	var ingressYAML string
-	if len(ingressRules) > 0 {
-		ingressYAML = "  ingress:\n"
-		for _, rule := range ingressRules {
-			ingressYAML += "  - from:\n"
-			if rule.FromLabels != nil {
-				ingressYAML += "    - podSelector:\n"
-				ingressYAML += "        matchLabels:\n"
-				// Sort label keys for deterministic output
-				labelKeys := make([]string, 0, len(rule.FromLabels))
-				for k := range rule.FromLabels {
-					labelKeys = append(labelKeys, k)
-				}
-				sort.Strings(labelKeys)
-				for _, k := range labelKeys {
-					ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromLabels[k])
-				}
-			} else {
-				ingressYAML += "    - podSelector: {}\n"
+	// Build ingress rules YAML.
+	// Always include the control plane ingress rule so that wf_run and cron triggers
+	// from the MCP server in tentacular-system can reach the workflow on port 8080.
+	// Uses namespaceSelector instead of ipBlock for precise origin-namespace matching.
+	controlPlaneIngress := `  # Control plane ingress: allows wf_run and cron triggers from MCP server
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: tentacular-system
+    ports:
+    - protocol: TCP
+      port: 8080
+`
+	ingressYAML := "  ingress:\n" + controlPlaneIngress
+	for _, rule := range ingressRules {
+		ingressYAML += "  - from:\n"
+		if rule.FromLabels != nil {
+			ingressYAML += "    - podSelector:\n"
+			ingressYAML += "        matchLabels:\n"
+			// Sort label keys for deterministic output
+			labelKeys := make([]string, 0, len(rule.FromLabels))
+			for k := range rule.FromLabels {
+				labelKeys = append(labelKeys, k)
 			}
-			// Add namespace selector if specified (e.g. allow ingress from istio-system)
-			if rule.FromNamespaceLabels != nil {
-				ingressYAML += "    - namespaceSelector:\n"
-				ingressYAML += "        matchLabels:\n"
-				nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
-				for k := range rule.FromNamespaceLabels {
-					nsLabelKeys = append(nsLabelKeys, k)
-				}
-				sort.Strings(nsLabelKeys)
-				for _, k := range nsLabelKeys {
-					ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
-				}
+			sort.Strings(labelKeys)
+			for _, k := range labelKeys {
+				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromLabels[k])
 			}
-			ingressYAML += fmt.Sprintf("    ports:\n    - protocol: %s\n      port: %d\n",
-				rule.Protocol, rule.Port)
+		} else {
+			ingressYAML += "    - podSelector: {}\n"
 		}
+		// Add namespace selector if specified (e.g. allow ingress from istio-system)
+		if rule.FromNamespaceLabels != nil {
+			ingressYAML += "    - namespaceSelector:\n"
+			ingressYAML += "        matchLabels:\n"
+			nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
+			for k := range rule.FromNamespaceLabels {
+				nsLabelKeys = append(nsLabelKeys, k)
+			}
+			sort.Strings(nsLabelKeys)
+			for _, k := range nsLabelKeys {
+				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
+			}
+		}
+		ingressYAML += fmt.Sprintf("    ports:\n    - protocol: %s\n      port: %d\n",
+			rule.Protocol, rule.Port)
 	}
 
 	// Generate NetworkPolicy manifest
@@ -132,73 +141,6 @@ spec:
 		Kind:    "NetworkPolicy",
 		Name:    wf.Name + "-netpol",
 		Content: manifest,
-	}
-}
-
-// GenerateTriggerNetworkPolicy creates a NetworkPolicy for CronJob trigger pods
-// (labeled tentacular.dev/role: trigger). It allows egress to:
-//   - The workflow engine Service on port 8080 (to POST /run)
-//   - kube-dns on port 53 (DNS resolution)
-//
-// Returns nil if the workflow has no cron triggers.
-//
-// NOTE: There are two implementations of trigger NetworkPolicy generation:
-// this public version in pkg/k8s for use by external callers (e.g., deploy.go),
-// and a private version in pkg/builder/k8s.go used by GenerateK8sManifests().
-// Both produce equivalent output. The duplication exists because pkg/builder
-// cannot import pkg/k8s without creating an import cycle.
-func GenerateTriggerNetworkPolicy(wf *spec.Workflow, namespace string) *builder.Manifest {
-	hasCron := false
-	for _, t := range wf.Triggers {
-		if t.Type == "cron" {
-			hasCron = true
-			break
-		}
-	}
-	if !hasCron {
-		return nil
-	}
-
-	content := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: %s-trigger-netpol
-  namespace: %s
-  labels:
-    app.kubernetes.io/name: %s
-    app.kubernetes.io/managed-by: tentacular
-spec:
-  podSelector:
-    matchLabels:
-      tentacular.dev/role: trigger
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app.kubernetes.io/name: %s
-    ports:
-    - protocol: TCP
-      port: 8080
-  - to:
-    - podSelector:
-        matchLabels:
-          k8s-app: kube-dns
-      namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-    ports:
-    - protocol: UDP
-      port: 53
-    - protocol: TCP
-      port: 53
-`, wf.Name, namespace, wf.Name, wf.Name)
-
-	return &builder.Manifest{
-		Kind:    "NetworkPolicy",
-		Name:    wf.Name + "-trigger-netpol",
-		Content: content,
 	}
 }
 

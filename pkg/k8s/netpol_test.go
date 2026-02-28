@@ -46,9 +46,12 @@ func TestGenerateNetworkPolicyEmptyContract(t *testing.T) {
 		t.Error("expected DNS egress rule for empty contract")
 	}
 
-	// Should have default-deny for ingress (no ingress rules)
+	// Should always have the control plane ingress rule and policyTypes
 	if !strings.Contains(manifest.Content, "policyTypes") {
 		t.Error("expected policyTypes section")
+	}
+	if !strings.Contains(manifest.Content, "ingress:") {
+		t.Error("expected ingress section with control plane ingress rule")
 	}
 }
 
@@ -241,7 +244,8 @@ func TestGenerateNetworkPolicyWebhookTriggerIngress(t *testing.T) {
 	}
 }
 
-func TestGenerateNetworkPolicyNonWebhookTriggerNoIngress(t *testing.T) {
+func TestGenerateNetworkPolicyNonWebhookTriggerHasControlPlaneIngress(t *testing.T) {
+	// All workflows always get the control plane ingress rule for K8s API service proxy.
 	wf := &spec.Workflow{
 		Name:    "test-workflow",
 		Version: "1.0",
@@ -262,9 +266,55 @@ func TestGenerateNetworkPolicyNonWebhookTriggerNoIngress(t *testing.T) {
 		t.Fatal("expected non-nil manifest")
 	}
 
-	// All workflows get namespace-local ingress on port 8080
+	// All workflows get the control plane ingress rule for wf_run from tentacular-system
 	if !strings.Contains(manifest.Content, "ingress:") {
-		t.Error("expected ingress rules for namespace-local access on port 8080")
+		t.Error("expected ingress section for control plane access on port 8080")
+	}
+	if !strings.Contains(manifest.Content, "kubernetes.io/metadata.name: tentacular-system") {
+		t.Error("expected namespaceSelector for tentacular-system in control plane ingress rule")
+	}
+}
+
+func TestGenerateNetworkPolicyControlPlaneIngressAlwaysPresent(t *testing.T) {
+	// The control plane ingress rule must be present for all workflows that have a
+	// contract, regardless of trigger type. This allows wf_run (MCP tool) and the
+	// in-process scheduler to reach the workflow directly.
+	wf := &spec.Workflow{
+		Name:    "cp-ingress-test",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "manual"},
+		},
+		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+		Contract: &spec.Contract{
+			Version:      "1",
+			Dependencies: map[string]spec.Dependency{},
+		},
+	}
+
+	manifest := GenerateNetworkPolicy(wf, "default", "")
+	if manifest == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+
+	// Must have ingress section
+	if !strings.Contains(manifest.Content, "ingress:") {
+		t.Error("expected ingress section in NetworkPolicy")
+	}
+
+	// Must have the namespaceSelector for tentacular-system
+	if !strings.Contains(manifest.Content, "kubernetes.io/metadata.name: tentacular-system") {
+		t.Error("expected namespaceSelector for tentacular-system in control plane ingress rule")
+	}
+
+	// Must have port 8080 in ingress
+	if !strings.Contains(manifest.Content, "port: 8080") {
+		t.Error("expected port 8080 in K8s API service proxy ingress rule")
+	}
+
+	// Must be TCP
+	if !strings.Contains(manifest.Content, "protocol: TCP") {
+		t.Error("expected protocol: TCP in ingress rule")
 	}
 }
 
@@ -685,89 +735,3 @@ contract:
 	}
 }
 
-func TestGenerateTriggerNetworkPolicyNoCronTrigger(t *testing.T) {
-	wf := &spec.Workflow{
-		Name:    "no-cron",
-		Version: "1.0",
-		Triggers: []spec.Trigger{
-			{Type: "manual"},
-			{Type: "webhook", Path: "/hook"},
-		},
-		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
-	}
-
-	manifest := GenerateTriggerNetworkPolicy(wf, "default")
-	if manifest != nil {
-		t.Error("expected nil manifest for workflow without cron trigger")
-	}
-}
-
-func TestGenerateTriggerNetworkPolicyWithCronTrigger(t *testing.T) {
-	wf := &spec.Workflow{
-		Name:    "cron-wf",
-		Version: "1.0",
-		Triggers: []spec.Trigger{
-			{Type: "cron", Schedule: "0 * * * *"},
-		},
-		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
-	}
-
-	manifest := GenerateTriggerNetworkPolicy(wf, "test-ns")
-	if manifest == nil {
-		t.Fatal("expected non-nil manifest for workflow with cron trigger")
-	}
-
-	if manifest.Kind != "NetworkPolicy" {
-		t.Errorf("expected kind NetworkPolicy, got %s", manifest.Kind)
-	}
-	if manifest.Name != "cron-wf-trigger-netpol" {
-		t.Errorf("expected name cron-wf-trigger-netpol, got %s", manifest.Name)
-	}
-
-	// Pod selector must target trigger pods
-	if !strings.Contains(manifest.Content, "tentacular.dev/role: trigger") {
-		t.Error("expected podSelector matching tentacular.dev/role: trigger")
-	}
-
-	// Must allow egress to engine port 8080
-	if !strings.Contains(manifest.Content, "app.kubernetes.io/name: cron-wf") {
-		t.Error("expected egress to engine pod by app.kubernetes.io/name label")
-	}
-	if !strings.Contains(manifest.Content, "port: 8080") {
-		t.Error("expected egress port 8080 to engine service")
-	}
-
-	// Must allow DNS egress
-	if !strings.Contains(manifest.Content, "k8s-app: kube-dns") {
-		t.Error("expected DNS egress rule to kube-dns")
-	}
-	if !strings.Contains(manifest.Content, "port: 53") {
-		t.Error("expected DNS port 53")
-	}
-
-	// Must be Egress-only (trigger pods don't receive ingress)
-	if !strings.Contains(manifest.Content, "- Egress") {
-		t.Error("expected policyTypes to include Egress")
-	}
-	if strings.Contains(manifest.Content, "- Ingress") {
-		t.Error("unexpected Ingress policyType — trigger pods need no ingress")
-	}
-
-	// Must have correct namespace
-	if !strings.Contains(manifest.Content, "namespace: test-ns") {
-		t.Error("expected namespace: test-ns")
-	}
-}
-
-func TestGenerateTriggerNetworkPolicyNoTriggers(t *testing.T) {
-	wf := &spec.Workflow{
-		Name:    "notrigger",
-		Version: "1.0",
-		Nodes:   map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
-	}
-
-	manifest := GenerateTriggerNetworkPolicy(wf, "default")
-	if manifest != nil {
-		t.Error("expected nil manifest for workflow with no triggers")
-	}
-}

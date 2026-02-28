@@ -14,13 +14,10 @@ import (
 	"github.com/randybias/tentacular/pkg/builder"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/fields"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer/yaml"
-	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -545,117 +542,6 @@ func (c *Client) GetPodLogs(ctx context.Context, namespace, name string, follow 
 	}
 
 	return stream, nil
-}
-
-// RunWorkflow triggers a deployed workflow by creating a temporary curl pod that POSTs to the workflow service.
-// Uses --retry and --retry-connrefused so that if NetworkPolicy ipsets haven't synced the pod's IP
-// yet (kube-router race), curl retries automatically with exponential backoff instead of failing.
-// Returns the JSON result from stdout. The temp pod is cleaned up on completion.
-func (c *Client) RunWorkflow(ctx context.Context, namespace, name string) (string, error) {
-	svcURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080/run", name, namespace)
-	podName := fmt.Sprintf("tntc-run-%s-%d", name, time.Now().UnixMilli())
-
-	pod := &corev1.Pod{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      podName,
-			Namespace: namespace,
-			Labels: map[string]string{
-				"app.kubernetes.io/managed-by": "tentacular",
-				"tentacular/run-target":        name,
-				"tentacular.dev/role":          "trigger",
-			},
-		},
-		Spec: corev1.PodSpec{
-			RestartPolicy: corev1.RestartPolicyNever,
-			Containers: []corev1.Container{
-				{
-					Name:  "curl",
-					Image: "curlimages/curl:latest",
-					Command: []string{
-						"curl", "-sf",
-						"--retry", "5",
-						"--retry-connrefused",
-						"--retry-delay", "1",
-						"-X", "POST",
-						"-H", "Content-Type: application/json",
-						"-d", "{}",
-						svcURL,
-					},
-					Resources: corev1.ResourceRequirements{
-						Limits: corev1.ResourceList{
-							corev1.ResourceMemory: resource.MustParse("32Mi"),
-							corev1.ResourceCPU:    resource.MustParse("100m"),
-						},
-					},
-				},
-			},
-		},
-	}
-
-	created, err := c.clientset.CoreV1().Pods(namespace).Create(ctx, pod, metav1.CreateOptions{})
-	if err != nil {
-		return "", fmt.Errorf("creating runner pod: %w", err)
-	}
-
-	// Clean up the temp pod when done
-	defer func() {
-		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-		defer cancel()
-		_ = c.clientset.CoreV1().Pods(namespace).Delete(cleanupCtx, podName, metav1.DeleteOptions{})
-	}()
-
-	// Watch pod until Succeeded or Failed
-	watcher, err := c.clientset.CoreV1().Pods(namespace).Watch(ctx, metav1.ListOptions{
-		FieldSelector: fields.OneTermEqualSelector("metadata.name", podName).String(),
-		Watch:         true,
-	})
-	if err != nil {
-		return "", fmt.Errorf("watching runner pod: %w", err)
-	}
-	defer watcher.Stop()
-
-	// Check if already completed before watching
-	if created.Status.Phase == corev1.PodSucceeded || created.Status.Phase == corev1.PodFailed {
-		// Already done, skip watch
-	} else {
-		for event := range watcher.ResultChan() {
-			if event.Type == watch.Error {
-				return "", fmt.Errorf("watch error")
-			}
-			p, ok := event.Object.(*corev1.Pod)
-			if !ok {
-				continue
-			}
-			if p.Status.Phase == corev1.PodSucceeded || p.Status.Phase == corev1.PodFailed {
-				break
-			}
-		}
-	}
-
-	// Get the final pod status to check phase
-	finalPod, err := c.clientset.CoreV1().Pods(namespace).Get(ctx, podName, metav1.GetOptions{})
-	if err != nil {
-		return "", fmt.Errorf("getting runner pod status: %w", err)
-	}
-
-	// Capture stdout logs
-	logOpts := &corev1.PodLogOptions{}
-	logStream, err := c.clientset.CoreV1().Pods(namespace).GetLogs(podName, logOpts).Stream(ctx)
-	if err != nil {
-		return "", fmt.Errorf("reading runner pod logs: %w", err)
-	}
-	defer logStream.Close()
-
-	var buf bytes.Buffer
-	if _, err := io.Copy(&buf, logStream); err != nil {
-		return "", fmt.Errorf("copying runner pod output: %w", err)
-	}
-
-	if finalPod.Status.Phase == corev1.PodFailed {
-		return "", fmt.Errorf("workflow run failed: %s", buf.String())
-	}
-
-	return buf.String(), nil
 }
 
 // GetDetailedStatus returns extended deployment information including pod details and events.
