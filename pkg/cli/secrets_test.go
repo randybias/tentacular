@@ -359,3 +359,146 @@ func TestResolveSharedSecretsNonSharedSkipped(t *testing.T) {
 		t.Errorf("expected nested key to be unchanged")
 	}
 }
+
+// TestScanContractSecretsBasic verifies that scanContractSecrets extracts the
+// service name from each contract dependency auth.secret field.
+func TestScanContractSecretsBasic(t *testing.T) {
+	// spec.Parse requires version, triggers, and nodes to be non-nil
+	yamlContent := `name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+    postgres:
+      protocol: postgresql
+      host: db.svc
+      port: 5432
+      database: app
+      user: app
+      auth:
+        type: password
+        secret: postgres.password
+`
+	required, err := scanContractSecrets([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !required["github"] {
+		t.Error("expected 'github' from contract dependency auth secret 'github.token'")
+	}
+	if !required["postgres"] {
+		t.Error("expected 'postgres' from contract dependency auth secret 'postgres.password'")
+	}
+	if len(required) != 2 {
+		t.Errorf("expected 2 contract secrets, got %d: %v", len(required), required)
+	}
+}
+
+// TestScanContractSecretsNoDeps verifies that scanContractSecrets returns
+// an empty map when no contract dependencies have auth.
+func TestScanContractSecretsNoDeps(t *testing.T) {
+	yamlContent := `name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+`
+	required, err := scanContractSecrets([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(required) != 0 {
+		t.Errorf("expected 0 contract secrets for deps without auth, got %d: %v", len(required), required)
+	}
+}
+
+// TestScanContractSecretsNoContract verifies that scanContractSecrets handles
+// YAML with no contract section gracefully.
+func TestScanContractSecretsNoContract(t *testing.T) {
+	// spec.Parse returns nil for YAML missing required fields, but scanContractSecrets
+	// should gracefully return empty map in that case.
+	yamlContent := `name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+`
+	required, err := scanContractSecrets([]byte(yamlContent))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(required) != 0 {
+		t.Errorf("expected 0 secrets for contract-less workflow, got %d", len(required))
+	}
+}
+
+// TestScanRequiredSecretsMergesNodeAndContractSecrets verifies that scanRequiredSecrets
+// returns both secrets from node source files AND from contract.dependencies auth.secret
+// fields, so both sources are covered in a single call.
+func TestScanRequiredSecretsMergesNodeAndContractSecrets(t *testing.T) {
+	dir := t.TempDir()
+	nodesDir := filepath.Join(dir, "nodes")
+	os.MkdirAll(nodesDir, 0o755)
+
+	// Node uses ctx.secrets directly (legacy pattern)
+	os.WriteFile(filepath.Join(nodesDir, "fetch.ts"), []byte(
+		`const webhook = ctx.secrets?.slack?.url;`,
+	), 0o644)
+
+	// workflow.yaml has contract with auth.secret (spec.Parse requires full structure)
+	yamlContent := `name: test
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+`
+	os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(yamlContent), 0o644)
+
+	required, err := scanRequiredSecrets(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !required["slack"] {
+		t.Error("expected 'slack' from node source scan")
+	}
+	if !required["github"] {
+		t.Error("expected 'github' from contract auth secret scan")
+	}
+}

@@ -684,3 +684,90 @@ contract:
 		t.Error("expected webhook ingress port 8080")
 	}
 }
+
+func TestGenerateTriggerNetworkPolicyNoCronTrigger(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "no-cron",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "manual"},
+			{Type: "webhook", Path: "/hook"},
+		},
+		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+	}
+
+	manifest := GenerateTriggerNetworkPolicy(wf, "default")
+	if manifest != nil {
+		t.Error("expected nil manifest for workflow without cron trigger")
+	}
+}
+
+func TestGenerateTriggerNetworkPolicyWithCronTrigger(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "cron-wf",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "cron", Schedule: "0 * * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+	}
+
+	manifest := GenerateTriggerNetworkPolicy(wf, "test-ns")
+	if manifest == nil {
+		t.Fatal("expected non-nil manifest for workflow with cron trigger")
+	}
+
+	if manifest.Kind != "NetworkPolicy" {
+		t.Errorf("expected kind NetworkPolicy, got %s", manifest.Kind)
+	}
+	if manifest.Name != "cron-wf-trigger-netpol" {
+		t.Errorf("expected name cron-wf-trigger-netpol, got %s", manifest.Name)
+	}
+
+	// Pod selector must target trigger pods
+	if !strings.Contains(manifest.Content, "tentacular.dev/role: trigger") {
+		t.Error("expected podSelector matching tentacular.dev/role: trigger")
+	}
+
+	// Must allow egress to engine port 8080
+	if !strings.Contains(manifest.Content, "app.kubernetes.io/name: cron-wf") {
+		t.Error("expected egress to engine pod by app.kubernetes.io/name label")
+	}
+	if !strings.Contains(manifest.Content, "port: 8080") {
+		t.Error("expected egress port 8080 to engine service")
+	}
+
+	// Must allow DNS egress
+	if !strings.Contains(manifest.Content, "k8s-app: kube-dns") {
+		t.Error("expected DNS egress rule to kube-dns")
+	}
+	if !strings.Contains(manifest.Content, "port: 53") {
+		t.Error("expected DNS port 53")
+	}
+
+	// Must be Egress-only (trigger pods don't receive ingress)
+	if !strings.Contains(manifest.Content, "- Egress") {
+		t.Error("expected policyTypes to include Egress")
+	}
+	if strings.Contains(manifest.Content, "- Ingress") {
+		t.Error("unexpected Ingress policyType — trigger pods need no ingress")
+	}
+
+	// Must have correct namespace
+	if !strings.Contains(manifest.Content, "namespace: test-ns") {
+		t.Error("expected namespace: test-ns")
+	}
+}
+
+func TestGenerateTriggerNetworkPolicyNoTriggers(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "notrigger",
+		Version: "1.0",
+		Nodes:   map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+	}
+
+	manifest := GenerateTriggerNetworkPolicy(wf, "default")
+	if manifest != nil {
+		t.Error("expected nil manifest for workflow with no triggers")
+	}
+}

@@ -277,8 +277,8 @@ func TestK8sManifestCronTriggerSingle(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "cron-wf:1-0", "default", DeployOptions{})
 
-	if len(manifests) != 3 {
-		t.Fatalf("expected 3 manifests (Deployment, Service, CronJob), got %d", len(manifests))
+	if len(manifests) != 4 {
+		t.Fatalf("expected 4 manifests (Deployment, Service, CronJob, NetworkPolicy), got %d", len(manifests))
 	}
 	if manifests[2].Kind != "CronJob" {
 		t.Errorf("expected third manifest kind CronJob, got %s", manifests[2].Kind)
@@ -314,14 +314,17 @@ func TestK8sManifestCronTriggerMultiple(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "multi-cron:1-0", "default", DeployOptions{})
 
-	if len(manifests) != 4 {
-		t.Fatalf("expected 4 manifests (Deployment, Service, 2 CronJobs), got %d", len(manifests))
+	if len(manifests) != 5 {
+		t.Fatalf("expected 5 manifests (Deployment, Service, 2 CronJobs, NetworkPolicy), got %d", len(manifests))
 	}
 	if manifests[2].Name != "multi-cron-cron-0" {
 		t.Errorf("expected first CronJob name multi-cron-cron-0, got %s", manifests[2].Name)
 	}
 	if manifests[3].Name != "multi-cron-cron-1" {
 		t.Errorf("expected second CronJob name multi-cron-cron-1, got %s", manifests[3].Name)
+	}
+	if manifests[4].Kind != "NetworkPolicy" {
+		t.Errorf("expected fifth manifest kind NetworkPolicy, got %s", manifests[4].Kind)
 	}
 }
 
@@ -875,9 +878,8 @@ func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
 }
 
 func TestDeploymentImportMapMountPath(t *testing.T) {
-	// deno.json must be mounted at /app/engine/deno.json (not /app/deno.json)
-	// because Deno's config discovery finds /app/engine/deno.json first when
-	// the entrypoint is engine/main.ts.
+	// deno.json must be mounted at /app/deno.json so Deno's config discovery
+	// finds it when the entrypoint is /app/mod.ts and "tentacular" resolves to ./mod.ts.
 	wf := &spec.Workflow{
 		Name:    "mount-path-test",
 		Version: "1.0",
@@ -892,11 +894,11 @@ func TestDeploymentImportMapMountPath(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 	dep := manifests[0].Content
-	if !strings.Contains(dep, "/app/engine/deno.json") {
-		t.Error("expected import map mounted at /app/engine/deno.json")
+	if !strings.Contains(dep, "mountPath: /app/deno.json") {
+		t.Error("expected import map mounted at /app/deno.json")
 	}
-	if strings.Contains(dep, "mountPath: /app/deno.json") {
-		t.Error("unexpected mount at /app/deno.json — should be /app/engine/deno.json")
+	if strings.Contains(dep, "/app/engine/deno.json") {
+		t.Error("unexpected mount at /app/engine/deno.json — entrypoint is now /app/mod.ts")
 	}
 }
 

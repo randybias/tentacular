@@ -25,7 +25,7 @@ const DefaultModuleProxyURL = "http://esm-sh.tentacular-support.svc.cluster.loca
 // TODO: auto-sync from engine/deno.json at build time instead of hardcoding here.
 // Keep in sync with engine/deno.json whenever engine deps change.
 var engineDenoImports = map[string]string{
-	"tentacular":              "./engine/mod.ts",
+	"tentacular":              "./mod.ts",
 	"std/":                    "https://deno.land/std@0.224.0/",
 	"std/yaml":                "https://deno.land/std@0.224.0/yaml/mod.ts",
 	"std/path":                "https://deno.land/std@0.224.0/path/mod.ts",
@@ -39,8 +39,9 @@ var engineDenoImports = map[string]string{
 
 // GenerateImportMap produces a ConfigMap manifest containing a merged deno.json that
 // combines engine import entries with jsr:/npm: rewrites pointing to the in-cluster
-// module proxy. Mounted at /app/deno.json, it overrides the image-baked deno.json so
-// Deno auto-discovers it without needing --import-map (which would break engine imports).
+// module proxy. Mounted at /app/deno.json by GenerateK8sManifests, it overrides the
+// image-baked deno.json so Deno auto-discovers it from the /app entrypoint (mod.ts)
+// without needing --import-map (which would break engine imports).
 // Returns nil if the workflow has no jsr/npm dependencies.
 func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 	if wf.Contract == nil || len(wf.Contract.Dependencies) == 0 {

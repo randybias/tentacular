@@ -135,6 +135,73 @@ spec:
 	}
 }
 
+// GenerateTriggerNetworkPolicy creates a NetworkPolicy for CronJob trigger pods
+// (labeled tentacular.dev/role: trigger). It allows egress to:
+//   - The workflow engine Service on port 8080 (to POST /run)
+//   - kube-dns on port 53 (DNS resolution)
+//
+// Returns nil if the workflow has no cron triggers.
+//
+// NOTE: There are two implementations of trigger NetworkPolicy generation:
+// this public version in pkg/k8s for use by external callers (e.g., deploy.go),
+// and a private version in pkg/builder/k8s.go used by GenerateK8sManifests().
+// Both produce equivalent output. The duplication exists because pkg/builder
+// cannot import pkg/k8s without creating an import cycle.
+func GenerateTriggerNetworkPolicy(wf *spec.Workflow, namespace string) *builder.Manifest {
+	hasCron := false
+	for _, t := range wf.Triggers {
+		if t.Type == "cron" {
+			hasCron = true
+			break
+		}
+	}
+	if !hasCron {
+		return nil
+	}
+
+	content := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: %s-trigger-netpol
+  namespace: %s
+  labels:
+    app.kubernetes.io/name: %s
+    app.kubernetes.io/managed-by: tentacular
+spec:
+  podSelector:
+    matchLabels:
+      tentacular.dev/role: trigger
+  policyTypes:
+  - Egress
+  egress:
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: %s
+    ports:
+    - protocol: TCP
+      port: 8080
+  - to:
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+`, wf.Name, namespace, wf.Name, wf.Name)
+
+	return &builder.Manifest{
+		Kind:    "NetworkPolicy",
+		Name:    wf.Name + "-trigger-netpol",
+		Content: content,
+	}
+}
+
 // buildEgressRule creates a NetworkPolicy egress rule based on the host pattern.
 // Three cases:
 // 1. DNS (port 53 to kube-dns): podSelector + namespaceSelector for kube-system
