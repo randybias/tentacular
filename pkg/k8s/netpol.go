@@ -63,26 +63,39 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace s
 		egressYAML += proxyEgress
 	}
 
-	// Build ingress rules YAML.
-	// Always include the control plane ingress rule so that wf_run and cron triggers
-	// from the MCP server in tentacular-system can reach the workflow on port 8080.
-	// Uses namespaceSelector instead of ipBlock for precise origin-namespace matching.
-	controlPlaneIngress := fmt.Sprintf(`  # Control plane ingress: allows wf_run and cron triggers from MCP server
-  - from:
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: %s
-    ports:
-    - protocol: TCP
-      port: 8080
-`, DefaultMCPNamespace)
-	ingressYAML := "  ingress:\n" + controlPlaneIngress
+	// Build ingress rules YAML from derived rules.
+	// DeriveIngressRules always includes the MCP health probe rule (namespaceSelector +
+	// podSelector in one from entry for AND semantics) so no hardcoded rule is needed here.
+	ingressYAML := "  ingress:\n"
 	for _, rule := range ingressRules {
 		ingressYAML += "  - from:\n"
-		if rule.FromLabels != nil {
+		if rule.FromNamespaceLabels != nil && rule.FromLabels != nil {
+			// Both namespace and pod selectors: combine into a single from entry (AND semantics).
+			// K8s treats selectors in the same from entry as AND, separate entries as OR.
+			ingressYAML += "    - namespaceSelector:\n"
+			ingressYAML += "        matchLabels:\n"
+			nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
+			for k := range rule.FromNamespaceLabels {
+				nsLabelKeys = append(nsLabelKeys, k)
+			}
+			sort.Strings(nsLabelKeys)
+			for _, k := range nsLabelKeys {
+				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
+			}
+			ingressYAML += "      podSelector:\n"
+			ingressYAML += "        matchLabels:\n"
+			labelKeys := make([]string, 0, len(rule.FromLabels))
+			for k := range rule.FromLabels {
+				labelKeys = append(labelKeys, k)
+			}
+			sort.Strings(labelKeys)
+			for _, k := range labelKeys {
+				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromLabels[k])
+			}
+		} else if rule.FromLabels != nil {
+			// Pod selector only (same namespace)
 			ingressYAML += "    - podSelector:\n"
 			ingressYAML += "        matchLabels:\n"
-			// Sort label keys for deterministic output
 			labelKeys := make([]string, 0, len(rule.FromLabels))
 			for k := range rule.FromLabels {
 				labelKeys = append(labelKeys, k)
@@ -93,18 +106,18 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace s
 			}
 		} else {
 			ingressYAML += "    - podSelector: {}\n"
-		}
-		// Add namespace selector if specified (e.g. allow ingress from istio-system)
-		if rule.FromNamespaceLabels != nil {
-			ingressYAML += "    - namespaceSelector:\n"
-			ingressYAML += "        matchLabels:\n"
-			nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
-			for k := range rule.FromNamespaceLabels {
-				nsLabelKeys = append(nsLabelKeys, k)
-			}
-			sort.Strings(nsLabelKeys)
-			for _, k := range nsLabelKeys {
-				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
+			// Namespace selector only when no pod label filter (e.g. istio-system)
+			if rule.FromNamespaceLabels != nil {
+				ingressYAML += "    - namespaceSelector:\n"
+				ingressYAML += "        matchLabels:\n"
+				nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
+				for k := range rule.FromNamespaceLabels {
+					nsLabelKeys = append(nsLabelKeys, k)
+				}
+				sort.Strings(nsLabelKeys)
+				for _, k := range nsLabelKeys {
+					ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
+				}
 			}
 		}
 		ingressYAML += fmt.Sprintf("    ports:\n    - protocol: %s\n      port: %d\n",
@@ -216,4 +229,71 @@ func buildEgressRule(rule spec.EgressRule) string {
     - protocol: %s
       port: %d
 `, toBlock, rule.Protocol, rule.Port)
+}
+
+// GenerateTriggerNetworkPolicy creates a NetworkPolicy for trigger pods (e.g. cron).
+// Returns nil if the workflow has no cron trigger.
+// Trigger pods need egress to the engine pod on port 8080 and DNS, but no ingress.
+func GenerateTriggerNetworkPolicy(wf *spec.Workflow, namespace string) *builder.Manifest {
+	hasCron := false
+	for _, t := range wf.Triggers {
+		if t.Type == "cron" {
+			hasCron = true
+			break
+		}
+	}
+	if !hasCron {
+		return nil
+	}
+
+	manifest := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: %s-trigger-netpol
+  namespace: %s
+  labels:
+    app.kubernetes.io/name: %s
+    app.kubernetes.io/managed-by: tentacular
+spec:
+  podSelector:
+    matchLabels:
+      tentacular.dev/role: trigger
+      app.kubernetes.io/name: %s
+  policyTypes:
+  - Egress
+  egress:
+  # Engine egress: allow trigger pod to call the engine on port 8080
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: %s
+    ports:
+    - protocol: TCP
+      port: 8080
+  # DNS egress (UDP and TCP for consistency with workflow netpol)
+  - to:
+    - podSelector:
+        matchLabels:
+          k8s-app: kube-dns
+      namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: kube-system
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+`,
+		wf.Name,
+		namespace,
+		wf.Name,
+		wf.Name,
+		wf.Name,
+	)
+
+	return &builder.Manifest{
+		Kind:    "NetworkPolicy",
+		Name:    wf.Name + "-trigger-netpol",
+		Content: manifest,
+	}
 }
