@@ -28,6 +28,7 @@ scratch/
 .claude/
 .codex/
 .gemini/
+.mcp.json
 CLAUDE.md
 
 # IDE

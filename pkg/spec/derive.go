@@ -258,23 +258,19 @@ func HasModuleProxyDeps(wf *Workflow) bool {
 // When all dependencies are fixed-host, returns scoped --allow-net=host1:port,host2:port,...
 // Always includes 0.0.0.0:8080 in scoped mode for internal health endpoints.
 // When jsr/npm deps are present, adds the module proxy host to the scoped allow list.
-// Scopes --allow-env to DENO_DIR,HOME only.
+// Scopes --allow-env to DENO_DIR,HOME,TELEMETRY_SINK.
 func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 	if c == nil || len(c.Dependencies) == 0 {
 		return nil
 	}
 
-	// Check if any dependency is dynamic-target or uses the module proxy (jsr/npm)
+	// Check if any dependency is dynamic-target
 	hasDynamic := false
-	hasModuleProxyDeps := false
 	var allowedHosts []string
 	for _, dep := range c.Dependencies {
 		if dep.Type == "dynamic-target" {
 			hasDynamic = true
 			break
-		}
-		if dep.Protocol == "jsr" || dep.Protocol == "npm" {
-			hasModuleProxyDeps = true
 		}
 	}
 
@@ -308,8 +304,8 @@ func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 			}
 		}
 
-		// Add module proxy host when jsr/npm deps are present
-		if hasModuleProxyDeps && !seen[proxyHost] {
+		// Always add module proxy host — engine jsr: deps route through esm.sh
+		if proxyHost != "" && !seen[proxyHost] {
 			allowedHosts = append(allowedHosts, proxyHost)
 			seen[proxyHost] = true
 		}
@@ -332,7 +328,7 @@ func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 		allowNetFlag,
 		"--allow-read=/app",
 		"--allow-write=/tmp",
-		"--allow-env=DENO_DIR,HOME",
+		"--allow-env=DENO_DIR,HOME,TELEMETRY_SINK",
 	}
 
 	// Deno 2 requires explicit --allow-import permission for any host from which
@@ -340,12 +336,16 @@ func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 	// allowlist (which includes deno.land, esm.sh, jsr.io, etc.) rather than
 	// extending it, so we must enumerate every host the engine needs.
 	//
-	// We always need deno.land because:
-	//   - The engine's std lib imports resolve to https://deno.land/std@...
-	//   - DENO_DIR=/tmp/deno-cache is empty at pod start (image is built as uid
-	//     1000 / deno user; pod runs as uid 65534 / nobody so the image-baked
-	//     cache at ~/.cache/deno is not readable), forcing Deno to re-fetch.
-	if hasModuleProxyDeps {
+	// Top-level imports route through the in-cluster esm.sh proxy via the import map:
+	//   - Engine jsr: deps → proxy /jsr/ path
+	//   - Engine deno.land/std imports → proxy /gh/denoland/deno_std@ path
+	//   - Workflow jsr/npm deps → proxy /jsr/ and / paths
+	//
+	// deno.land:443 is still required because deno_std modules have internal
+	// cross-references using absolute https://deno.land/... URLs that the import
+	// map cannot intercept. This will be removed when the engine migrates from
+	// deno.land/std to jsr:@std/* packages (which esm.sh serves natively).
+	if proxyHost != "" {
 		flags = append(flags, "--allow-import=deno.land:443,"+proxyHost)
 	}
 

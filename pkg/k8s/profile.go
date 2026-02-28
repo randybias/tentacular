@@ -283,6 +283,9 @@ func detectDistribution(nodes *corev1.NodeList) string {
 		if v, ok := labels["node.kubernetes.io/instance-type"]; ok && strings.HasPrefix(v, "k3s") {
 			return "k3s"
 		}
+		if _, ok := labels["node.k0sproject.io/role"]; ok {
+			return "k0s"
+		}
 	}
 	return "vanilla"
 }
@@ -296,6 +299,8 @@ func detectCNI(pods *corev1.PodList) CNIInfo {
 			return CNIInfo{Name: "calico", NetworkPolicySupported: true, EgressSupported: true}
 		case app == "cilium":
 			return CNIInfo{Name: "cilium", NetworkPolicySupported: true, EgressSupported: true}
+		case app == "kube-router":
+			return CNIInfo{Name: "kube-router", NetworkPolicySupported: true, EgressSupported: true}
 		case strings.Contains(name, "weave"):
 			return CNIInfo{Name: "weave", NetworkPolicySupported: true, EgressSupported: true}
 		case strings.Contains(name, "flannel"):

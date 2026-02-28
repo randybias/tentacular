@@ -358,11 +358,15 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 		manifests = append(manifests, *netpol)
 	}
 
-	// Add import map ConfigMap when workflow has jsr/npm module proxy dependencies
-	if k8s.HasModuleProxyDeps(wf) {
-		if importMap := k8s.GenerateImportMapWithNamespace(wf, namespace, proxyURL); importMap != nil {
-			manifests = append(manifests, *importMap)
-			fmt.Fprintf(w, "  Module proxy: import map generated (%d jsr/npm deps)\n", countModuleProxyDeps(wf))
+	// Always generate import map — engine jsr: deps must route through the module proxy.
+	// Workflow namespaces cannot reach external registries directly.
+	if importMap := k8s.GenerateImportMapWithNamespace(wf, namespace, proxyURL); importMap != nil {
+		manifests = append(manifests, *importMap)
+		wfDeps := countModuleProxyDeps(wf)
+		if wfDeps > 0 {
+			fmt.Fprintf(w, "  Module proxy: import map generated (%d jsr/npm workflow deps + engine deps)\n", wfDeps)
+		} else {
+			fmt.Fprintf(w, "  Module proxy: import map generated (engine deps)\n")
 		}
 	}
 
@@ -437,7 +441,7 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 		fmt.Fprintf(w, "  applied %s\n", applied)
 	}
 
-	if applyResult.Updated {
+	if applyResult.Updated > 0 {
 		fmt.Fprintln(w, "  Triggered rollout restart")
 	}
 

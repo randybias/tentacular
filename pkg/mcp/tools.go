@@ -19,7 +19,7 @@ type WfApplyParams struct {
 type WfApplyResult struct {
 	Status  string   `json:"status"`  // "created" | "updated" | "unchanged"
 	Applied []string `json:"applied"` // resource names applied
-	Updated bool     `json:"updated"` // true if any resource was updated vs created
+	Updated int      `json:"updated"` // count of resources updated (vs created)
 }
 
 // WfApply calls the wf_apply MCP tool to apply workflow manifests.

@@ -132,3 +132,32 @@ The following issues have been fixed. See [roadmap.md](roadmap.md) Archive secti
 - **Version Label YAML Float Parsing** -- `app.kubernetes.io/version` label is now YAML-quoted (`"1.0"`) to prevent float interpretation
 - **Deployment Args Numeric YAML Quoting** -- Numeric values in Deployment `args:` (e.g., port `8080`) are now YAML-quoted (`"8080"`) to prevent K8s rejecting them as non-string types
 - **kube-router NetworkPolicy ipset Sync Race** -- kube-router populates `podSelector` ipsets asynchronously. This was previously a problem for ephemeral trigger pods. With the elimination of curl-based trigger pods (replaced by K8s API service proxy in the MCP server), this race no longer affects `tntc run` or cron triggers. It may still affect other ephemeral pods (e.g., gVisor verification pods) on first connection.
+
+---
+
+### Fixed in Current Branch
+
+#### Cron Schedule YAML Annotation Quoting
+- Cron schedule values like `*/5 * * * *` must be quoted in YAML annotations because `*` is the YAML alias character
+- Fixed: `pkg/builder/k8s.go` now wraps annotation value in double quotes
+
+#### K8s Secret Values Must Be JSON-Structured
+- The engine reads secrets from `/app/secrets/<service>` and parses each file as JSON
+- Contract reference `secret: openai.api_key` means: K8s Secret key = `openai`, value = `{"api_key":"sk-..."}`
+- Plain text values are silently ignored — `ctx.dependency().secret` returns null
+- Fixed by documenting and validating in E2E tests
+
+#### CNI Detection Missing kube-router
+- Cluster profiling did not detect kube-router (k0s default CNI)
+- Fixed: `pkg/k8s/profile.go` now detects `k8s-app: kube-router` pods with NetworkPolicy + egress support
+- Also added k0s distribution detection via `node.k0sproject.io/role` node label
+
+#### Module Proxy Import Maps Not Always Generated
+- Import maps were only generated when the workflow had jsr/npm contract deps
+- The engine itself has jsr: deps that need the proxy — import maps must always be generated
+- Fixed: import map generation is now unconditional
+
+#### deno.land/std URLs Not Routed Through Proxy
+- Engine deno.land/std imports bypassed the module proxy
+- Fixed: `rewriteDenoLandURL()` rewrites to `/gh/denoland/deno_std@version/path` proxy path
+- `deno.land:443` still required in `--allow-import` for transitive cross-references within deno_std

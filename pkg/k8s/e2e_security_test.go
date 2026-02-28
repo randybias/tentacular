@@ -103,12 +103,12 @@ contract:
 	// Should have scoped --allow-env
 	foundScopedEnv := false
 	for _, flag := range denoFlags {
-		if flag == "--allow-env=DENO_DIR,HOME" {
+		if flag == "--allow-env=DENO_DIR,HOME,TELEMETRY_SINK" {
 			foundScopedEnv = true
 		}
 	}
 	if !foundScopedEnv {
-		t.Error("expected --allow-env=DENO_DIR,HOME in derived flags")
+		t.Error("expected --allow-env=DENO_DIR,HOME,TELEMETRY_SINK in derived flags")
 	}
 
 	// Step 4: Verify derived secrets

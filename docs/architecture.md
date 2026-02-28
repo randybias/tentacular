@@ -261,8 +261,9 @@ Cron trigger schedules are stored in a `tentacular.dev/cron-schedule` annotation
 on the Deployment during `tntc deploy`. No CronJob resources are created.
 
 The MCP server's internal cron scheduler (`robfig/cron/v3`) reads this annotation
-on startup and after each `wf_apply`/`wf_remove`. It fires `wf_run` internally
-on schedule via the K8s API service proxy -- no ephemeral pods are created.
+on startup and after each `wf_apply`/`wf_remove`. It fires an HTTP POST to the
+workflow's `/run` endpoint (via the K8s API service proxy) on schedule -- no
+CronJob resources or ephemeral pods are created.
 
 - **Annotation**: `tentacular.dev/cron-schedule` on the Deployment
 - **Named trigger**: scheduler POSTs `{"trigger": "<name>"}` to `/run`
@@ -325,7 +326,7 @@ The base image ENTRYPOINT uses broad Deno permission flags as a fallback:
 - `--allow-write=/tmp` — write access only to /tmp (ephemeral scratch, limited to 512Mi)
 - `--allow-env` — environment variable access for runtime configuration
 
-**Contract-derived scoping:** When a workflow declares `contract.dependencies`, the K8s Deployment manifest overrides the ENTRYPOINT with scoped flags via `command` and `args`. The `DeriveDenoFlags()` function generates `--allow-net=<host1>:<port>,<host2>:<port>,0.0.0.0:8080`, restricting network access to only declared dependency hosts and the trigger listener port. If any dependency has `type: dynamic-target`, the function falls back to broad `--allow-net` (no host restriction) since targets are resolved at runtime. The `--allow-env` flag is scoped to `DENO_DIR,HOME` only (narrower than the ENTRYPOINT fallback). Numeric args like port `8080` are YAML-quoted to prevent integer interpretation by K8s.
+**Contract-derived scoping:** When a workflow declares `contract.dependencies`, the K8s Deployment manifest overrides the ENTRYPOINT with scoped flags via `command` and `args`. The `DeriveDenoFlags()` function generates `--allow-net=<host1>:<port>,<host2>:<port>,0.0.0.0:8080`, restricting network access to only declared dependency hosts and the trigger listener port. If any dependency has `type: dynamic-target`, the function falls back to broad `--allow-net` (no host restriction) since targets are resolved at runtime. The `--allow-env` flag is scoped to `DENO_DIR,HOME,TELEMETRY_SINK` only (narrower than the ENTRYPOINT fallback). Numeric args like port `8080` are YAML-quoted to prevent integer interpretation by K8s.
 
 No subprocess, FFI, or unrestricted file system access beyond the declared paths.
 
@@ -384,6 +385,9 @@ tntc deploy [dir]
   2. Resolve base image tag via cascade:
      --image flag > env config image > .tentacular/base-image.txt > tentacular-engine:latest
   3. GenerateCodeConfigMap() → ConfigMap with workflow.yaml + nodes/*.ts
+  3b. GenerateImportMapConfigMap() → ConfigMap `{name}-import-map` with deno.json (always generated;
+      jsr deps route through esm.sh proxy in tentacular-support, deno.land/std URLs rewritten
+      through proxy via `/gh/denoland/deno_std@version/path`)
   4. GenerateK8sManifests() → Deployment + Service + NetworkPolicy (cron schedules stored as annotation)
   5. buildSecretManifest() → K8s Secret from .secrets/ or .secrets.yaml
   6. MCP ns_create → ensure namespace exists with PSA labels and NetworkPolicy
@@ -418,6 +422,7 @@ tntc cluster check        Preflight validation (MCP: cluster_preflight)
 | Resource | Name | Key Fields |
 |----------|------|------------|
 | ConfigMap | `{workflow-name}-code` | Contains workflow.yaml + nodes/*.ts (max 900KB). Mounted at /app/workflow |
+| ConfigMap | `{workflow-name}-import-map` | deno.json import map (always generated). jsr/std deps rewritten through esm.sh proxy |
 | Deployment | `{workflow-name}` | 1 replica, gVisor RuntimeClass, code volume mount at /app/workflow, security contexts, probes, resource limits |
 | Service | `{workflow-name}` | ClusterIP, port 8080 |
 | Secret | `{workflow-name}-secrets` | Opaque, stringData from .secrets/ or .secrets.yaml |
@@ -479,6 +484,10 @@ stripe:
   github     → {"token": "ghp_abc123"}   (JSON parsed)
   api-token  → my-plain-token             (wrapped as {value: "..."})
 ```
+
+### K8s Secret Value Format
+
+K8s Secret values must be JSON objects. The contract reference `secret: openai.api_key` maps to: K8s Secret key = `openai`, value = `{"api_key":"sk-..."}`. At runtime the engine performs a `secrets[serviceName][keyName]` lookup.
 
 ### Deploy-Time Provisioning
 
@@ -595,7 +604,7 @@ Compiles to:
 
 ### k0s Cluster
 
-The target deployment environment is a k0s Kubernetes cluster — a lightweight, single-binary distribution suitable for edge and small-scale deployments.
+The target deployment environment is a k0s Kubernetes cluster — a lightweight, single-binary distribution suitable for edge and small-scale deployments. The MCP server's `cluster_profile` tool detects k0s via the `node.k0sproject.io/role` label on nodes and identifies kube-router (the k0s default CNI) for NetworkPolicy compatibility checks.
 
 ### Container Registry
 

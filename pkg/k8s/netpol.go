@@ -42,9 +42,9 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace s
 		}
 	}
 
-	// Add module proxy egress rule when workflow has jsr/npm dependencies.
-	// Workflow pods route all jsr:/npm: imports through the in-cluster esm.sh service.
-	if HasModuleProxyDeps(wf) {
+	// Always add module proxy egress — engine jsr: deps must route through esm.sh.
+	// Workflow namespaces cannot reach external registries directly.
+	{
 		proxyEgress := fmt.Sprintf(`  # Module proxy (esm.sh): resolves jsr: and npm: imports
   - to:
     - namespaceSelector:
