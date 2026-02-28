@@ -39,7 +39,7 @@ After install, the MCP endpoint and token are saved to ~/.tentacular/config.yaml
 so subsequent tntc commands automatically find and use the MCP server.`,
 		RunE: runClusterInstall,
 	}
-	install.Flags().String("namespace", "tentacular-system", "Namespace to install MCP server into")
+	install.Flags().String("namespace", k8s.DefaultMCPNamespace, "Namespace to install MCP server into")
 	install.Flags().String("proxy-namespace", k8s.DefaultProxyNamespace, "Namespace to install module proxy into")
 	install.Flags().String("image", "", "MCP server image (default: "+k8s.DefaultMCPImage+")")
 	install.Flags().Bool("module-proxy", true, "Install esm.sh module proxy for jsr/npm dep resolution")
