@@ -67,15 +67,15 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace s
 	// Always include the control plane ingress rule so that wf_run and cron triggers
 	// from the MCP server in tentacular-system can reach the workflow on port 8080.
 	// Uses namespaceSelector instead of ipBlock for precise origin-namespace matching.
-	controlPlaneIngress := `  # Control plane ingress: allows wf_run and cron triggers from MCP server
+	controlPlaneIngress := fmt.Sprintf(`  # Control plane ingress: allows wf_run and cron triggers from MCP server
   - from:
     - namespaceSelector:
         matchLabels:
-          kubernetes.io/metadata.name: tentacular-system
+          kubernetes.io/metadata.name: %s
     ports:
     - protocol: TCP
       port: 8080
-`
+`, DefaultMCPNamespace)
 	ingressYAML := "  ingress:\n" + controlPlaneIngress
 	for _, rule := range ingressRules {
 		ingressYAML += "  - from:\n"
