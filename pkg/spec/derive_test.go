@@ -327,8 +327,8 @@ func TestDeriveDenoFlagsFixedHostScoped(t *testing.T) {
 	}
 
 	// Should include scoped --allow-env
-	if allowEnvFlag != "--allow-env=DENO_DIR,HOME" {
-		t.Errorf("expected --allow-env=DENO_DIR,HOME, got %s", allowEnvFlag)
+	if allowEnvFlag != "--allow-env=DENO_DIR,HOME,TELEMETRY_SINK" {
+		t.Errorf("expected --allow-env=DENO_DIR,HOME,TELEMETRY_SINK, got %s", allowEnvFlag)
 	}
 }
 
@@ -516,16 +516,16 @@ func TestDeriveDenoFlagsScopedAllowEnv(t *testing.T) {
 		t.Fatal("expected non-nil flags")
 	}
 
-	// Should include scoped --allow-env=DENO_DIR,HOME
+	// Should include scoped --allow-env=DENO_DIR,HOME,TELEMETRY_SINK
 	foundAllowEnv := false
 	for _, flag := range flags {
-		if flag == "--allow-env=DENO_DIR,HOME" {
+		if flag == "--allow-env=DENO_DIR,HOME,TELEMETRY_SINK" {
 			foundAllowEnv = true
 			break
 		}
 	}
 
 	if !foundAllowEnv {
-		t.Errorf("expected --allow-env=DENO_DIR,HOME in derived flags, got %v", flags)
+		t.Errorf("expected --allow-env=DENO_DIR,HOME,TELEMETRY_SINK in derived flags, got %v", flags)
 	}
 }

@@ -10,15 +10,18 @@ import (
 )
 
 func TestGenerateImportMapWithNamespace(t *testing.T) {
-	t.Run("returns nil for workflow without contract", func(t *testing.T) {
+	t.Run("generates import map for workflow without contract (engine deps)", func(t *testing.T) {
 		wf := &spec.Workflow{Name: "no-contract"}
 		got := GenerateImportMapWithNamespace(wf, "default", "")
-		if got != nil {
-			t.Error("expected nil for contract-less workflow")
+		if got == nil {
+			t.Fatal("expected non-nil — engine jsr deps always need proxying")
+		}
+		if !strings.Contains(got.Content, "jsr/@nats-io/transport-deno") {
+			t.Error("expected engine NATS dep rewritten through proxy")
 		}
 	})
 
-	t.Run("returns nil for workflow with no jsr/npm deps", func(t *testing.T) {
+	t.Run("generates import map for workflow with no jsr/npm deps (engine deps)", func(t *testing.T) {
 		wf := &spec.Workflow{
 			Name: "https-only",
 			Contract: &spec.Contract{
@@ -29,8 +32,11 @@ func TestGenerateImportMapWithNamespace(t *testing.T) {
 			},
 		}
 		got := GenerateImportMapWithNamespace(wf, "default", "")
-		if got != nil {
-			t.Error("expected nil for workflow with no jsr/npm deps")
+		if got == nil {
+			t.Fatal("expected non-nil — engine jsr deps always need proxying")
+		}
+		if !strings.Contains(got.Content, "jsr/@nats-io/transport-deno") {
+			t.Error("expected engine NATS dep rewritten through proxy")
 		}
 	})
 
@@ -191,6 +197,53 @@ func TestGenerateImportMapContainsEngineEntries(t *testing.T) {
 	// Workflow entry must also be present
 	if !strings.Contains(got.Content, "jsr:@db/postgres") {
 		t.Error("expected workflow jsr entry in merged deno.json")
+	}
+}
+
+func TestImportMapRewritesDenoLandURLs(t *testing.T) {
+	// All deno.land/std URLs must be rewritten through the esm.sh proxy to ensure
+	// workflow pods never need direct egress to deno.land.
+	wf := &spec.Workflow{Name: "std-proxy-check"}
+	proxy := "http://esm-sh.tentacular-support.svc.cluster.local:8080"
+	got := GenerateImportMapWithNamespace(wf, "default", proxy)
+	if got == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+
+	// No direct deno.land URLs should remain in the generated import map
+	if strings.Contains(got.Content, "https://deno.land") {
+		t.Error("expected all deno.land URLs rewritten through proxy, but found direct deno.land URL")
+	}
+
+	// Verify proxy GitHub path pattern for std lib
+	if !strings.Contains(got.Content, proxy+"/gh/denoland/deno_std@") {
+		t.Error("expected deno.land/std rewritten to proxy /gh/denoland/deno_std@ path")
+	}
+
+	// Specific entry check: std/yaml should be rewritten
+	if !strings.Contains(got.Content, proxy+"/gh/denoland/deno_std@0.224.0/yaml/mod.ts") {
+		t.Errorf("expected std/yaml rewritten through proxy, got:\n%s", got.Content)
+	}
+}
+
+func TestRewriteDenoLandURL(t *testing.T) {
+	proxy := "http://proxy:8080"
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"https://deno.land/std@0.224.0/yaml/mod.ts", proxy + "/gh/denoland/deno_std@0.224.0/yaml/mod.ts"},
+		{"https://deno.land/std@0.224.0/", proxy + "/gh/denoland/deno_std@0.224.0/"},
+		{"https://deno.land/std@0.224.0/path/mod.ts", proxy + "/gh/denoland/deno_std@0.224.0/path/mod.ts"},
+		{"./mod.ts", ""},          // not a deno.land URL
+		{"jsr:@std/yaml", ""},     // jsr, not deno.land
+		{"https://example.com", ""}, // not deno.land
+	}
+	for _, tt := range tests {
+		got := rewriteDenoLandURL(tt.input, proxy)
+		if got != tt.want {
+			t.Errorf("rewriteDenoLandURL(%q) = %q, want %q", tt.input, got, tt.want)
+		}
 	}
 }
 

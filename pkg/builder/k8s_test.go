@@ -287,7 +287,7 @@ func TestK8sManifestCronTriggerSingle(t *testing.T) {
 		}
 	}
 	dep := manifests[0].Content
-	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 9 * * *") {
+	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation on Deployment with schedule")
 	}
 }
@@ -343,7 +343,7 @@ func TestK8sManifestCronTriggerNamedScheduleAnnotation(t *testing.T) {
 	manifests := GenerateK8sManifests(wf, "named-cron:1-0", "default", DeployOptions{})
 
 	dep := manifests[0].Content
-	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 9 * * *") {
+	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation with schedule on Deployment")
 	}
 }
@@ -407,7 +407,7 @@ func TestK8sManifestCronTriggerAnnotationOnlyTwoManifests(t *testing.T) {
 		t.Fatalf("expected 2 manifests (Deployment+Service), got %d", len(manifests))
 	}
 	dep := manifests[0].Content
-	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 9 * * *") {
+	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation on Deployment")
 	}
 }
@@ -918,7 +918,7 @@ func TestBuildDeployAnnotationsCronScheduleSingle(t *testing.T) {
 		{Type: "cron", Schedule: "0 9 * * *"},
 	}
 	result := buildDeployAnnotations(nil, triggers)
-	if !strings.Contains(result, "tentacular.dev/cron-schedule: 0 9 * * *") {
+	if !strings.Contains(result, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation with single schedule")
 	}
 }
@@ -930,7 +930,7 @@ func TestBuildDeployAnnotationsCronScheduleMultiple(t *testing.T) {
 		{Type: "cron", Schedule: "0 * * * *"},
 	}
 	result := buildDeployAnnotations(nil, triggers)
-	if !strings.Contains(result, "tentacular.dev/cron-schedule: 0 9 * * *,0 * * * *") {
+	if !strings.Contains(result, `tentacular.dev/cron-schedule: "0 9 * * *,0 * * * *"`) {
 		t.Errorf("expected comma-joined schedules in cron-schedule annotation, got: %q", result)
 	}
 }

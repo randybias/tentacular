@@ -144,7 +144,7 @@ func TestE2E_CronTriggerAnnotationOnDeployment(t *testing.T) {
 
 	// The cron schedule should appear as an annotation on the Deployment.
 	dep := manifests[0].Content
-	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 8 * * *") {
+	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 8 * * *"`) {
 		t.Error("expected cron-schedule annotation on Deployment with schedule")
 	}
 }

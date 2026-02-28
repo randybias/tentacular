@@ -44,7 +44,7 @@ Port:       8080
 Storage:    emptyDir (default) or PVC (opt-in via config)
 NetworkPolicy:
   ingress:  from any pod in any namespace on port 8080
-  egress:   jsr.io:443, registry.npmjs.org:443, cdn.deno.land:443
+  egress:   jsr.io:443, registry.npmjs.org:443, cdn.deno.land:443, raw.githubusercontent.com:443
 ```
 
 Config flags (passed via env or config file):
@@ -65,27 +65,40 @@ the internal esm.sh URL, then stores it as a ConfigMap:
 }
 ```
 
-**Source of truth for the rewrite:** the workflow's `contract.dependencies` section. Each
-dependency with a `jsr:` or `npm:` protocol gets an entry. Version is taken from the contract;
-if omitted, `*` (latest) is used.
+Import maps are **always generated**, not conditional on a contract or jsr/npm deps. The engine
+itself has `jsr:` dependencies (e.g., `@nats-io/transport-deno`) that must route through the
+module proxy, so every workflow pod receives an import map. Contract-declared dependencies are
+merged in on top of the engine's baseline entries. Version is taken from the contract; if
+omitted, `*` (latest) is used.
 
-ConfigMap name: `<workflow-name>-import-map`  
-Mounted at: `/app/workflow/import_map.json`
+`deno.land/std` URLs are rewritten through the esm.sh proxy using the GitHub proxy feature:
+`/gh/denoland/deno_std@<version>/<path>`. This means no direct `deno.land` egress is needed
+from workflow pods; the module proxy fetches from `raw.githubusercontent.com` on their behalf.
 
-### 3. Deno Engine Flag
+ConfigMap name: `<workflow-name>-import-map`
+Mounted at: `/app/engine/deno.json`
 
-The engine `ENTRYPOINT` gains one flag:
+### 3. Deno Engine Flags
+
+The engine `ENTRYPOINT` uses:
 
 ```
-deno run --allow-net --import-map=/app/workflow/import_map.json engine/main.ts
+deno run \
+  --allow-net \
+  --allow-env=DENO_DIR,HOME,TELEMETRY_SINK \
+  --allow-import=deno.land:443,<proxy-host> \
+  engine/main.ts
 ```
 
-The import map is only mounted if a `contract` section exists in the workflow. Contract-less
-workflows are unaffected.
+- No `--import-map` flag is needed. Deno auto-discovers `deno.json` from `/app/engine/`.
+- `--allow-env` includes `TELEMETRY_SINK` for the telemetry sink endpoint.
+- `--allow-import` includes `deno.land:443` because it is still needed for transitive
+  cross-references within `deno_std`, even though the actual module bytes route through
+  the proxy. `<proxy-host>` is the cluster-local esm.sh service hostname.
 
 ### 4. Workflow Pod NetworkPolicy
 
-Workflow pods with a contract get this egress rule added automatically:
+All workflow pods get this egress rule automatically:
 
 ```yaml
 - to:
@@ -128,9 +141,9 @@ moduleProxy:
 
 ## NetworkPolicy Behaviour
 
-Once the module proxy is installed and a workflow is deployed with `jsr`/`npm` deps, the
-generated NetworkPolicy for that workflow pod contains **no egress to `jsr.io` or
-`registry.npmjs.org`**. The only dep-related egress is to `esm-sh.tentacular-support:8080`.
+Once the module proxy is installed, the generated NetworkPolicy for every workflow pod contains
+**no egress to `jsr.io`, `registry.npmjs.org`, or `deno.land`**. The only dep-related egress
+is to `esm-sh.tentacular-support:8080`.
 
 External package fetches are isolated to the module proxy pod, which has its own
 NetworkPolicy allowing outbound 443 to the public internet.
@@ -166,5 +179,5 @@ NetworkPolicy allowing outbound 443 to the public internet.
 3. `pkg/k8s` — add `GenerateImportMap(wf, proxyURL)` → ConfigMap manifest
 4. `pkg/k8s` — update `GenerateNetworkPolicy` to add esm.sh egress rule when module proxy is enabled
 5. `pkg/cli/deploy.go` — generate and apply the import map ConfigMap at deploy time
-6. Engine Dockerfile — add `--import-map` flag to ENTRYPOINT
+6. Engine Dockerfile — add `--allow-env`, `--allow-import` flags to ENTRYPOINT
 7. `tntc contract status` — surface module proxy status

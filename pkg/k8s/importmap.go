@@ -42,62 +42,66 @@ var engineDenoImports = map[string]string{
 // module proxy. Mounted at /app/deno.json by GenerateK8sManifests, it overrides the
 // image-baked deno.json so Deno auto-discovers it from the /app entrypoint (mod.ts)
 // without needing --import-map (which would break engine imports).
-// Returns nil if the workflow has no jsr/npm dependencies.
+//
+// The import map is always generated because the engine itself has jsr: dependencies
+// (e.g. @nats-io/transport-deno) that must route through the module proxy. Workflow
+// namespaces cannot reach external registries directly — all module resolution goes
+// through esm-sh in tentacular-support.
 func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
-	if wf.Contract == nil || len(wf.Contract.Dependencies) == 0 {
-		return nil
-	}
-
 	if proxyURL == "" {
 		proxyURL = DefaultModuleProxyURL
 	}
 	proxyURL = strings.TrimRight(proxyURL, "/")
 
-	// Build merged imports: engine entries + workflow jsr/npm entries
+	// Build merged imports: engine entries + workflow jsr/npm entries.
+	// Rewrite jsr: specifiers and deno.land/std URLs to route through the proxy.
 	imports := make(map[string]string, len(engineDenoImports))
 	for k, v := range engineDenoImports {
-		imports[k] = v
+		if rewritten := rewriteJSRSpecifier(v, proxyURL); rewritten != "" {
+			imports[k] = rewritten
+		} else if rewritten := rewriteDenoLandURL(v, proxyURL); rewritten != "" {
+			imports[k] = rewritten
+		} else {
+			imports[k] = v
+		}
 	}
 
-	hasProxyDeps := false
-	for _, dep := range wf.Contract.Dependencies {
-		if dep.Protocol != "jsr" && dep.Protocol != "npm" {
-			continue
-		}
-		if dep.Host == "" {
-			continue
-		}
-
-		switch dep.Protocol {
-		case "jsr":
-			// Emit two keys when a version is specified:
-			//   "jsr:@scope/pkg@version" (exact match for versioned imports in code)
-			//   "jsr:@scope/pkg"         (fallback for bare/unversioned imports)
-			// Both point to the versioned proxy URL to keep the pinned version.
-			// Deno's import map does exact-key lookup — the unversioned key alone
-			// would never intercept "jsr:@db/postgres@0.19.5".
-			baseSpec := "jsr:" + dep.Host
-			proxyPath := "/jsr/" + dep.Host
-			if dep.Version != "" {
-				proxyPath += "@" + dep.Version
-				imports[baseSpec+"@"+dep.Version] = proxyURL + proxyPath
+	// Add workflow-specific jsr/npm deps if present.
+	if wf.Contract != nil {
+		for _, dep := range wf.Contract.Dependencies {
+			if dep.Protocol != "jsr" && dep.Protocol != "npm" {
+				continue
 			}
-			imports[baseSpec] = proxyURL + proxyPath
-		case "npm":
-			// Same dual-key strategy for npm: specifiers.
-			baseSpec := "npm:" + dep.Host
-			proxyPath := "/" + dep.Host
-			if dep.Version != "" {
-				proxyPath += "@" + dep.Version
-				imports[baseSpec+"@"+dep.Version] = proxyURL + proxyPath
+			if dep.Host == "" {
+				continue
 			}
-			imports[baseSpec] = proxyURL + proxyPath
-		}
-		hasProxyDeps = true
-	}
 
-	if !hasProxyDeps {
-		return nil
+			switch dep.Protocol {
+			case "jsr":
+				// Emit two keys when a version is specified:
+				//   "jsr:@scope/pkg@version" (exact match for versioned imports in code)
+				//   "jsr:@scope/pkg"         (fallback for bare/unversioned imports)
+				// Both point to the versioned proxy URL to keep the pinned version.
+				// Deno's import map does exact-key lookup — the unversioned key alone
+				// would never intercept "jsr:@db/postgres@0.19.5".
+				baseSpec := "jsr:" + dep.Host
+				proxyPath := "/jsr/" + dep.Host
+				if dep.Version != "" {
+					proxyPath += "@" + dep.Version
+					imports[baseSpec+"@"+dep.Version] = proxyURL + proxyPath
+				}
+				imports[baseSpec] = proxyURL + proxyPath
+			case "npm":
+				// Same dual-key strategy for npm: specifiers.
+				baseSpec := "npm:" + dep.Host
+				proxyPath := "/" + dep.Host
+				if dep.Version != "" {
+					proxyPath += "@" + dep.Version
+					imports[baseSpec+"@"+dep.Version] = proxyURL + proxyPath
+				}
+				imports[baseSpec] = proxyURL + proxyPath
+			}
+		}
 	}
 
 	// Build sorted imports for deterministic output
@@ -165,6 +169,40 @@ func GenerateImportMapWithNamespace(wf *spec.Workflow, namespace, proxyURL strin
 // Delegates to spec.HasModuleProxyDeps.
 func HasModuleProxyDeps(wf *spec.Workflow) bool {
 	return spec.HasModuleProxyDeps(wf)
+}
+
+// rewriteJSRSpecifier rewrites a "jsr:@scope/pkg@version" value to a proxy URL.
+// Returns empty string if the value is not a jsr: specifier.
+func rewriteJSRSpecifier(value, proxyURL string) string {
+	if !strings.HasPrefix(value, "jsr:") {
+		return ""
+	}
+	rest := value[4:] // strip "jsr:"
+	return proxyURL + "/jsr/" + rest
+}
+
+// denoLandStdPrefix is the URL prefix for deno.land standard library imports.
+const denoLandStdPrefix = "https://deno.land/std@"
+
+// rewriteDenoLandURL rewrites a deno.land/std URL to route through the esm.sh proxy
+// using its GitHub proxy feature: /gh/denoland/deno_std@version/path.
+// Returns empty string if the value is not a deno.land/std URL.
+func rewriteDenoLandURL(value, proxyURL string) string {
+	if !strings.HasPrefix(value, denoLandStdPrefix) {
+		return ""
+	}
+	// "https://deno.land/std@0.224.0/yaml/mod.ts" → "0.224.0/yaml/mod.ts"
+	rest := value[len("https://deno.land/std@"):]
+	// Split version from path: "0.224.0/yaml/mod.ts" → version="0.224.0", path="/yaml/mod.ts"
+	// Handle bare "https://deno.land/std@0.224.0/" (trailing slash, no subpath)
+	slashIdx := strings.Index(rest, "/")
+	if slashIdx < 0 {
+		// No path, just version
+		return proxyURL + "/gh/denoland/deno_std@" + rest
+	}
+	version := rest[:slashIdx]
+	path := rest[slashIdx:] // includes leading "/"
+	return proxyURL + "/gh/denoland/deno_std@" + version + path
 }
 
 // indentLines prepends each line with the given prefix.

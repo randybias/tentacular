@@ -46,6 +46,17 @@ func TestDetectDistribution_AKS(t *testing.T) {
 	}
 }
 
+func TestDetectDistribution_K0s(t *testing.T) {
+	nodes := &corev1.NodeList{Items: []corev1.Node{{
+		ObjectMeta: metav1.ObjectMeta{
+			Labels: map[string]string{"node.k0sproject.io/role": "control-plane"},
+		},
+	}}}
+	if got := detectDistribution(nodes); got != "k0s" {
+		t.Errorf("expected k0s, got %s", got)
+	}
+}
+
 func TestDetectDistribution_Vanilla(t *testing.T) {
 	nodes := &corev1.NodeList{Items: []corev1.Node{{
 		ObjectMeta: metav1.ObjectMeta{Labels: map[string]string{}},
@@ -115,6 +126,25 @@ func TestDetectCNI_Kindnet(t *testing.T) {
 	cni := detectCNI(pods)
 	if cni.Name != "kindnet" {
 		t.Errorf("expected kindnet, got %s", cni.Name)
+	}
+}
+
+func TestDetectCNI_KubeRouter(t *testing.T) {
+	pods := &corev1.PodList{Items: []corev1.Pod{{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:   "kube-router-cq8ct",
+			Labels: map[string]string{"k8s-app": "kube-router", "tier": "node"},
+		},
+	}}}
+	cni := detectCNI(pods)
+	if cni.Name != "kube-router" {
+		t.Errorf("expected kube-router, got %s", cni.Name)
+	}
+	if !cni.NetworkPolicySupported {
+		t.Error("expected NetworkPolicy supported for kube-router")
+	}
+	if !cni.EgressSupported {
+		t.Error("expected egress supported for kube-router")
 	}
 }
 

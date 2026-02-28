@@ -55,7 +55,7 @@ func TestWfApply(t *testing.T) {
 	h := makeToolServer(t, "wf_apply", WfApplyResult{
 		Status:  "created",
 		Applied: []string{"ConfigMap/my-wf", "Deployment/my-wf"},
-		Updated: false,
+		Updated: 0,
 	}, false)
 	defer h.Close()
 
@@ -258,7 +258,7 @@ func TestWfApply_Updated(t *testing.T) {
 	h := makeToolServer(t, "wf_apply", WfApplyResult{
 		Status:  "updated",
 		Applied: []string{"Deployment/my-wf"},
-		Updated: true,
+		Updated: 1,
 	}, false)
 	defer h.Close()
 
@@ -266,8 +266,8 @@ func TestWfApply_Updated(t *testing.T) {
 	if err != nil {
 		t.Fatalf("WfApply: %v", err)
 	}
-	if !result.Updated {
-		t.Error("expected updated=true")
+	if result.Updated == 0 {
+		t.Error("expected updated > 0")
 	}
 }
 

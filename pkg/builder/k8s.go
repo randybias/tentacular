@@ -170,7 +170,7 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 		}
 	}
 	if len(cronSchedules) > 0 {
-		lines = append(lines, fmt.Sprintf("    tentacular.dev/cron-schedule: %s", strings.Join(cronSchedules, ",")))
+		lines = append(lines, fmt.Sprintf(`    tentacular.dev/cron-schedule: "%s"`, strings.Join(cronSchedules, ",")))
 	}
 	if len(lines) == 0 {
 		return ""
@@ -219,24 +219,19 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
 	}
 
-	// Build conditional import map volume mount and volume (for jsr/npm module proxy deps)
-	importMapVolumeMount := ""
-	importMapVolume := ""
-	if spec.HasModuleProxyDeps(wf) {
-		// Mount the merged deno.json (engine + workflow deps) at /app/deno.json.
-		// Deno's config discovery walks up from the entrypoint (/app/mod.ts) and
-		// finds /app/deno.json, where "tentacular" resolves to "./mod.ts" (/app/mod.ts).
-		importMapVolumeMount = `            - name: import-map
+	// Always mount the import map — the engine has jsr: deps (e.g. @nats-io/transport-deno)
+	// that must route through the in-cluster module proxy. Workflow namespaces cannot reach
+	// external registries directly.
+	importMapVolumeMount := `            - name: import-map
               mountPath: /app/deno.json
               subPath: deno.json
               readOnly: true
 `
-		importMapVolume = fmt.Sprintf(`        - name: import-map
+	importMapVolume := fmt.Sprintf(`        - name: import-map
           configMap:
             name: %s-import-map
             optional: true
 `, wf.Name)
-	}
 
 	// Build command/args block for Deno permission flags (10-space indent for container-level)
 	commandArgsBlock := ""
