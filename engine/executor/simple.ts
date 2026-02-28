@@ -1,5 +1,7 @@
 import type { CompiledDAG, Context, ExecutionResult, ExecutionTiming, NodeTiming } from "../types.ts";
 import type { NodeRunner, WorkflowExecutor } from "./types.ts";
+import type { TelemetrySink } from "../telemetry/mod.ts";
+import { NoopSink } from "../telemetry/mod.ts";
 
 /**
  * SimpleExecutor — lightweight in-memory DAG executor.
@@ -8,10 +10,12 @@ import type { NodeRunner, WorkflowExecutor } from "./types.ts";
 export class SimpleExecutor implements WorkflowExecutor {
   private timeoutMs: number;
   private maxRetries: number;
+  private sink: TelemetrySink;
 
-  constructor(opts?: { timeoutMs?: number; maxRetries?: number }) {
+  constructor(opts?: { timeoutMs?: number; maxRetries?: number; sink?: TelemetrySink }) {
     this.timeoutMs = opts?.timeoutMs ?? 30_000;
     this.maxRetries = opts?.maxRetries ?? 0;
+    this.sink = opts?.sink ?? new NoopSink();
   }
 
   async execute(graph: CompiledDAG, runner: NodeRunner, ctx: Context, input?: unknown): Promise<ExecutionResult> {
@@ -27,6 +31,7 @@ export class SimpleExecutor implements WorkflowExecutor {
       const stageResults = await Promise.all(
         stage.nodes.map(async (nodeId) => {
           const nodeStart = Date.now();
+          this.sink.record({ type: "node-start", timestamp: nodeStart, metadata: { node: nodeId } });
           try {
             // Build input for this node from its dependencies' outputs
             const nodeInput = this.resolveInput(nodeId, inputMap, outputs, input);
@@ -39,11 +44,13 @@ export class SimpleExecutor implements WorkflowExecutor {
 
             outputs[nodeId] = output;
             const nodeEnd = Date.now();
+            const durationMs = nodeEnd - nodeStart;
             nodeTimings[nodeId] = {
               startedAt: nodeStart,
               completedAt: nodeEnd,
-              durationMs: nodeEnd - nodeStart,
+              durationMs,
             };
+            this.sink.record({ type: "node-complete", timestamp: nodeEnd, metadata: { node: nodeId, durationMs } });
             return { nodeId, success: true };
           } catch (err) {
             const nodeEnd = Date.now();
@@ -54,6 +61,7 @@ export class SimpleExecutor implements WorkflowExecutor {
               completedAt: nodeEnd,
               durationMs: nodeEnd - nodeStart,
             };
+            this.sink.record({ type: "node-error", timestamp: nodeEnd, metadata: { node: nodeId, error: errMsg } });
             return { nodeId, success: false, error: errMsg };
           }
         }),

@@ -136,6 +136,7 @@ type IngressRule struct {
 
 // DeriveIngressRules returns ingress rules derived from workflow triggers.
 // Returns label-scoped ingress for internal triggers (CronJob/runner) and open ingress for webhooks.
+// Always includes an MCP server health probe ingress from the tentacular-system namespace.
 func DeriveIngressRules(wf *Workflow) []IngressRule {
 	var rules []IngressRule
 
@@ -169,6 +170,20 @@ func DeriveIngressRules(wf *Workflow) []IngressRule {
 			FromLabels: map[string]string{"tentacular.dev/role": "trigger"},
 		})
 	}
+
+	// MCP server health probes: allow the MCP server (running in tentacular-system)
+	// to reach the workflow engine /health endpoint for wf_health tool support.
+	// Belt-and-suspenders: namespace selector + pod label for tightest possible rule.
+	rules = append(rules, IngressRule{
+		Port:     8080,
+		Protocol: "TCP",
+		FromLabels: map[string]string{
+			"app.kubernetes.io/name": "tentacular-mcp",
+		},
+		FromNamespaceLabels: map[string]string{
+			"kubernetes.io/metadata.name": "tentacular-system",
+		},
+	})
 
 	return rules
 }

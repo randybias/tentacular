@@ -2,6 +2,8 @@ import type { CompiledDAG, Context, ExecutionResult } from "./types.ts";
 import type { NodeRunner } from "./executor/types.ts";
 import { SimpleExecutor } from "./executor/simple.ts";
 import { handleGitHubWebhook, validateOptions as validateWebhookOptions } from "./triggers/webhook.ts";
+import type { TelemetrySink } from "./telemetry/mod.ts";
+import { NoopSink } from "./telemetry/mod.ts";
 
 export interface ServerOptions {
   port: number;
@@ -12,6 +14,8 @@ export interface ServerOptions {
   maxRetries?: number;
   /** GitHub webhook secret for HMAC-SHA256 signature validation */
   webhookSecret?: string;
+  /** Telemetry sink for runtime observability (default: NoopSink) */
+  sink?: TelemetrySink;
 }
 
 /**
@@ -26,15 +30,24 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
     if (err) throw new Error(`Webhook trigger configuration error: ${err}`);
   }
 
+  const sink: TelemetrySink = opts.sink ?? new NoopSink();
+
   const executor = new SimpleExecutor({
     timeoutMs: opts.timeoutMs,
     maxRetries: opts.maxRetries,
+    sink,
   });
 
   const handler = async (req: Request): Promise<Response> => {
     const url = new URL(req.url);
 
     if (url.pathname === "/health") {
+      if (url.searchParams.get("detail") === "1") {
+        // snapshot() already includes status: "ok"
+        return new Response(JSON.stringify(sink.snapshot(), null, 2), {
+          headers: { "content-type": "application/json" },
+        });
+      }
       return new Response(JSON.stringify({ status: "ok" }), {
         headers: { "content-type": "application/json" },
       });
@@ -73,6 +86,7 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
     }
 
     if (url.pathname === "/run" && (req.method === "POST" || req.method === "GET")) {
+      sink.record({ type: "request-in", timestamp: Date.now(), metadata: { path: "/run" } });
       try {
         // Parse POST body as initial input for root nodes
         let input: unknown = {};
@@ -88,6 +102,7 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
         }
 
         const result = await executor.execute(opts.graph, opts.runner, opts.ctx, input);
+        sink.record({ type: "request-out", timestamp: Date.now(), metadata: { path: "/run" } });
 
         return new Response(JSON.stringify(result, null, 2), {
           status: result.success ? 200 : 500,
@@ -109,6 +124,7 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
   console.log(`Workflow server listening on http://localhost:${opts.port}`);
   console.log(`  POST /run              — trigger workflow execution`);
   console.log(`  GET  /health           — health check`);
+  console.log(`  GET  /health?detail=1  — telemetry snapshot`);
   const hasWebhookTrigger = (opts.graph.workflow.triggers ?? []).some((t) => t.type === "webhook");
   if (hasWebhookTrigger) {
     console.log(`  POST /webhook/github   — GitHub webhook receiver`);

@@ -189,10 +189,11 @@ contract:
 		t.Error("expected CIDR 0.0.0.0/0 in NetworkPolicy for dynamic-target")
 	}
 
-	// Step 7: Verify ingress (cron trigger = label-scoped)
+	// Step 7: Verify ingress (cron trigger = label-scoped + MCP health probe)
 	ingressRules := spec.DeriveIngressRules(wf)
-	if len(ingressRules) != 1 {
-		t.Fatalf("expected 1 ingress rule, got %d", len(ingressRules))
+	// Expect 2 rules: trigger ingress + MCP health probe ingress
+	if len(ingressRules) != 2 {
+		t.Fatalf("expected 2 ingress rules (trigger + MCP), got %d", len(ingressRules))
 	}
 	if ingressRules[0].FromLabels == nil {
 		t.Error("expected label-scoped ingress for cron trigger, got open (nil FromLabels)")
@@ -377,10 +378,11 @@ contract:
 		t.Fatalf("spec.Parse failed, warnings: %v", warnings)
 	}
 
-	// Webhook trigger should produce open ingress
+	// Webhook trigger should produce open ingress + MCP health probe ingress
 	ingressRules := spec.DeriveIngressRules(wf)
-	if len(ingressRules) != 1 {
-		t.Fatalf("expected 1 ingress rule, got %d", len(ingressRules))
+	// Expect 2 rules: webhook ingress + MCP health probe ingress
+	if len(ingressRules) != 2 {
+		t.Fatalf("expected 2 ingress rules (webhook + MCP), got %d", len(ingressRules))
 	}
 	if ingressRules[0].Port != 8080 {
 		t.Errorf("expected webhook ingress port 8080, got %d", ingressRules[0].Port)

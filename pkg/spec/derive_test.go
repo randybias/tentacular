@@ -176,8 +176,9 @@ func TestDeriveIngressRulesWebhook(t *testing.T) {
 	}
 
 	rules := DeriveIngressRules(wf)
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 ingress rule for webhook, got %d", len(rules))
+	// Expect 2 rules: webhook ingress + MCP health probe ingress
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 ingress rules for webhook (webhook + MCP), got %d", len(rules))
 	}
 
 	if rules[0].Port != 8080 || rules[0].Protocol != "TCP" {
@@ -199,8 +200,9 @@ func TestDeriveIngressRulesNoWebhook(t *testing.T) {
 	}
 
 	rules := DeriveIngressRules(wf)
-	if len(rules) != 1 {
-		t.Errorf("expected 1 ingress rule (namespace-local port 8080), got %d", len(rules))
+	// Expect 2 rules: trigger ingress + MCP health probe ingress
+	if len(rules) != 2 {
+		t.Errorf("expected 2 ingress rules (trigger + MCP), got %d", len(rules))
 	}
 	if len(rules) > 0 && rules[0].Port != 8080 {
 		t.Errorf("expected ingress port 8080, got %d", rules[0].Port)

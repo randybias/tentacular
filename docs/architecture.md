@@ -36,7 +36,7 @@ Tentacular is a workflow execution platform that runs TypeScript DAGs on Kuberne
 |-----------|---------|
 | `cmd/tntc/` | CLI entry point (Cobra command tree) |
 | `pkg/` | Go packages: spec parser, builder, K8s client, CLI commands |
-| `engine/` | Deno TypeScript engine: compiler, executor, context, server |
+| `engine/` | Deno TypeScript engine: compiler, executor, context, server, telemetry |
 | `example-workflows/` | Runnable example workflows |
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |
 | `openspec/` | Change tracking and specifications |
@@ -153,10 +153,11 @@ pkg/
 7.  Create base Context (fetch, log, config, secrets)
 8.  Create NodeRunner (per-node context creation)
 9.  Parse timeout/retry config
-10. Start HTTP server on configured port
-11. Start NATS triggers if queue triggers defined (dynamic import)
-12. Register signal handlers (SIGTERM/SIGINT) for graceful shutdown
-13. (Optional) Start file watcher for hot-reload
+10. Create TelemetrySink from TENTACULAR_TELEMETRY env var ("basic" default, "none" for noop)
+11. Start HTTP server on configured port (passes sink for /health?detail=1)
+12. Start NATS triggers if queue triggers defined (dynamic import, passes sink)
+13. Register signal handlers (SIGTERM/SIGINT) for graceful shutdown
+14. (Optional) Start file watcher for hot-reload
 ```
 
 ### Compilation Pipeline
@@ -184,6 +185,7 @@ workflow.yaml edges:        Compiled stages:
 - **Timeout** — per-node timeout with `Promise.race` pattern (default 30s)
 - **Retry** — exponential backoff: 100ms, 200ms, 400ms... up to maxRetries
 - **Fail-fast** — if any node in a stage fails, execution stops immediately
+- **Telemetry** — `node-start`, `node-complete`, and `node-error` events fire synchronously (fire-and-forget) into the TelemetrySink on each node execution
 
 ### Context System
 
@@ -280,6 +282,27 @@ Queue triggers subscribe to NATS subjects. Messages trigger workflow execution w
 ### POST Body Passthrough
 
 The `/run` endpoint parses POST body as JSON and passes it as initial input to root nodes (nodes with no incoming edges). GET requests and empty bodies default to `{}`.
+
+### Health Endpoint
+
+`GET /health` returns `{"status":"ok"}` unconditionally (unchanged baseline).
+
+`GET /health?detail=1` returns a `TelemetrySnapshot` from the active TelemetrySink:
+
+```json
+{
+  "uptimeSec": 120,
+  "totalRequests": 45,
+  "totalErrors": 2,
+  "errorRate": 0.044,
+  "lastErrorMs": 1709123456789,
+  "nodeStats": {
+    "fetch-repos": { "runs": 45, "errors": 2, "avgDurationMs": 310 }
+  }
+}
+```
+
+This endpoint is used by the MCP server's `wf_health` tool to classify workflow health as Green/Amber/Red without log parsing.
 
 ## 5. Security Model
 
@@ -487,6 +510,7 @@ Run: `go test ./pkg/...`
 | `context` | `secrets_test.ts` | 6 | Secret loading: YAML, directory, missing, hidden, invalid, plain text |
 | `context` | `cascade_test.ts` | 7 | Cascade: explicit precedence, dir/YAML merge, empty, fallback, key preservation |
 | `executor` | `simple_test.ts` | 7 | Execution: single, chain, failure, parallel, retry, retry exhaustion, timeout |
+| `telemetry` | `telemetry_test.ts` | 20 | NoopSink, BasicSink counters, factory modes, executor integration |
 | `triggers` | `nats_test.ts` | 6 | NATS options validation: URL, token, triggers, subject, valid options |
 
 Run: `deno test --allow-read --allow-write=/tmp --allow-net --allow-env` in `engine/`

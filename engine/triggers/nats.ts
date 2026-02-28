@@ -7,6 +7,8 @@
 import type { CompiledDAG, Context, Trigger } from "../types.ts";
 import type { NodeRunner } from "../executor/types.ts";
 import { SimpleExecutor } from "../executor/simple.ts";
+import type { TelemetrySink } from "../telemetry/mod.ts";
+import { NoopSink } from "../telemetry/mod.ts";
 
 export interface NATSTriggerOptions {
   /** NATS server URL (e.g. "nats.example.com:4222") */
@@ -25,6 +27,8 @@ export interface NATSTriggerOptions {
   timeoutMs?: number;
   /** Max retries per node */
   maxRetries?: number;
+  /** Telemetry sink for runtime observability (default: NoopSink) */
+  sink?: TelemetrySink;
 }
 
 export interface NATSTriggerHandle {
@@ -73,9 +77,12 @@ export async function startNATSTriggers(opts: NATSTriggerOptions): Promise<NATST
 
   console.log(`NATS connected to ${opts.url}`);
 
+  const sink: TelemetrySink = opts.sink ?? new NoopSink();
+
   const executor = new SimpleExecutor({
     timeoutMs: opts.timeoutMs,
     maxRetries: opts.maxRetries,
+    sink,
   });
 
   // Subscribe to each queue trigger's subject
@@ -108,6 +115,7 @@ export async function startNATSTriggers(opts: NATSTriggerOptions): Promise<NATST
           }
 
           console.log(`NATS message on ${trigger.subject} — executing workflow`);
+          sink.record({ type: "nats-message", timestamp: Date.now(), metadata: { subject: trigger.subject } });
           const result = await executor.execute(opts.graph, opts.runner, opts.ctx, input);
 
           // Request-reply: send result back if reply subject is set

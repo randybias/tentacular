@@ -21,6 +21,7 @@ import { loadAllNodes, clearModuleCache } from "./loader.ts";
 import { startServer } from "./server.ts";
 import { watchFiles } from "./watcher.ts";
 import type { NodeRunner } from "./executor/types.ts";
+import { NewTelemetrySink } from "./telemetry/mod.ts";
 
 const flags = parseFlags(Deno.args, {
   string: ["workflow", "port", "secrets"],
@@ -129,6 +130,11 @@ async function main() {
     );
   }
 
+  // Create telemetry sink based on TELEMETRY_SINK env var (default "basic")
+  const telemetryMode = Deno.env.get("TELEMETRY_SINK");
+  const sink = NewTelemetrySink(telemetryMode);
+  sink.record({ type: "engine-start", timestamp: Date.now(), metadata: { workflow: spec.name } });
+
   // Start HTTP server
   const server = startServer({
     port,
@@ -138,6 +144,7 @@ async function main() {
     timeoutMs,
     maxRetries: spec.config?.retries ?? 0,
     webhookSecret,
+    sink,
   });
 
   // Start NATS triggers for queue-type triggers
@@ -164,6 +171,7 @@ async function main() {
           ctx,
           timeoutMs,
           maxRetries: spec.config?.retries ?? 0,
+          sink,
         });
       } catch (err) {
         console.error("Failed to start NATS triggers:", err);

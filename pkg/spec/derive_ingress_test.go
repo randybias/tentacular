@@ -20,8 +20,9 @@ func TestDeriveIngressRulesWebhookTrigger(t *testing.T) {
 
 	rules := DeriveIngressRules(wf)
 
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 ingress rule for webhook, got %d", len(rules))
+	// Expect 2 rules: webhook ingress + MCP health probe ingress
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 ingress rules for webhook (webhook + MCP), got %d", len(rules))
 	}
 
 	rule := rules[0]
@@ -37,6 +38,15 @@ func TestDeriveIngressRulesWebhookTrigger(t *testing.T) {
 	if rule.FromLabels != nil {
 		t.Errorf("expected FromLabels=nil for webhook trigger (podSelector: {}), got %v", rule.FromLabels)
 		t.Logf("Bug: Webhook ingress is label-scoped, preventing external traffic")
+	}
+
+	// Second rule: MCP health probe ingress from tentacular-system
+	mcpRule := rules[1]
+	if mcpRule.Port != 8080 {
+		t.Errorf("expected MCP ingress port 8080, got %d", mcpRule.Port)
+	}
+	if mcpRule.FromNamespaceLabels["kubernetes.io/metadata.name"] != "tentacular-system" {
+		t.Errorf("expected MCP ingress from tentacular-system, got %v", mcpRule.FromNamespaceLabels)
 	}
 }
 
@@ -54,8 +64,9 @@ func TestDeriveIngressRulesNonWebhookTrigger(t *testing.T) {
 
 	rules := DeriveIngressRules(wf)
 
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 ingress rule for cron, got %d", len(rules))
+	// Expect 2 rules: trigger ingress + MCP health probe ingress
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 ingress rules for cron (trigger + MCP), got %d", len(rules))
 	}
 
 	rule := rules[0]
@@ -70,6 +81,15 @@ func TestDeriveIngressRulesNonWebhookTrigger(t *testing.T) {
 		if rule.FromLabels["tentacular.dev/role"] != "trigger" {
 			t.Errorf("expected role=trigger label, got %v", rule.FromLabels)
 		}
+	}
+
+	// Second rule: MCP health probe ingress from tentacular-system
+	mcpRule := rules[1]
+	if mcpRule.Port != 8080 {
+		t.Errorf("expected MCP ingress port 8080, got %d", mcpRule.Port)
+	}
+	if mcpRule.FromNamespaceLabels["kubernetes.io/metadata.name"] != "tentacular-system" {
+		t.Errorf("expected MCP ingress from tentacular-system, got %v", mcpRule.FromNamespaceLabels)
 	}
 }
 
@@ -89,9 +109,9 @@ func TestDeriveIngressRulesMixedTriggers(t *testing.T) {
 
 	rules := DeriveIngressRules(wf)
 
-	// If ANY trigger is webhook, should use open ingress (podSelector: {})
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 ingress rule, got %d", len(rules))
+	// If ANY trigger is webhook, should use open ingress (podSelector: {}) + MCP ingress
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 ingress rules (webhook + MCP), got %d", len(rules))
 	}
 
 	rule := rules[0]
@@ -114,8 +134,9 @@ func TestDeriveIngressRulesManualTriggerOnly(t *testing.T) {
 
 	rules := DeriveIngressRules(wf)
 
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 ingress rule for manual, got %d", len(rules))
+	// Expect 2 rules: trigger ingress + MCP health probe ingress
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 ingress rules for manual (trigger + MCP), got %d", len(rules))
 	}
 
 	rule := rules[0]
@@ -143,8 +164,9 @@ func TestDeriveIngressRulesQueueTrigger(t *testing.T) {
 
 	rules := DeriveIngressRules(wf)
 
-	if len(rules) != 1 {
-		t.Fatalf("expected 1 ingress rule for queue, got %d", len(rules))
+	// Expect 2 rules: trigger ingress + MCP health probe ingress
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 ingress rules for queue (trigger + MCP), got %d", len(rules))
 	}
 
 	rule := rules[0]
@@ -155,5 +177,43 @@ func TestDeriveIngressRulesQueueTrigger(t *testing.T) {
 		if rule.FromLabels["tentacular.dev/role"] != "trigger" {
 			t.Errorf("expected role=trigger label, got %v", rule.FromLabels)
 		}
+	}
+}
+
+func TestDeriveIngressRulesMCPHealthProbe(t *testing.T) {
+	wf := &Workflow{
+		Name:    "any-workflow",
+		Version: "1.0",
+		Triggers: []Trigger{
+			{Type: "manual"},
+		},
+		Nodes: map[string]NodeSpec{
+			"task": {Path: "./task.ts"},
+		},
+	}
+
+	rules := DeriveIngressRules(wf)
+
+	// Always expect MCP health probe rule as last rule
+	if len(rules) < 1 {
+		t.Fatal("expected at least 1 ingress rule")
+	}
+	mcpRule := rules[len(rules)-1]
+	if mcpRule.Port != 8080 {
+		t.Errorf("expected MCP ingress port 8080, got %d", mcpRule.Port)
+	}
+	if mcpRule.Protocol != "TCP" {
+		t.Errorf("expected MCP ingress protocol TCP, got %s", mcpRule.Protocol)
+	}
+	if mcpRule.FromNamespaceLabels == nil {
+		t.Error("expected MCP ingress to have FromNamespaceLabels")
+	} else if mcpRule.FromNamespaceLabels["kubernetes.io/metadata.name"] != "tentacular-system" {
+		t.Errorf("expected MCP ingress from tentacular-system, got %v", mcpRule.FromNamespaceLabels)
+	}
+	// Belt-and-suspenders: MCP probe also scopes to the tentacular-mcp pod label
+	if mcpRule.FromLabels == nil {
+		t.Error("expected MCP ingress FromLabels to be set (app.kubernetes.io/name: tentacular-mcp)")
+	} else if mcpRule.FromLabels["app.kubernetes.io/name"] != "tentacular-mcp" {
+		t.Errorf("expected MCP ingress FromLabels app.kubernetes.io/name=tentacular-mcp, got %v", mcpRule.FromLabels)
 	}
 }

@@ -690,10 +690,11 @@ contract:
 		t.Error("expected additionalEgress override 10.100.0.0/16:9090")
 	}
 
-	// Step 5: Verify derived ingress rules (has webhook trigger)
+	// Step 5: Verify derived ingress rules (has webhook trigger + MCP health probe)
 	ingressRules := spec.DeriveIngressRules(wf)
-	if len(ingressRules) != 1 {
-		t.Fatalf("expected 1 ingress rule for webhook, got %d", len(ingressRules))
+	// Expect 2 rules: webhook ingress + MCP health probe ingress
+	if len(ingressRules) != 2 {
+		t.Fatalf("expected 2 ingress rules for webhook (webhook + MCP), got %d", len(ingressRules))
 	}
 	if ingressRules[0].Port != 8080 {
 		t.Errorf("expected webhook ingress port 8080, got %d", ingressRules[0].Port)
@@ -735,3 +736,123 @@ contract:
 	}
 }
 
+func TestGenerateTriggerNetworkPolicyNoCronTrigger(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "no-cron",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "manual"},
+			{Type: "webhook", Path: "/hook"},
+		},
+		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+	}
+
+	manifest := GenerateTriggerNetworkPolicy(wf, "default")
+	if manifest != nil {
+		t.Error("expected nil manifest for workflow without cron trigger")
+	}
+}
+
+func TestGenerateTriggerNetworkPolicyWithCronTrigger(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "cron-wf",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "cron", Schedule: "0 * * * *"},
+		},
+		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+	}
+
+	manifest := GenerateTriggerNetworkPolicy(wf, "test-ns")
+	if manifest == nil {
+		t.Fatal("expected non-nil manifest for workflow with cron trigger")
+	}
+
+	if manifest.Kind != "NetworkPolicy" {
+		t.Errorf("expected kind NetworkPolicy, got %s", manifest.Kind)
+	}
+	if manifest.Name != "cron-wf-trigger-netpol" {
+		t.Errorf("expected name cron-wf-trigger-netpol, got %s", manifest.Name)
+	}
+
+	// Pod selector must target trigger pods
+	if !strings.Contains(manifest.Content, "tentacular.dev/role: trigger") {
+		t.Error("expected podSelector matching tentacular.dev/role: trigger")
+	}
+
+	// Must allow egress to engine port 8080
+	if !strings.Contains(manifest.Content, "app.kubernetes.io/name: cron-wf") {
+		t.Error("expected egress to engine pod by app.kubernetes.io/name label")
+	}
+	if !strings.Contains(manifest.Content, "port: 8080") {
+		t.Error("expected egress port 8080 to engine service")
+	}
+
+	// Must allow DNS egress
+	if !strings.Contains(manifest.Content, "k8s-app: kube-dns") {
+		t.Error("expected DNS egress rule to kube-dns")
+	}
+	if !strings.Contains(manifest.Content, "port: 53") {
+		t.Error("expected DNS port 53")
+	}
+
+	// Must be Egress-only (trigger pods don't receive ingress)
+	if !strings.Contains(manifest.Content, "- Egress") {
+		t.Error("expected policyTypes to include Egress")
+	}
+	if strings.Contains(manifest.Content, "- Ingress") {
+		t.Error("unexpected Ingress policyType — trigger pods need no ingress")
+	}
+
+	// Must have correct namespace
+	if !strings.Contains(manifest.Content, "namespace: test-ns") {
+		t.Error("expected namespace: test-ns")
+	}
+}
+
+func TestGenerateTriggerNetworkPolicyNoTriggers(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "notrigger",
+		Version: "1.0",
+		Nodes:   map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+	}
+
+	manifest := GenerateTriggerNetworkPolicy(wf, "default")
+	if manifest != nil {
+		t.Error("expected nil manifest for workflow with no triggers")
+	}
+}
+
+func TestGenerateNetworkPolicyMCPIngressRule(t *testing.T) {
+	wf := &spec.Workflow{
+		Name:    "mcp-test",
+		Version: "1.0",
+		Triggers: []spec.Trigger{
+			{Type: "manual"},
+		},
+		Nodes: map[string]spec.NodeSpec{"a": {Path: "./a.ts"}},
+		Contract: &spec.Contract{
+			Version:      "1",
+			Dependencies: map[string]spec.Dependency{},
+		},
+	}
+
+	manifest := GenerateNetworkPolicy(wf, "default", "")
+	if manifest == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+
+	// Verify the MCP ingress rule for tentacular-system is rendered
+	if !strings.Contains(manifest.Content, "tentacular-system") {
+		t.Error("expected tentacular-system in NetworkPolicy ingress rules for MCP health probe")
+	}
+	if !strings.Contains(manifest.Content, "tentacular-mcp") {
+		t.Error("expected tentacular-mcp pod label in NetworkPolicy ingress rules for MCP health probe")
+	}
+	if !strings.Contains(manifest.Content, "ingress:") {
+		t.Error("expected ingress section for MCP health probe rule")
+	}
+	if !strings.Contains(manifest.Content, "port: 8080") {
+		t.Error("expected port 8080 in ingress rules")
+	}
+}
