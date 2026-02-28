@@ -21,7 +21,7 @@ type Manifest struct {
 type DeployOptions struct {
 	RuntimeClassName string // If empty, omit runtimeClassName from pod spec
 	ImagePullPolicy  string // If empty, defaults to "Always"
-	ModuleProxyURL   string // If set and workflow has jsr/npm deps, generates a proxy pre-warm initContainer
+	ModuleProxyURL   string // If set, used to scope Deno net flags for jsr/npm proxy host
 }
 
 // GenerateCodeConfigMap produces a ConfigMap containing workflow code (workflow.yaml + nodes/*.ts).
@@ -125,39 +125,52 @@ func sanitizeAnnotationValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// buildDeployAnnotations converts workflow metadata into a YAML annotations block.
-// Returns empty string if metadata is nil or all fields are empty.
+// buildDeployAnnotations converts workflow metadata and cron triggers into a YAML
+// annotations block. Returns empty string if all fields are empty.
 // Values are sanitized to prevent YAML injection via newlines or special characters.
-func buildDeployAnnotations(meta *spec.WorkflowMetadata) string {
-	if meta == nil {
-		return ""
-	}
+// If triggers contains cron triggers, a tentacular.dev/cron-schedule annotation is
+// added with comma-separated schedules (one per cron trigger).
+func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger) string {
 	var lines []string
-	if meta.Owner != "" {
-		if v := sanitizeAnnotationValue(meta.Owner); v != "" {
-			lines = append(lines, fmt.Sprintf("    tentacular.dev/owner: %s", v))
-		}
-	}
-	if meta.Team != "" {
-		if v := sanitizeAnnotationValue(meta.Team); v != "" {
-			lines = append(lines, fmt.Sprintf("    tentacular.dev/team: %s", v))
-		}
-	}
-	if len(meta.Tags) > 0 {
-		var cleanTags []string
-		for _, tag := range meta.Tags {
-			if v := sanitizeAnnotationValue(tag); v != "" {
-				cleanTags = append(cleanTags, v)
+	if meta != nil {
+		if meta.Owner != "" {
+			if v := sanitizeAnnotationValue(meta.Owner); v != "" {
+				lines = append(lines, fmt.Sprintf("    tentacular.dev/owner: %s", v))
 			}
 		}
-		if len(cleanTags) > 0 {
-			lines = append(lines, fmt.Sprintf("    tentacular.dev/tags: %s", strings.Join(cleanTags, ",")))
+		if meta.Team != "" {
+			if v := sanitizeAnnotationValue(meta.Team); v != "" {
+				lines = append(lines, fmt.Sprintf("    tentacular.dev/team: %s", v))
+			}
+		}
+		if len(meta.Tags) > 0 {
+			var cleanTags []string
+			for _, tag := range meta.Tags {
+				if v := sanitizeAnnotationValue(tag); v != "" {
+					cleanTags = append(cleanTags, v)
+				}
+			}
+			if len(cleanTags) > 0 {
+				lines = append(lines, fmt.Sprintf("    tentacular.dev/tags: %s", strings.Join(cleanTags, ",")))
+			}
+		}
+		if meta.Environment != "" {
+			if v := sanitizeAnnotationValue(meta.Environment); v != "" {
+				lines = append(lines, fmt.Sprintf("    tentacular.dev/environment: %s", v))
+			}
 		}
 	}
-	if meta.Environment != "" {
-		if v := sanitizeAnnotationValue(meta.Environment); v != "" {
-			lines = append(lines, fmt.Sprintf("    tentacular.dev/environment: %s", v))
+	// Add cron-schedule annotation for any cron triggers.
+	// Multiple schedules are joined with commas. The MCP server reads this annotation
+	// to register the workflow with the in-process scheduler (no CronJob pods needed).
+	var cronSchedules []string
+	for _, t := range triggers {
+		if t.Type == "cron" && t.Schedule != "" {
+			cronSchedules = append(cronSchedules, t.Schedule)
 		}
+	}
+	if len(cronSchedules) > 0 {
+		lines = append(lines, fmt.Sprintf("    tentacular.dev/cron-schedule: %s", strings.Join(cronSchedules, ",")))
 	}
 	if len(lines) == 0 {
 		return ""
@@ -253,66 +266,6 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		commandArgsBlock = strings.Join(lines, "\n") + "\n"
 	}
 
-	// Build proxy pre-warm initContainer when module proxy deps are present.
-	// The initContainer runs in-cluster before the engine starts, triggering esm.sh
-	// to build and cache each jsr/npm module. This prevents cold-start timeouts where
-	// the first build exceeds esm.sh's 60s context deadline at pod startup.
-	initContainerBlock := ""
-	if opts.ModuleProxyURL != "" && spec.HasModuleProxyDeps(wf) {
-		proxyBase := strings.TrimRight(opts.ModuleProxyURL, "/")
-		seenURLs := make(map[string]bool)
-		var curlURLs []string
-		for _, dep := range wf.Contract.Dependencies {
-			if dep.Protocol != "jsr" && dep.Protocol != "npm" {
-				continue
-			}
-			var url string
-			switch dep.Protocol {
-			case "jsr":
-				url = proxyBase + "/jsr/" + dep.Host
-			case "npm":
-				url = proxyBase + "/" + dep.Host
-			}
-			if dep.Version != "" {
-				url += "@" + dep.Version
-			}
-			if !seenURLs[url] {
-				curlURLs = append(curlURLs, url)
-				seenURLs[url] = true
-			}
-		}
-		sort.Strings(curlURLs)
-		if len(curlURLs) > 0 {
-			var cmds []string
-			for _, url := range curlURLs {
-				// Use '|| true' rather than '|| echo ...' to avoid ': ' in the echo
-				// message causing the YAML scalar to be parsed as a map key:value.
-				cmds = append(cmds, fmt.Sprintf("curl -sf --retry 3 --retry-delay 10 --max-time 120 %s > /dev/null || true", url))
-			}
-			shellScript := strings.Join(cmds, "; ")
-			// %q wraps in YAML-safe double quotes so '>', '|', '||' inside the
-			// shell script are treated as literal characters, not YAML operators.
-			initContainerBlock = fmt.Sprintf(`      initContainers:
-        - name: proxy-prewarm
-          image: curlimages/curl:latest
-          command:
-            - /bin/sh
-            - -c
-            - %q
-          securityContext:
-            readOnlyRootFilesystem: true
-            allowPrivilegeEscalation: false
-            capabilities:
-              drop:
-                - ALL
-          resources:
-            limits:
-              memory: "32Mi"
-              cpu: "100m"
-`, shellScript)
-		}
-	}
-
 	// Deployment with security hardening
 	deployment := fmt.Sprintf(`apiVersion: apps/v1
 kind: Deployment
@@ -339,7 +292,7 @@ metadata:
         runAsUser: 65534
         seccompProfile:
           type: RuntimeDefault
-%s      containers:
+      containers:
         - name: engine
           image: %s
           imagePullPolicy: %s
@@ -396,7 +349,7 @@ metadata:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
-%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata), wf.Name, labels, runtimeClassLine, initContainerBlock, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
+%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, wf.Triggers), wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
@@ -418,152 +371,12 @@ metadata:
     - port: 8080
       targetPort: 8080
       protocol: TCP
-`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata), wf.Name)
+`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, nil), wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Service", Name: wf.Name, Content: service,
 	})
 
-	// CronJobs for cron triggers
-	var cronTriggers []cronTriggerInfo
-	for i, t := range wf.Triggers {
-		if t.Type == "cron" {
-			cronTriggers = append(cronTriggers, cronTriggerInfo{index: i, trigger: t})
-		}
-	}
-	for i, ct := range cronTriggers {
-		cronName := wf.Name + "-cron"
-		if len(cronTriggers) > 1 {
-			cronName = fmt.Sprintf("%s-cron-%d", wf.Name, i)
-		}
-		cronManifest := generateCronJobManifest(wf.Name, cronName, namespace, labels, ct.trigger)
-		manifests = append(manifests, cronManifest)
-	}
-
-	// Trigger egress NetworkPolicy: allow trigger pods to reach the workflow Service and DNS.
-	// Generated whenever there are cron triggers (pods with tentacular.dev/role: trigger).
-	if len(cronTriggers) > 0 {
-		triggerNetpol := generateTriggerNetworkPolicy(wf.Name, namespace)
-		manifests = append(manifests, triggerNetpol)
-	}
-
 	return manifests
 }
 
-type cronTriggerInfo struct {
-	index   int
-	trigger spec.Trigger
-}
-
-func generateCronJobManifest(wfName, cronName, namespace, labels string, trigger spec.Trigger) Manifest {
-	postBody := "{}"
-	if trigger.Name != "" {
-		postBody = fmt.Sprintf(`{\"trigger\":\"%s\"}`, trigger.Name)
-	}
-
-	svcURL := fmt.Sprintf("http://%s.%s.svc.cluster.local:8080/run", wfName, namespace)
-
-	content := fmt.Sprintf(`apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: %s
-  namespace: %s
-  labels:
-    %s
-spec:
-  schedule: "%s"
-  concurrencyPolicy: Forbid
-  successfulJobsHistoryLimit: 3
-  failedJobsHistoryLimit: 3
-  jobTemplate:
-    spec:
-      template:
-        metadata:
-          labels:
-            tentacular.dev/role: trigger
-        spec:
-          restartPolicy: OnFailure
-          securityContext:
-            runAsNonRoot: true
-            runAsUser: 65534
-            seccompProfile:
-              type: RuntimeDefault
-          containers:
-            - name: trigger
-              image: curlimages/curl:latest
-              command:
-                - curl
-                - -sf
-                - -X
-                - POST
-                - -H
-                - "Content-Type: application/json"
-                - -d
-                - "%s"
-                - %s
-              securityContext:
-                readOnlyRootFilesystem: true
-                allowPrivilegeEscalation: false
-                capabilities:
-                  drop:
-                    - ALL
-              resources:
-                limits:
-                  memory: "32Mi"
-                  cpu: "100m"
-`, cronName, namespace, labels, trigger.Schedule, postBody, svcURL)
-
-	return Manifest{
-		Kind: "CronJob", Name: cronName, Content: content,
-	}
-}
-
-// generateTriggerNetworkPolicy creates a NetworkPolicy for trigger pods
-// (labeled tentacular.dev/role: trigger) that allows:
-//   - Egress to the workflow engine Service on port 8080 (same namespace)
-//   - Egress to kube-dns for DNS resolution (UDP/TCP 53)
-//
-// All other egress is blocked by default-deny.
-func generateTriggerNetworkPolicy(wfName, namespace string) Manifest {
-	content := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: %s-trigger-netpol
-  namespace: %s
-  labels:
-    app.kubernetes.io/name: %s
-    app.kubernetes.io/managed-by: tentacular
-spec:
-  podSelector:
-    matchLabels:
-      tentacular.dev/role: trigger
-  policyTypes:
-  - Egress
-  egress:
-  - to:
-    - podSelector:
-        matchLabels:
-          app.kubernetes.io/name: %s
-    ports:
-    - protocol: TCP
-      port: 8080
-  - to:
-    - podSelector:
-        matchLabels:
-          k8s-app: kube-dns
-      namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: kube-system
-    ports:
-    - protocol: UDP
-      port: 53
-    - protocol: TCP
-      port: 53
-`, wfName, namespace, wfName, wfName)
-
-	return Manifest{
-		Kind:    "NetworkPolicy",
-		Name:    wfName + "-trigger-netpol",
-		Content: content,
-	}
-}

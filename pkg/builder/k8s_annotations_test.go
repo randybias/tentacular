@@ -314,26 +314,26 @@ metadata:
 
 // --- Direct unit tests for buildDeployAnnotations() ---
 
-// TestBuildDeployAnnotationsNil verifies nil metadata returns empty string.
+// TestBuildDeployAnnotationsNil verifies nil metadata with no triggers returns empty string.
 func TestBuildDeployAnnotationsNil(t *testing.T) {
-	result := buildDeployAnnotations(nil)
+	result := buildDeployAnnotations(nil, nil)
 	if result != "" {
-		t.Errorf("expected empty string for nil metadata, got %q", result)
+		t.Errorf("expected empty string for nil metadata and no triggers, got %q", result)
 	}
 }
 
-// TestBuildDeployAnnotationsEmpty verifies empty struct returns empty string.
+// TestBuildDeployAnnotationsEmpty verifies empty struct with no triggers returns empty string.
 func TestBuildDeployAnnotationsEmpty(t *testing.T) {
-	result := buildDeployAnnotations(&spec.WorkflowMetadata{})
+	result := buildDeployAnnotations(&spec.WorkflowMetadata{}, nil)
 	if result != "" {
-		t.Errorf("expected empty string for empty metadata struct, got %q", result)
+		t.Errorf("expected empty string for empty metadata struct and no triggers, got %q", result)
 	}
 }
 
 // TestBuildDeployAnnotationsOwnerOnly verifies annotations block with just owner.
 func TestBuildDeployAnnotationsOwnerOnly(t *testing.T) {
 	meta := &spec.WorkflowMetadata{Owner: "platform-team"}
-	result := buildDeployAnnotations(meta)
+	result := buildDeployAnnotations(meta, nil)
 	if !strings.Contains(result, "annotations:") {
 		t.Error("expected 'annotations:' in result")
 	}
@@ -356,7 +356,7 @@ func TestBuildDeployAnnotationsAllFields(t *testing.T) {
 		Tags:        []string{"etl", "daily", "reporting"},
 		Environment: "production",
 	}
-	result := buildDeployAnnotations(meta)
+	result := buildDeployAnnotations(meta, nil)
 	if !strings.Contains(result, "tentacular.dev/owner: platform-team") {
 		t.Error("expected tentacular.dev/owner annotation")
 	}
@@ -376,7 +376,7 @@ func TestBuildDeployAnnotationsSingleTag(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
 		Tags: []string{"etl"},
 	}
-	result := buildDeployAnnotations(meta)
+	result := buildDeployAnnotations(meta, nil)
 	if !strings.Contains(result, "tentacular.dev/tags: etl") {
 		t.Error("expected tentacular.dev/tags: etl")
 	}

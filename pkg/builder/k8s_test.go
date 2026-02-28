@@ -277,26 +277,18 @@ func TestK8sManifestCronTriggerSingle(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "cron-wf:1-0", "default", DeployOptions{})
 
-	if len(manifests) != 4 {
-		t.Fatalf("expected 4 manifests (Deployment, Service, CronJob, NetworkPolicy), got %d", len(manifests))
+	// Cron triggers are encoded as an annotation on the Deployment, not as CronJob manifests.
+	if len(manifests) != 2 {
+		t.Fatalf("expected 2 manifests (Deployment, Service), got %d", len(manifests))
 	}
-	if manifests[2].Kind != "CronJob" {
-		t.Errorf("expected third manifest kind CronJob, got %s", manifests[2].Kind)
+	for _, m := range manifests {
+		if m.Kind == "CronJob" {
+			t.Errorf("unexpected CronJob manifest: cron triggers are now annotations on the Deployment")
+		}
 	}
-	if manifests[2].Name != "cron-wf-cron" {
-		t.Errorf("expected CronJob name cron-wf-cron, got %s", manifests[2].Name)
-	}
-	if !strings.Contains(manifests[2].Content, `schedule: "0 9 * * *"`) {
-		t.Error("expected schedule in CronJob manifest")
-	}
-	if !strings.Contains(manifests[2].Content, "concurrencyPolicy: Forbid") {
-		t.Error("expected concurrencyPolicy: Forbid")
-	}
-	if !strings.Contains(manifests[2].Content, "successfulJobsHistoryLimit: 3") {
-		t.Error("expected successfulJobsHistoryLimit: 3")
-	}
-	if !strings.Contains(manifests[2].Content, "failedJobsHistoryLimit: 3") {
-		t.Error("expected failedJobsHistoryLimit: 3")
+	dep := manifests[0].Content
+	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 9 * * *") {
+		t.Error("expected cron-schedule annotation on Deployment with schedule")
 	}
 }
 
@@ -314,21 +306,30 @@ func TestK8sManifestCronTriggerMultiple(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "multi-cron:1-0", "default", DeployOptions{})
 
-	if len(manifests) != 5 {
-		t.Fatalf("expected 5 manifests (Deployment, Service, 2 CronJobs, NetworkPolicy), got %d", len(manifests))
+	// Multiple cron triggers are comma-joined in the cron-schedule annotation.
+	if len(manifests) != 2 {
+		t.Fatalf("expected 2 manifests (Deployment, Service), got %d", len(manifests))
 	}
-	if manifests[2].Name != "multi-cron-cron-0" {
-		t.Errorf("expected first CronJob name multi-cron-cron-0, got %s", manifests[2].Name)
+	for _, m := range manifests {
+		if m.Kind == "CronJob" {
+			t.Errorf("unexpected CronJob manifest: cron triggers are now annotations on the Deployment")
+		}
 	}
-	if manifests[3].Name != "multi-cron-cron-1" {
-		t.Errorf("expected second CronJob name multi-cron-cron-1, got %s", manifests[3].Name)
+	dep := manifests[0].Content
+	if !strings.Contains(dep, "tentacular.dev/cron-schedule:") {
+		t.Error("expected cron-schedule annotation on Deployment")
 	}
-	if manifests[4].Kind != "NetworkPolicy" {
-		t.Errorf("expected fifth manifest kind NetworkPolicy, got %s", manifests[4].Kind)
+	// Both schedules should appear in the annotation (comma-joined)
+	if !strings.Contains(dep, "0 9 * * *") {
+		t.Error("expected daily schedule in cron-schedule annotation")
+	}
+	if !strings.Contains(dep, "0 * * * *") {
+		t.Error("expected hourly schedule in cron-schedule annotation")
 	}
 }
 
-func TestK8sManifestCronTriggerNamedPostBody(t *testing.T) {
+func TestK8sManifestCronTriggerNamedScheduleAnnotation(t *testing.T) {
+	// Named triggers should still appear in the cron-schedule annotation.
 	wf := &spec.Workflow{
 		Name:    "named-cron",
 		Version: "1.0",
@@ -341,13 +342,14 @@ func TestK8sManifestCronTriggerNamedPostBody(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "named-cron:1-0", "default", DeployOptions{})
 
-	cronContent := manifests[2].Content
-	if !strings.Contains(cronContent, `daily-digest`) {
-		t.Error("expected trigger name in POST body")
+	dep := manifests[0].Content
+	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 9 * * *") {
+		t.Error("expected cron-schedule annotation with schedule on Deployment")
 	}
 }
 
-func TestK8sManifestCronTriggerUnnamedPostBody(t *testing.T) {
+func TestK8sManifestCronTriggerNoCronJobGenerated(t *testing.T) {
+	// Verify no CronJob manifests are generated regardless of trigger type.
 	wf := &spec.Workflow{
 		Name:    "unnamed-cron",
 		Version: "1.0",
@@ -360,35 +362,10 @@ func TestK8sManifestCronTriggerUnnamedPostBody(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "unnamed-cron:1-0", "default", DeployOptions{})
 
-	cronContent := manifests[2].Content
-	// Should contain {} (not a trigger name)
-	if strings.Contains(cronContent, `"trigger"`) {
-		t.Error("unnamed trigger should not include trigger field in POST body")
-	}
-}
-
-func TestK8sManifestCronTriggerLabels(t *testing.T) {
-	wf := &spec.Workflow{
-		Name:    "label-cron",
-		Version: "1.0",
-		Triggers: []spec.Trigger{
-			{Type: "cron", Schedule: "0 9 * * *"},
-		},
-		Nodes: map[string]spec.NodeSpec{
-			"fetch": {Path: "./nodes/fetch.ts"},
-		},
-	}
-	manifests := GenerateK8sManifests(wf, "label-cron:1-0", "default", DeployOptions{})
-
-	cronContent := manifests[2].Content
-	if !strings.Contains(cronContent, "app.kubernetes.io/name: label-cron") {
-		t.Error("expected app.kubernetes.io/name label in CronJob")
-	}
-	if !strings.Contains(cronContent, "app.kubernetes.io/managed-by: tentacular") {
-		t.Error("expected app.kubernetes.io/managed-by label in CronJob")
-	}
-	if !strings.Contains(cronContent, `app.kubernetes.io/version: "1.0"`) {
-		t.Error("expected app.kubernetes.io/version label in CronJob")
+	for _, m := range manifests {
+		if m.Kind == "CronJob" {
+			t.Errorf("unexpected CronJob manifest: cron triggers are now annotations on the Deployment")
+		}
 	}
 }
 
@@ -404,9 +381,16 @@ func TestK8sManifestManualOnlyNoRegression(t *testing.T) {
 			t.Error("manual-only workflow should not have CronJob manifests")
 		}
 	}
+	// Manual-only workflows should not have the cron-schedule annotation
+	dep := manifests[0].Content
+	if strings.Contains(dep, "tentacular.dev/cron-schedule") {
+		t.Error("expected no cron-schedule annotation for manual-only workflow")
+	}
 }
 
-func TestK8sManifestCronTriggerServiceURL(t *testing.T) {
+func TestK8sManifestCronTriggerAnnotationOnlyTwoManifests(t *testing.T) {
+	// Cron workflows now produce only Deployment+Service (no CronJob) with the
+	// schedule encoded as a Deployment annotation for the MCP scheduler.
 	wf := &spec.Workflow{
 		Name:    "svc-url-test",
 		Version: "1.0",
@@ -419,9 +403,12 @@ func TestK8sManifestCronTriggerServiceURL(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "svc-url-test:1-0", "prod", DeployOptions{})
 
-	cronContent := manifests[2].Content
-	if !strings.Contains(cronContent, "http://svc-url-test.prod.svc.cluster.local:8080/run") {
-		t.Error("expected correct service URL in CronJob manifest")
+	if len(manifests) != 2 {
+		t.Fatalf("expected 2 manifests (Deployment+Service), got %d", len(manifests))
+	}
+	dep := manifests[0].Content
+	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 9 * * *") {
+		t.Error("expected cron-schedule annotation on Deployment")
 	}
 }
 
@@ -800,7 +787,9 @@ func TestDeploymentDENODIRAlwaysSet(t *testing.T) {
 	}
 }
 
-func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
+func TestDeploymentNoInitContainers(t *testing.T) {
+	// The proxy pre-warm initContainer has been removed. Module pre-warming is now
+	// handled server-side by the MCP server's PrewarmModules function after wf_apply.
 	wf := &spec.Workflow{
 		Name:    "prewarm-test",
 		Version: "1.0",
@@ -814,65 +803,28 @@ func TestDeploymentProxyPrewarmInitContainer(t *testing.T) {
 		},
 	}
 
-	t.Run("initContainer present when ModuleProxyURL set and jsr deps exist", func(t *testing.T) {
+	t.Run("no initContainers even with ModuleProxyURL set and jsr deps", func(t *testing.T) {
 		opts := DeployOptions{
 			ModuleProxyURL: "http://esm-sh.tentacular-support.svc.cluster.local:8080",
 		}
 		manifests := GenerateK8sManifests(wf, "test:latest", "default", opts)
 		dep := manifests[0].Content
-		if !strings.Contains(dep, "initContainers:") {
-			t.Error("expected initContainers block when ModuleProxyURL set")
+		if strings.Contains(dep, "initContainers:") {
+			t.Error("expected no initContainers block (pre-warming moved to MCP server)")
 		}
-		if !strings.Contains(dep, "proxy-prewarm") {
-			t.Error("expected proxy-prewarm initContainer name")
+		if strings.Contains(dep, "proxy-prewarm") {
+			t.Error("expected no proxy-prewarm reference in Deployment")
 		}
-		if !strings.Contains(dep, "/jsr/@db/postgres@0.19.5") {
-			t.Error("expected jsr dep URL in prewarm curl command")
+		if strings.Contains(dep, "curlimages") {
+			t.Error("expected no curlimages reference in Deployment")
 		}
 	})
 
-	t.Run("no initContainer when ModuleProxyURL empty", func(t *testing.T) {
+	t.Run("no initContainers without ModuleProxyURL", func(t *testing.T) {
 		manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 		dep := manifests[0].Content
 		if strings.Contains(dep, "initContainers:") {
-			t.Error("expected no initContainers block when ModuleProxyURL not set")
-		}
-	})
-
-	t.Run("initContainer shell script is YAML-double-quoted (no bare > or | operators)", func(t *testing.T) {
-		// The third command item must be a YAML double-quoted string so that
-		// '> /dev/null' and '||' are not parsed as YAML fold/literal scalars,
-		// and echo text with ': ' doesn't create a spurious map key:value.
-		opts := DeployOptions{
-			ModuleProxyURL: "http://esm-sh.tentacular-support.svc.cluster.local:8080",
-		}
-		manifests := GenerateK8sManifests(wf, "test:latest", "default", opts)
-		dep := manifests[0].Content
-		// The shell script line must start with '- "' (YAML double-quoted scalar)
-		if !strings.Contains(dep, "- \"curl -sf") {
-			t.Errorf("expected initContainer shell script to be YAML double-quoted, got snippet:\n%s",
-				dep[max(0, strings.Index(dep, "proxy-prewarm")):min(len(dep), strings.Index(dep, "proxy-prewarm")+500)])
-		}
-	})
-
-	t.Run("no initContainer when no jsr/npm deps", func(t *testing.T) {
-		httpOnly := &spec.Workflow{
-			Name:    "http-only",
-			Version: "1.0",
-			Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
-			Triggers: []spec.Trigger{{Type: "manual"}},
-			Contract: &spec.Contract{
-				Version: "1",
-				Dependencies: map[string]spec.Dependency{
-					"api": {Protocol: "https", Host: "api.example.com", Port: 443},
-				},
-			},
-		}
-		opts := DeployOptions{ModuleProxyURL: "http://esm-sh.tentacular-support.svc.cluster.local:8080"}
-		manifests := GenerateK8sManifests(httpOnly, "test:latest", "default", opts)
-		dep := manifests[0].Content
-		if strings.Contains(dep, "initContainers:") {
-			t.Error("expected no initContainers block when no jsr/npm deps")
+			t.Error("expected no initContainers block")
 		}
 	})
 }
@@ -903,16 +855,16 @@ func TestDeploymentImportMapMountPath(t *testing.T) {
 }
 
 func TestBuildDeployAnnotationsNilMetadata(t *testing.T) {
-	result := buildDeployAnnotations(nil)
+	result := buildDeployAnnotations(nil, nil)
 	if result != "" {
-		t.Errorf("expected empty string for nil metadata, got %q", result)
+		t.Errorf("expected empty string for nil metadata and no triggers, got %q", result)
 	}
 }
 
 func TestBuildDeployAnnotationsAllEmpty(t *testing.T) {
-	result := buildDeployAnnotations(&spec.WorkflowMetadata{})
+	result := buildDeployAnnotations(&spec.WorkflowMetadata{}, nil)
 	if result != "" {
-		t.Errorf("expected empty string for empty metadata struct, got %q", result)
+		t.Errorf("expected empty string for empty metadata struct and no triggers, got %q", result)
 	}
 }
 
@@ -923,7 +875,7 @@ func TestBuildDeployAnnotationsFullMetadata(t *testing.T) {
 		Tags:        []string{"production", "critical"},
 		Environment: "prod",
 	}
-	result := buildDeployAnnotations(meta)
+	result := buildDeployAnnotations(meta, nil)
 	if !strings.Contains(result, "tentacular.dev/owner: platform-team") {
 		t.Error("expected owner annotation")
 	}
@@ -946,7 +898,7 @@ func TestBuildDeployAnnotationsPartialMetadata(t *testing.T) {
 		Owner: "data-team",
 		// Team, Tags, Environment intentionally omitted
 	}
-	result := buildDeployAnnotations(meta)
+	result := buildDeployAnnotations(meta, nil)
 	if !strings.Contains(result, "tentacular.dev/owner: data-team") {
 		t.Error("expected owner annotation")
 	}
@@ -961,12 +913,34 @@ func TestBuildDeployAnnotationsPartialMetadata(t *testing.T) {
 	}
 }
 
+func TestBuildDeployAnnotationsCronScheduleSingle(t *testing.T) {
+	triggers := []spec.Trigger{
+		{Type: "cron", Schedule: "0 9 * * *"},
+	}
+	result := buildDeployAnnotations(nil, triggers)
+	if !strings.Contains(result, "tentacular.dev/cron-schedule: 0 9 * * *") {
+		t.Error("expected cron-schedule annotation with single schedule")
+	}
+}
+
+func TestBuildDeployAnnotationsCronScheduleMultiple(t *testing.T) {
+	triggers := []spec.Trigger{
+		{Type: "cron", Schedule: "0 9 * * *"},
+		{Type: "manual"},
+		{Type: "cron", Schedule: "0 * * * *"},
+	}
+	result := buildDeployAnnotations(nil, triggers)
+	if !strings.Contains(result, "tentacular.dev/cron-schedule: 0 9 * * *,0 * * * *") {
+		t.Errorf("expected comma-joined schedules in cron-schedule annotation, got: %q", result)
+	}
+}
+
 func TestBuildDeployAnnotationsNewlineInjectionBlocked(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
 		Owner: "foo\n    injected.key: evil-value",
 		Team:  "bar\r\nbaz",
 	}
-	result := buildDeployAnnotations(meta)
+	result := buildDeployAnnotations(meta, nil)
 
 	// Verify no additional YAML lines were injected. After sanitization the
 	// newlines are removed, so the only annotation lines should be

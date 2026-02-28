@@ -30,7 +30,7 @@ The `tntc` CLI manages the full workflow lifecycle — from scaffolding to deplo
 | `run` | `tntc run <name>` | Trigger a deployed workflow, return JSON result |
 | `logs` | `tntc logs <name>` | View pod logs; `-f` to stream in real time |
 | `list` | `tntc list` | List all deployed workflows with version, status, and age |
-| `undeploy` | `tntc undeploy <name>` | Remove deployed workflow (Deployment, Service, Secret, CronJobs) |
+| `undeploy` | `tntc undeploy <name>` | Remove deployed workflow (Deployment, Service, Secret, ConfigMap, NetworkPolicy) |
 | `cluster check` | `tntc cluster check` | Preflight cluster validation; `--fix` auto-remediates |
 | `cluster profile` | `tntc cluster profile` | Capability snapshot for agent workflow design; auto-runs on `configure` |
 

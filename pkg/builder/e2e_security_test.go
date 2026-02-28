@@ -118,54 +118,10 @@ func TestE2E_DeploymentSecurityHardeningComplete(t *testing.T) {
 	}
 }
 
-// TestE2E_ProxyPrewarmInitContainerSecurityContext verifies that the proxy-prewarm init
-// container has the required PSA-compliant security context fields.
-func TestE2E_ProxyPrewarmInitContainerSecurityContext(t *testing.T) {
-	wf := &spec.Workflow{
-		Name:    "prewarm-sec",
-		Version: "1.0",
-		Triggers: []spec.Trigger{
-			{Type: "manual"},
-		},
-		Nodes: map[string]spec.NodeSpec{
-			"fetch": {Path: "./nodes/fetch.ts"},
-		},
-		Contract: &spec.Contract{
-			Dependencies: map[string]spec.Dependency{
-				"pg": {Protocol: "jsr", Host: "@db/postgres", Version: "^0.4"},
-			},
-		},
-	}
-
-	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{
-		ModuleProxyURL: "http://esm-sh.tentacular-support.svc.cluster.local:8080",
-	})
-
-	dep := manifests[0].Content
-
-	// Init container must be present
-	if !strings.Contains(dep, "initContainers:") {
-		t.Fatal("expected initContainers block in Deployment with jsr dep and proxy URL")
-	}
-	if !strings.Contains(dep, "proxy-prewarm") {
-		t.Error("expected proxy-prewarm init container name")
-	}
-
-	// PSA-required security context on init container
-	if !strings.Contains(dep, "readOnlyRootFilesystem: true") {
-		t.Error("expected readOnlyRootFilesystem: true in proxy-prewarm init container")
-	}
-	if !strings.Contains(dep, "allowPrivilegeEscalation: false") {
-		t.Error("expected allowPrivilegeEscalation: false in proxy-prewarm init container")
-	}
-	if !strings.Contains(dep, "- ALL") {
-		t.Error("expected capabilities drop ALL in proxy-prewarm init container")
-	}
-}
-
-// TestE2E_CronJobTriggerSecurityContext verifies that generated CronJob trigger pods
-// have the required PSA-compliant security context at both pod and container level.
-func TestE2E_CronJobTriggerSecurityContext(t *testing.T) {
+// TestE2E_CronTriggerAnnotationOnDeployment verifies that cron triggers produce
+// a tentacular.dev/cron-schedule annotation on the Deployment instead of CronJob manifests.
+// Pre-warming is now handled server-side by the MCP server after wf_apply.
+func TestE2E_CronTriggerAnnotationOnDeployment(t *testing.T) {
 	wf := &spec.Workflow{
 		Name:    "cron-sec",
 		Version: "1.0",
@@ -179,109 +135,23 @@ func TestE2E_CronJobTriggerSecurityContext(t *testing.T) {
 
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 
-	// Find the CronJob manifest
-	var cronContent string
+	// No CronJob manifests should be generated.
 	for _, m := range manifests {
 		if m.Kind == "CronJob" {
-			cronContent = m.Content
-			break
+			t.Errorf("unexpected CronJob manifest: cron triggers are now annotations on the Deployment")
 		}
 	}
-	if cronContent == "" {
-		t.Fatal("expected a CronJob manifest for cron trigger")
-	}
 
-	// Pod-level security context
-	if !strings.Contains(cronContent, "runAsNonRoot: true") {
-		t.Error("expected runAsNonRoot: true in CronJob pod security context")
-	}
-	if !strings.Contains(cronContent, "runAsUser: 65534") {
-		t.Error("expected runAsUser: 65534 in CronJob pod security context")
-	}
-	if !strings.Contains(cronContent, "type: RuntimeDefault") {
-		t.Error("expected seccompProfile type: RuntimeDefault in CronJob pod security context")
-	}
-
-	// Container-level security context
-	if !strings.Contains(cronContent, "readOnlyRootFilesystem: true") {
-		t.Error("expected readOnlyRootFilesystem: true in CronJob container security context")
-	}
-	if !strings.Contains(cronContent, "allowPrivilegeEscalation: false") {
-		t.Error("expected allowPrivilegeEscalation: false in CronJob container security context")
-	}
-	if !strings.Contains(cronContent, "- ALL") {
-		t.Error("expected capabilities drop ALL in CronJob container security context")
-	}
-
-	// Trigger role label on pod
-	if !strings.Contains(cronContent, "tentacular.dev/role: trigger") {
-		t.Error("expected tentacular.dev/role: trigger label on CronJob pod")
+	// The cron schedule should appear as an annotation on the Deployment.
+	dep := manifests[0].Content
+	if !strings.Contains(dep, "tentacular.dev/cron-schedule: 0 8 * * *") {
+		t.Error("expected cron-schedule annotation on Deployment with schedule")
 	}
 }
 
-// TestE2E_CronJobTriggerEgressNetworkPolicy verifies that a CronJob workflow generates
-// a trigger NetworkPolicy allowing egress to the engine on port 8080 and to kube-dns.
-func TestE2E_CronJobTriggerEgressNetworkPolicy(t *testing.T) {
-	wf := &spec.Workflow{
-		Name:    "cron-netpol",
-		Version: "1.0",
-		Triggers: []spec.Trigger{
-			{Type: "cron", Schedule: "0 8 * * *"},
-		},
-		Nodes: map[string]spec.NodeSpec{
-			"process": {Path: "./nodes/process.ts"},
-		},
-	}
-
-	manifests := GenerateK8sManifests(wf, "test:latest", "tentacular-dev", DeployOptions{})
-
-	// Find the trigger NetworkPolicy manifest
-	var netpolContent string
-	var netpolName string
-	for _, m := range manifests {
-		if m.Kind == "NetworkPolicy" && strings.Contains(m.Name, "trigger") {
-			netpolContent = m.Content
-			netpolName = m.Name
-			break
-		}
-	}
-	if netpolContent == "" {
-		t.Fatal("expected a trigger NetworkPolicy manifest for cron workflow")
-	}
-	_ = netpolName
-
-	// Must select trigger pods
-	if !strings.Contains(netpolContent, "tentacular.dev/role: trigger") {
-		t.Error("expected podSelector for tentacular.dev/role: trigger")
-	}
-
-	// Must have egress to engine on port 8080
-	if !strings.Contains(netpolContent, "port: 8080") {
-		t.Error("expected egress port 8080 to workflow engine")
-	}
-
-	// Must have DNS egress
-	if !strings.Contains(netpolContent, "port: 53") {
-		t.Error("expected DNS egress port 53")
-	}
-	if !strings.Contains(netpolContent, "kube-dns") {
-		t.Error("expected kube-dns selector in DNS egress rule")
-	}
-
-	// Must have correct namespace
-	if !strings.Contains(netpolContent, "namespace: tentacular-dev") {
-		t.Error("expected namespace: tentacular-dev in trigger NetworkPolicy")
-	}
-
-	// Must declare Egress policy type
-	if !strings.Contains(netpolContent, "- Egress") {
-		t.Error("expected Egress in policyTypes")
-	}
-}
-
-// TestE2E_NoCronNoTriggerNetworkPolicy verifies that workflows without cron triggers
-// do NOT generate a trigger NetworkPolicy.
-func TestE2E_NoCronNoTriggerNetworkPolicy(t *testing.T) {
+// TestE2E_NoCronNoAnnotation verifies that workflows without cron triggers
+// do NOT have a cron-schedule annotation on the Deployment.
+func TestE2E_NoCronNoAnnotation(t *testing.T) {
 	wf := &spec.Workflow{
 		Name:    "manual-only",
 		Version: "1.0",
@@ -295,9 +165,14 @@ func TestE2E_NoCronNoTriggerNetworkPolicy(t *testing.T) {
 
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 
+	dep := manifests[0].Content
+	if strings.Contains(dep, "tentacular.dev/cron-schedule") {
+		t.Error("expected no cron-schedule annotation for manual-only workflow")
+	}
+
 	for _, m := range manifests {
-		if m.Kind == "NetworkPolicy" && strings.Contains(m.Name, "trigger") {
-			t.Errorf("unexpected trigger NetworkPolicy for manual-only workflow: %s", m.Name)
+		if m.Kind == "CronJob" {
+			t.Errorf("unexpected CronJob manifest for manual-only workflow: %s", m.Name)
 		}
 	}
 }

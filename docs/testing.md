@@ -51,7 +51,7 @@ When `config` or `secrets` are omitted, the mock context uses empty objects (sam
 | Suite | Tests | Coverage Areas |
 |-------|-------|---------------|
 | Go (`pkg/spec`) | 17 | Parser: valid spec, naming, cycles, edges, triggers, config, deployment namespace |
-| Go (`pkg/builder`) | 38 | K8s manifests: security, probes, RuntimeClass, CronJobs, imagePullPolicy, version labels, ConfigMap |
+| Go (`pkg/builder`) | 38 | K8s manifests: security, probes, RuntimeClass, cron annotation, imagePullPolicy, version labels, ConfigMap, NetworkPolicy |
 | Go (`pkg/cli`) | 42 | Secret provisioning, nested YAML, shared secrets, config loading/merging, secrets check/init |
 | Go (`pkg/k8s`) | 3 | Preflight checks: JSON round-trip, warning omitempty |
 | Deno (`compiler`) | 9 | DAG compilation: chains, fan-out, fan-in, cycles |
