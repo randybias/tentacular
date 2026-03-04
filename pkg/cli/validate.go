@@ -173,6 +173,6 @@ func outputValidateJSON(wf *spec.Workflow, out io.Writer) error {
 	if err != nil {
 		return fmt.Errorf("marshaling JSON: %w", err)
 	}
-	fmt.Fprintln(out, string(data))
+	_, _ = fmt.Fprintln(out, string(data))
 	return nil
 }

@@ -236,7 +236,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 				return emitDeployResult(cmd, "fail", "verification: workflow returned success=false", execResult, startedAt)
 			}
 		}
-		fmt.Fprintln(w, "  Verification passed")
+		_, _ = fmt.Fprintln(w, "  Verification passed")
 	}
 
 	return emitDeployResult(cmd, "pass", fmt.Sprintf("deployed %s to %s", deployResult.WorkflowName, deployResult.Namespace), nil, startedAt)
@@ -375,7 +375,7 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 		return nil, fmt.Errorf("building secret manifest: %w", err)
 	}
 	if secretManifest != nil {
-		fmt.Fprintf(w, "  Found local secrets -- will provision %s-secrets\n", wf.Name)
+		_, _ = fmt.Fprintf(w, "  Found local secrets -- will provision %s-secrets\n", wf.Name)
 		manifests = append(manifests, *secretManifest)
 	}
 
@@ -415,7 +415,7 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 		return nil, err
 	}
 
-	fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, opts.Namespace)
+	_, _ = fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, opts.Namespace)
 
 	// Phase 2: Convert manifests to map[string]interface{} for MCP transport
 	mcpManifests := make([]map[string]interface{}, 0, len(manifests))
@@ -437,14 +437,14 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 	}
 
 	for _, applied := range applyResult.Applied {
-		fmt.Fprintf(w, "  applied %s\n", applied)
+		_, _ = fmt.Fprintf(w, "  applied %s\n", applied)
 	}
 
 	if applyResult.Updated > 0 {
-		fmt.Fprintln(w, "  Triggered rollout restart")
+		_, _ = fmt.Fprintln(w, "  Triggered rollout restart")
 	}
 
-	fmt.Fprintf(w, "Deployed %s to %s\n", wf.Name, opts.Namespace)
+	_, _ = fmt.Fprintf(w, "Deployed %s to %s\n", wf.Name, opts.Namespace)
 	return &DeployResult{
 		WorkflowName: wf.Name,
 		Namespace:    opts.Namespace,
