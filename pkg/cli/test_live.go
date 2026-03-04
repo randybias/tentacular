@@ -31,7 +31,7 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no workflow.yaml found in %s", absDir)
 	}
 
-	envName, _ := cmd.Flags().GetString("env")
+	envName := flagString(cmd, "env")
 	keep, _ := cmd.Flags().GetBool("keep")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 

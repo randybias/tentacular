@@ -404,3 +404,93 @@ func TestAuditResources_UnmarshalError(t *testing.T) {
 		t.Error("expected unmarshal error from AuditResources")
 	}
 }
+
+// --- cluster_profile ---
+
+// TestClusterProfile_Success verifies ClusterProfile returns raw JSON from the tool.
+func TestClusterProfile_Success(t *testing.T) {
+	profileJSON := `{"k8sVersion":"v1.29.0","distribution":"k0s","gvisor":true}`
+	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
+		"cluster_profile": func(args map[string]any) (string, bool) {
+			return profileJSON, false
+		},
+	})
+	defer srv.Close()
+	defer client.Close()
+
+	result, err := client.ClusterProfile(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ClusterProfile: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected non-nil result")
+	}
+	if string(result.Raw) != profileJSON {
+		t.Errorf("expected raw JSON %q, got %q", profileJSON, string(result.Raw))
+	}
+}
+
+// TestClusterProfile_WithNamespace verifies namespace is passed as a parameter.
+func TestClusterProfile_WithNamespace(t *testing.T) {
+	var receivedNS string
+	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
+		"cluster_profile": func(args map[string]any) (string, bool) {
+			if ns, ok := args["namespace"]; ok {
+				receivedNS, _ = ns.(string)
+			}
+			return `{"k8sVersion":"v1.29.0"}`, false
+		},
+	})
+	defer srv.Close()
+	defer client.Close()
+
+	_, err := client.ClusterProfile(context.Background(), "my-namespace")
+	if err != nil {
+		t.Fatalf("ClusterProfile: %v", err)
+	}
+	if receivedNS != "my-namespace" {
+		t.Errorf("expected namespace=my-namespace to be passed, got %q", receivedNS)
+	}
+}
+
+// TestClusterProfile_NoNamespaceOmitsParam verifies that an empty namespace
+// does not add a namespace parameter to the call.
+func TestClusterProfile_NoNamespaceOmitsParam(t *testing.T) {
+	var receivedArgs map[string]any
+	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
+		"cluster_profile": func(args map[string]any) (string, bool) {
+			receivedArgs = args
+			return `{"k8sVersion":"v1.29.0"}`, false
+		},
+	})
+	defer srv.Close()
+	defer client.Close()
+
+	_, err := client.ClusterProfile(context.Background(), "")
+	if err != nil {
+		t.Fatalf("ClusterProfile: %v", err)
+	}
+	// When namespace is empty, it should be omitted (omitempty)
+	if ns, ok := receivedArgs["namespace"]; ok && ns != "" {
+		t.Errorf("expected namespace to be absent or empty when not provided, got %q", ns)
+	}
+}
+
+// TestClusterProfile_ToolError verifies tool errors are propagated.
+func TestClusterProfile_ToolError(t *testing.T) {
+	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
+		"cluster_profile": func(args map[string]any) (string, bool) {
+			return "cluster profile failed: permission denied", true
+		},
+	})
+	defer srv.Close()
+	defer client.Close()
+
+	_, err := client.ClusterProfile(context.Background(), "")
+	if err == nil {
+		t.Fatal("expected error from tool error response")
+	}
+	if !IsToolError(err) {
+		t.Errorf("expected IsToolError=true, got false for: %v", err)
+	}
+}

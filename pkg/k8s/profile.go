@@ -1,18 +1,14 @@
 package k8s
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"os"
 	"sort"
 	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 // ClusterProfile is a point-in-time capability snapshot of a target cluster environment.
@@ -107,163 +103,6 @@ type LimitRangeSummary struct {
 	DefaultCPULimit      string `json:"defaultCPULimit,omitempty"      yaml:"defaultCPULimit,omitempty"`
 	DefaultMemoryRequest string `json:"defaultMemoryRequest,omitempty" yaml:"defaultMemoryRequest,omitempty"`
 	DefaultMemoryLimit   string `json:"defaultMemoryLimit,omitempty"   yaml:"defaultMemoryLimit,omitempty"`
-}
-
-// Profile collects a capability snapshot for the given namespace and environment name.
-// The envName is used only for labelling the profile — it does not affect cluster access,
-// which is already established via the Client's kubeconfig/context.
-func (c *Client) Profile(ctx context.Context, namespace, envName string) (*ClusterProfile, error) {
-	p := &ClusterProfile{
-		GeneratedAt: time.Now().UTC(),
-		Environment: envName,
-		Namespace:   namespace,
-	}
-
-	// K8s server version
-	sv, err := c.clientset.Discovery().ServerVersion()
-	if err != nil {
-		return nil, fmt.Errorf("fetching server version: %w", err)
-	}
-	p.K8sVersion = sv.GitVersion
-
-	// Nodes + distribution
-	nodes, err := c.clientset.CoreV1().Nodes().List(ctx, metav1.ListOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("listing nodes: %w", err)
-	}
-	p.Distribution = detectDistribution(nodes)
-	for _, n := range nodes.Items {
-		ni := NodeInfo{
-			Name:   n.Name,
-			Arch:   n.Status.NodeInfo.Architecture,
-			OS:     n.Status.NodeInfo.OperatingSystem,
-			Labels: n.Labels,
-		}
-		for _, t := range n.Spec.Taints {
-			ni.Taints = append(ni.Taints, fmt.Sprintf("%s=%s:%s", t.Key, t.Value, t.Effect))
-		}
-		p.Nodes = append(p.Nodes, ni)
-	}
-
-	// RuntimeClasses
-	rcs, err := c.clientset.NodeV1().RuntimeClasses().List(ctx, metav1.ListOptions{})
-	if err == nil {
-		for _, rc := range rcs.Items {
-			p.RuntimeClasses = append(p.RuntimeClasses, RuntimeClassInfo{
-				Name:    rc.Name,
-				Handler: rc.Handler,
-			})
-			if rc.Name == "gvisor" || strings.Contains(rc.Handler, "runsc") {
-				p.GVisor = true
-			}
-		}
-	}
-
-	// StorageClasses + CSI drivers
-	scs, err := c.clientset.StorageV1().StorageClasses().List(ctx, metav1.ListOptions{})
-	if err == nil {
-		for _, sc := range scs.Items {
-			isDefault := sc.Annotations["storageclass.kubernetes.io/is-default-class"] == "true"
-			reclaimPolicy := "Delete"
-			if sc.ReclaimPolicy != nil {
-				reclaimPolicy = string(*sc.ReclaimPolicy)
-			}
-			allowExpand := false
-			if sc.AllowVolumeExpansion != nil {
-				allowExpand = *sc.AllowVolumeExpansion
-			}
-			p.StorageClasses = append(p.StorageClasses, StorageClassInfo{
-				Name:                 sc.Name,
-				Provisioner:          sc.Provisioner,
-				IsDefault:            isDefault,
-				ReclaimPolicy:        reclaimPolicy,
-				AllowVolumeExpansion: allowExpand,
-				RWXCapable:           isRWXCapable(sc.Provisioner),
-			})
-		}
-		p.RWXNote = "rwxCapable is inferred from provisioner name only — not verified. Actual RWX support depends on CSI driver version and cluster configuration."
-	}
-	csiDrivers, err := c.clientset.StorageV1().CSIDrivers().List(ctx, metav1.ListOptions{})
-	if err == nil {
-		for _, d := range csiDrivers.Items {
-			p.CSIDrivers = append(p.CSIDrivers, d.Name)
-		}
-	}
-
-	// CNI (via kube-system pods)
-	ksPods, err := c.clientset.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{})
-	if err == nil {
-		p.CNI = detectCNI(ksPods)
-	}
-	if p.CNI.Name == "unknown" {
-		fmt.Fprintf(os.Stderr, "WARNING [profile]: CNI plugin could not be detected from kube-system pod labels. "+
-			"NetworkPolicy and egress support are marked false. This may be due to a non-standard CNI "+
-			"(e.g. Antrea, Canal, Kube-OVN) or RBAC restrictions on listing pods in kube-system. "+
-			"Verify NetworkPolicy support manually.\n")
-	}
-
-	// NetworkPolicy support + usage
-	netpols, err := c.clientset.NetworkingV1().NetworkPolicies("").List(ctx, metav1.ListOptions{})
-	if err == nil {
-		p.NetworkPolicy = NetPolInfo{
-			Supported: p.CNI.NetworkPolicySupported,
-			InUse:     len(netpols.Items) > 0,
-		}
-	} else {
-		p.NetworkPolicy = NetPolInfo{Supported: p.CNI.NetworkPolicySupported}
-	}
-
-	// Ingress controllers (all namespaces)
-	allPods, err := c.clientset.CoreV1().Pods("").List(ctx, metav1.ListOptions{})
-	if err == nil {
-		p.Ingress = detectIngress(allPods)
-	}
-
-	// CRD-based extensions
-	crdGVR := schema.GroupVersionResource{
-		Group:    "apiextensions.k8s.io",
-		Version:  "v1",
-		Resource: "customresourcedefinitions",
-	}
-	crdList, err := c.dynamic.Resource(crdGVR).List(ctx, metav1.ListOptions{})
-	if err == nil {
-		p.Extensions = classifyExtensions(crdList)
-	}
-
-	// Metrics server (kube-system)
-	if err == nil {
-		msPods, _ := c.clientset.CoreV1().Pods("kube-system").List(ctx, metav1.ListOptions{
-			LabelSelector: "k8s-app=metrics-server",
-		})
-		if msPods != nil && len(msPods.Items) > 0 {
-			p.Extensions.MetricsServer = true
-		}
-	}
-
-	// Resource quotas
-	quotas, err := c.clientset.CoreV1().ResourceQuotas(namespace).List(ctx, metav1.ListOptions{})
-	if err == nil && len(quotas.Items) > 0 {
-		p.Quota = summariseQuotas(quotas.Items)
-	}
-
-	// LimitRanges
-	limits, err := c.clientset.CoreV1().LimitRanges(namespace).List(ctx, metav1.ListOptions{})
-	if err == nil && len(limits.Items) > 0 {
-		p.LimitRange = summariseLimitRanges(limits.Items)
-	}
-
-	// Pod Security Admission
-	ns, err := c.clientset.CoreV1().Namespaces().Get(ctx, namespace, metav1.GetOptions{})
-	if err == nil {
-		p.PodSecurity = detectPodSecurity(ns)
-	} else {
-		p.PodSecurity = "unknown"
-	}
-
-	// Agent guidance
-	p.Guidance = deriveGuidance(p)
-
-	return p, nil
 }
 
 // --- helpers ---

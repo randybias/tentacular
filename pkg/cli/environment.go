@@ -17,17 +17,22 @@ type EnvironmentConfig struct {
 	ConfigOverrides map[string]interface{} `yaml:"config_overrides,omitempty"`
 	SecretsSource   string                 `yaml:"secrets_source,omitempty"`
 	Enforcement     string                 `yaml:"enforcement,omitempty"` // "strict" (default) or "audit"
+	MCPEndpoint     string                 `yaml:"mcp_endpoint,omitempty"`
+	MCPTokenPath    string                 `yaml:"mcp_token_path,omitempty"`
 }
 
 // ResolveEnvironment loads the merged config and returns the named environment.
-// Resolution cascade: explicit envName > TENTACULAR_ENV env var > "" (top-level defaults).
-// When envName is empty (and TENTACULAR_ENV is unset), returns top-level config
-// promoted to an EnvironmentConfig.
+// Resolution cascade: explicit envName > TENTACULAR_ENV env var > default_env config > "" (top-level defaults).
+// When envName is empty (and TENTACULAR_ENV is unset and default_env is not set),
+// returns top-level config promoted to an EnvironmentConfig.
 func ResolveEnvironment(envName string) (*EnvironmentConfig, error) {
 	if envName == "" {
 		envName = os.Getenv("TENTACULAR_ENV")
 	}
 	cfg := LoadConfig()
+	if envName == "" {
+		envName = cfg.DefaultEnv
+	}
 	return cfg.LoadEnvironment(envName)
 }
 
@@ -50,9 +55,12 @@ func (c *TentacularConfig) LoadEnvironment(name string) (*EnvironmentConfig, err
 	if !ok {
 		return nil, fmt.Errorf("environment %q not found in config", name)
 	}
-	// Expand ~ in kubeconfig path
+	// Expand ~ in path fields
 	if env.Kubeconfig != "" {
 		env.Kubeconfig = expandHome(env.Kubeconfig)
+	}
+	if env.MCPTokenPath != "" {
+		env.MCPTokenPath = expandHome(env.MCPTokenPath)
 	}
 	return &env, nil
 }

@@ -1,0 +1,3 @@
+# Per-workflow secrets (shared secrets live at repo root .secrets/, covered by root .gitignore)
+**/.secrets.yaml
+**/.secrets/

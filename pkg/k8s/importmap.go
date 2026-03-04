@@ -17,7 +17,7 @@ import (
 const DefaultProxyNamespace = "tentacular-support"
 
 // DefaultModuleProxyURL is the in-cluster URL of the esm.sh module proxy service.
-// Installed by `tntc cluster install` in the tentacular-support namespace.
+// Deployed by the MCP server in the tentacular-support namespace.
 const DefaultModuleProxyURL = "http://esm-sh.tentacular-support.svc.cluster.local:8080"
 
 // engineDenoImports holds the engine's base import map entries from engine/deno.json.
@@ -301,7 +301,7 @@ func parseModuleSpecifier(s string) (host, version string) {
 }
 
 // GenerateModuleProxyManifests returns the set of K8s manifests for the esm.sh
-// module proxy service, deployed into tentacular-support by `tntc cluster install`.
+// module proxy service, deployed into tentacular-support by the MCP server.
 func GenerateModuleProxyManifests(image, namespace, storage, pvcSize string) []builder.Manifest {
 	if image == "" {
 		image = "ghcr.io/esm-dev/esm.sh:v136"

@@ -38,7 +38,7 @@ Three components form the system: a Go CLI manages the full lifecycle, an in-clu
                                  └──────────────────────────────────────────────┘
 ```
 
-`tntc cluster install` bootstraps the MCP server and is the only CLI command that communicates directly with the Kubernetes API. All other cluster-facing commands route through MCP.
+All CLI commands that interact with the cluster route through the MCP server via HTTP. The MCP server is installed separately using its Helm chart (`helm install tentacular-mcp`).
 
 ## Features
 
@@ -90,20 +90,31 @@ tntc dev
 # POST http://localhost:8080/run to trigger, GET /health to check
 ```
 
-### 4. Bootstrap the cluster (one-time)
+### 4. Install the MCP server (one-time per cluster)
 
 ```bash
-tntc cluster install
+# Generate a token and install via Helm
+TOKEN=$(openssl rand -hex 32)
+helm install tentacular-mcp charts/tentacular-mcp \
+  --namespace tentacular-system --create-namespace \
+  --set auth.token="${TOKEN}"
 ```
 
-### 5. Build and deploy
+### 5. Configure the CLI
+
+```bash
+tntc configure --registry registry.example.com
+# Add MCP endpoint and token to ~/.tentacular/config.yaml
+```
+
+### 6. Build and deploy
 
 ```bash
 tntc build my-workflow -r registry.example.com --push
 tntc deploy my-workflow -n my-namespace -r registry.example.com
 ```
 
-### 6. Operate
+### 7. Operate
 
 ```bash
 tntc status my-workflow -n my-namespace

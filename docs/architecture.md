@@ -30,7 +30,7 @@ Tentacular is a workflow execution platform that runs TypeScript DAGs on Kuberne
                                       └──────────────────────────────────────────────┘
 ```
 
-**CLI-to-MCP Handoff:** `tntc cluster install` is the only CLI command that communicates directly with the Kubernetes API. It bootstraps the MCP server, generates a bearer token, and saves the MCP endpoint and token to `~/.tentacular/config.yaml`. All subsequent cluster-facing commands (deploy, run, list, status, logs, undeploy, audit, cluster check) route through the MCP server using JSON-RPC 2.0 over Streamable HTTP.
+**CLI-to-MCP Architecture:** The CLI has no direct Kubernetes API access. All cluster-facing commands (deploy, run, list, status, logs, undeploy, audit, cluster check, cluster profile) route through the MCP server using JSON-RPC 2.0 over Streamable HTTP. The MCP server is installed separately via its Helm chart. MCP connection details are configured per-environment in `~/.tentacular/config.yaml` or via `TNTC_MCP_ENDPOINT` / `TNTC_MCP_TOKEN` environment variables.
 
 | Directory | Purpose |
 |-----------|---------|
@@ -84,14 +84,14 @@ tntc
 ├── list                List deployed workflows (via MCP)
 ├── undeploy <name>     Remove a deployed workflow (via MCP)
 ├── audit <name>        Run security audit (via MCP: RBAC, netpol, PSA)
-├── cluster install     Bootstrap MCP server and module proxy (direct K8s API)
 ├── cluster check       Preflight cluster validation (via MCP)
+├── cluster profile     Cluster capability snapshot (via MCP)
 └── visualize [dir]     Generate Mermaid DAG diagram
 ```
 
-Global flags: `--namespace`, `--registry`, `--output` (text|json)
+Global flags: `--namespace`, `--registry`, `--output` (text|json), `--env` (environment name)
 
-Commands marked "(via MCP)" require a running MCP server. Run `tntc cluster install` first to bootstrap. The `logs` command returns a snapshot of recent lines; real-time streaming (`--follow`) is not supported through MCP.
+Commands marked "(via MCP)" require a running MCP server. Install the MCP server via its Helm chart and configure the endpoint in your config. The `logs` command returns a snapshot of recent lines; real-time streaming (`--follow`) is not supported through MCP.
 
 ### Package Layout
 
@@ -116,27 +116,23 @@ pkg/
 │   ├── list.go         List deployed workflows via MCP wf_list
 │   ├── undeploy.go     Remove deployed workflow via MCP wf_remove
 │   ├── audit.go        Security audit via MCP audit_rbac, audit_netpol, audit_psa
-│   ├── cluster.go      cluster install (bootstrap) + cluster check (via MCP)
-│   ├── resolve.go      resolveMCPClient(), requireMCPClient(), mcpErrorHint()
+│   ├── cluster.go      cluster check (via MCP)
+│   ├── resolve.go      Per-env MCP resolution: resolveMCPClient(), requireMCPClient()
 │   └── visualize.go    Mermaid graph output
 ├── mcp/            MCP client (JSON-RPC 2.0 over Streamable HTTP)
 │   ├── client.go       Client struct, CallTool(), Ping()
 │   ├── tools.go        Typed tool methods: WfApply, WfRemove, WfStatus, WfList,
-│   │                   WfLogs, WfRun, ClusterPreflight, NsCreate, AuditResources
-│   └── auth.go         Config resolution, LoadConfigFromCluster(), SaveConfig()
-└── k8s/            Kubernetes client operations (bootstrap only)
-    ├── client.go       NewClient(), Apply() — used only by cluster install
-    ├── mcp_deploy.go   GenerateMCPServerManifests(), MCPEndpointInCluster()
-    ├── mcp_token.go    Token generation for MCP auth
-    └── preflight.go    PreflightCheck() — legacy, now proxied via MCP
+│   │                   WfLogs, WfRun, ClusterPreflight, ClusterProfile, NsCreate,
+│   │                   AuditResources, WfHealth, Promote
+│   └── auth.go         Config resolution helpers
+└── k8s/            Kubernetes types and profile rendering
+    └── profile.go      ClusterProfile struct and Markdown() renderer
 ```
 
 ### Dependencies
 
 - `github.com/spf13/cobra` — CLI framework
 - `gopkg.in/yaml.v3` — YAML parsing for workflow specs and secrets
-- `k8s.io/client-go` — K8s API client (used only by `cluster install` bootstrap)
-- `k8s.io/apimachinery` — K8s types and API machinery
 - `net/http` — MCP client transport (JSON-RPC 2.0 over HTTP)
 
 ## 3. Deno Engine Architecture
@@ -413,8 +409,8 @@ tntc list                 List all tentacular-managed deployments (MCP: wf_list)
 tntc undeploy <name>      Remove all deployment resources (MCP: wf_remove)
   --yes                          Skip confirmation prompt
 tntc audit <name>         Security audit (MCP: audit_rbac, audit_netpol, audit_psa)
-tntc cluster install      Bootstrap MCP server + module proxy (direct K8s API)
 tntc cluster check        Preflight validation (MCP: cluster_preflight)
+tntc cluster profile      Cluster capability snapshot (MCP: cluster_profile)
 ```
 
 ### Generated K8s Resources

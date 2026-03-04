@@ -41,6 +41,7 @@ func newSecretsInitCmd() *cobra.Command {
 		RunE:  runSecretsInit,
 	}
 	cmd.Flags().Bool("force", false, "Overwrite existing .secrets.yaml")
+	cmd.Flags().Bool("shared", false, "Initialize shared .secrets/ directory from .secrets.yaml.example")
 	return cmd
 }
 
@@ -61,8 +62,11 @@ func runSecretsCheck(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Read provisioned secrets
+	// Read provisioned secrets (local + shared)
 	provisioned, provSource := readProvisionedSecrets(dir)
+
+	// Also check shared secrets for any $shared.<name> references in .secrets.yaml
+	sharedStatus := checkSharedSecrets(dir)
 
 	// Compare
 	wfName := filepath.Base(dir)
@@ -77,7 +81,16 @@ func runSecretsCheck(cmd *cobra.Command, args []string) error {
 	sort.Strings(keys)
 
 	for _, name := range keys {
-		if _, ok := provisioned[name]; ok {
+		if status, ok := sharedStatus[name]; ok {
+			// Secret is referenced via $shared
+			if status == "ok" {
+				fmt.Printf("  %s  provisioned (shared)\n", name)
+			} else {
+				fmt.Printf("  %s  missing (%s)\n", name, status)
+				allProvisioned = false
+				missing++
+			}
+		} else if _, ok := provisioned[name]; ok {
 			fmt.Printf("  %s  provisioned (%s)\n", name, provSource)
 		} else {
 			fmt.Printf("  %s  missing\n", name)
@@ -96,9 +109,64 @@ func runSecretsCheck(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// checkSharedSecrets reads .secrets.yaml for $shared.<name> references and
+// verifies each referenced shared secret exists and is non-empty.
+// Returns a map of service name -> "ok" | "empty" | "missing".
+func checkSharedSecrets(workflowDir string) map[string]string {
+	result := make(map[string]string)
+
+	secretsFile := filepath.Join(workflowDir, ".secrets.yaml")
+	data, err := os.ReadFile(secretsFile)
+	if err != nil {
+		return result
+	}
+
+	var secrets map[string]interface{}
+	if err := yaml.Unmarshal(data, &secrets); err != nil {
+		return result
+	}
+
+	repoRoot := findRepoRoot(workflowDir)
+	if repoRoot == "" {
+		return result
+	}
+	sharedDir := filepath.Join(repoRoot, ".secrets")
+
+	for serviceName, val := range secrets {
+		strVal, ok := val.(string)
+		if !ok || !strings.HasPrefix(strVal, "$shared.") {
+			continue
+		}
+		sharedName := strings.TrimPrefix(strVal, "$shared.")
+		sharedPath := filepath.Clean(filepath.Join(sharedDir, sharedName))
+		// Path traversal guard
+		if !strings.HasPrefix(sharedPath, filepath.Clean(sharedDir)+string(filepath.Separator)) {
+			result[serviceName] = "invalid path"
+			continue
+		}
+		info, err := os.Stat(sharedPath)
+		if err != nil {
+			result[serviceName] = "missing from shared"
+			continue
+		}
+		if info.Size() == 0 {
+			result[serviceName] = "empty in shared (edit " + sharedPath + ")"
+			continue
+		}
+		result[serviceName] = "ok"
+	}
+
+	return result
+}
+
 func runSecretsInit(cmd *cobra.Command, args []string) error {
 	dir := resolveDir(args)
 	force, _ := cmd.Flags().GetBool("force")
+	shared, _ := cmd.Flags().GetBool("shared")
+
+	if shared {
+		return runSecretsInitShared(dir, force)
+	}
 
 	src := filepath.Join(dir, ".secrets.yaml.example")
 	dst := filepath.Join(dir, ".secrets.yaml")
@@ -127,6 +195,57 @@ func runSecretsInit(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Created %s from example template.\n", dst)
 	fmt.Println("Edit the file to add your actual secret values.")
+	return nil
+}
+
+// runSecretsInitShared creates the .secrets/ directory with placeholder files
+// for each key in .secrets.yaml.example at the given directory.
+func runSecretsInitShared(dir string, force bool) error {
+	src := filepath.Join(dir, ".secrets.yaml.example")
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return fmt.Errorf("no .secrets.yaml.example found at %s -- create one first", dir)
+	}
+
+	// Parse the example to get secret names (keys are service names)
+	var example map[string]interface{}
+	if err := yaml.Unmarshal(data, &example); err != nil {
+		return fmt.Errorf("parsing .secrets.yaml.example: %w", err)
+	}
+
+	sharedDir := filepath.Join(dir, ".secrets")
+	if err := os.MkdirAll(sharedDir, 0o755); err != nil {
+		return fmt.Errorf("creating .secrets/ directory: %w", err)
+	}
+
+	var created, skipped []string
+	for name := range example {
+		dest := filepath.Join(sharedDir, name)
+		if !force {
+			if _, err := os.Stat(dest); err == nil {
+				skipped = append(skipped, name)
+				continue
+			}
+		}
+		if err := os.WriteFile(dest, []byte(""), 0o600); err != nil {
+			return fmt.Errorf("creating .secrets/%s: %w", name, err)
+		}
+		created = append(created, name)
+	}
+
+	sort.Strings(created)
+	sort.Strings(skipped)
+
+	for _, name := range created {
+		fmt.Printf("  created .secrets/%s\n", name)
+	}
+	for _, name := range skipped {
+		fmt.Printf("  skipped .secrets/%s (already exists; use --force to overwrite)\n", name)
+	}
+
+	if len(created) > 0 {
+		fmt.Printf("\nEdit the files in %s with actual secret values.\n", sharedDir)
+	}
 	return nil
 }
 
@@ -252,6 +371,8 @@ func parseYAMLMap(data []byte, out *map[string]interface{}) error {
 }
 
 // resolveSharedSecrets resolves $shared.<name> references in secrets map.
+// Shared secrets live at <repo-root>/.secrets/<name> where repo root is
+// detected by walking up from workflowDir to find .git or go.mod.
 func resolveSharedSecrets(secrets map[string]interface{}, workflowDir string) error {
 	repoRoot := findRepoRoot(workflowDir)
 	if repoRoot == "" {

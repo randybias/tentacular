@@ -13,7 +13,7 @@ Workflow nodes are deployed as TypeScript files via ConfigMap at runtime. When D
 
 ## Solution
 
-Deploy a single in-cluster **esm.sh** instance as a cluster-level service during `tntc cluster install`. All workflow pods resolve module imports through this internal proxy. External egress to `jsr.io`/`registry.npmjs.org` is confined to the proxy — workflow pods need no external egress for dependencies at all.
+Deploy a single in-cluster **esm.sh** instance as a cluster-level service during MCP server setup. All workflow pods resolve module imports through this internal proxy. External egress to `jsr.io`/`registry.npmjs.org` is confined to the proxy — workflow pods need no external egress for dependencies at all.
 
 ---
 
@@ -32,7 +32,7 @@ workflow pod
 
 ## Components
 
-### 1. esm.sh Deployment (`tntc cluster install`)
+### 1. esm.sh Deployment (MCP server managed)
 
 A cluster-level Deployment in the `tentacular-support` namespace:
 
@@ -117,21 +117,20 @@ No external `jsr.io` egress needed on workflow pods.
 
 ---
 
-## `tntc cluster install` Changes
+## MCP Server Module Proxy Management
 
-Adds esm.sh to the cluster component manifest set:
+The MCP server manages the esm.sh module proxy deployment:
 
 ```
-tntc cluster install
-  ├─ (existing) engine image pull / RBAC / etc.
-  └─ (new) esm-sh Deployment + Service + NetworkPolicy
+MCP server startup
+  └─ proxy_reconcile: esm-sh Deployment + Service + NetworkPolicy
 ```
 
 New config option in `~/.tentacular/config.yaml`:
 
 ```yaml
 moduleProxy:
-  enabled: true          # default true when cluster install runs
+  enabled: true          # default true when MCP server is installed via Helm
   storage: emptydir      # or "pvc" for persistence across restarts
   pvcSize: 5Gi           # only used when storage: pvc
   image: ghcr.io/esm-dev/esm.sh:v1.x.x
@@ -174,7 +173,7 @@ NetworkPolicy allowing outbound 443 to the public internet.
 
 ## Implementation Plan
 
-1. `tntc cluster install` — add esm.sh Deployment + Service + NetworkPolicy
+1. Helm chart — deploy esm.sh Deployment + Service + NetworkPolicy via MCP server
 2. `pkg/spec` — add `jsr` and `npm` protocol types to `Dependency`
 3. `pkg/k8s` — add `GenerateImportMap(wf, proxyURL)` → ConfigMap manifest
 4. `pkg/k8s` — update `GenerateNetworkPolicy` to add esm.sh egress rule when module proxy is enabled

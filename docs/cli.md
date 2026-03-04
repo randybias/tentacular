@@ -31,8 +31,8 @@ The `tntc` CLI manages the full workflow lifecycle — from scaffolding to deplo
 | `logs` | `tntc logs <name>` | View pod logs; `-f` to stream in real time |
 | `list` | `tntc list` | List all deployed workflows with version, status, and age |
 | `undeploy` | `tntc undeploy <name>` | Remove deployed workflow (Deployment, Service, Secret, ConfigMap, NetworkPolicy) |
-| `cluster check` | `tntc cluster check` | Preflight cluster validation; `--fix` auto-remediates |
-| `cluster profile` | `tntc cluster profile` | Capability snapshot for agent workflow design; auto-runs on `configure` |
+| `cluster check` | `tntc cluster check` | Preflight cluster validation via MCP |
+| `cluster profile` | `tntc cluster profile` | Capability snapshot via MCP for agent workflow design; auto-runs on `configure` |
 
 ## Global Flags
 
@@ -41,6 +41,7 @@ The `tntc` CLI manages the full workflow lifecycle — from scaffolding to deplo
 | `--namespace` | `-n` | `default` | Kubernetes namespace |
 | `--registry` | `-r` | (none) | Container registry URL |
 | `--output` | `-o` | `text` | Output format: `text` or `json` |
+| `--env` | | (none) | Target environment from config (for deploy, etc.) |
 
 Namespace resolution order: CLI `-n` flag > `workflow.yaml deployment.namespace` > config file default > `default`.
 
@@ -98,7 +99,30 @@ Config resolution order: CLI flags > project config (`.tentacular/config.yaml`) 
 registry: nats.ospo-dev.miralabs.dev:30500
 namespace: default
 runtime_class: gvisor
+default_env: dev
+
+mcp:
+  endpoint: http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
+  token_path: ~/.tentacular/mcp-token
+
+environments:
+  dev:
+    namespace: tentacular-dev
+    mcp_endpoint: http://localhost:8080    # port-forwarded
+    mcp_token_path: ~/.tentacular/mcp-token
+  prod:
+    namespace: tentacular-prod
+    mcp_endpoint: http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
+    mcp_token_path: ~/.tentacular/prod-mcp-token
 ```
+
+### MCP Resolution
+
+MCP endpoint and token are resolved per-environment:
+
+1. Active environment's `mcp_endpoint` / `mcp_token_path` (from `--env` > `TENTACULAR_ENV` > `default_env`)
+2. Global `mcp.endpoint` / `mcp.token_path` from config files
+3. `TNTC_MCP_ENDPOINT` / `TNTC_MCP_TOKEN` environment variables
 
 ## Secrets Commands
 

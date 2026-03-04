@@ -19,7 +19,6 @@ func NewTestCmd() *cobra.Command {
 	}
 	cmd.Flags().Bool("pipeline", false, "Run full pipeline test")
 	cmd.Flags().Bool("live", false, "Deploy and test against a real cluster")
-	cmd.Flags().String("env", "dev", "Environment to use for live testing")
 	cmd.Flags().Bool("keep", false, "Keep deployment after live test (do not clean up)")
 	cmd.Flags().Duration("timeout", 120*time.Second, "Timeout for live test (deploy + run)")
 	cmd.Flags().StringP("output", "o", "", "Output format (json)")

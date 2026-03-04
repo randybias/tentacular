@@ -76,7 +76,7 @@ kubectl patch deployment <name> -n <namespace> \
 
 **Status:** By design
 
-The `--fix` flag for `tntc cluster check` has been removed. Namespace creation and other remediation is now handled through dedicated MCP tools (`ns_create`). Run `tntc cluster install` to bootstrap the cluster environment.
+The `--fix` flag for `tntc cluster check` has been removed. Namespace creation and other remediation is now handled through dedicated MCP tools (`ns_create`). Install the MCP server via its Helm chart to bootstrap the cluster environment.
 
 ---
 

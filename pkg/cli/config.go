@@ -27,6 +27,7 @@ type TentacularConfig struct {
 	Registry     string                       `yaml:"registry,omitempty"`
 	Namespace    string                       `yaml:"namespace,omitempty"`
 	RuntimeClass string                       `yaml:"runtime_class,omitempty"`
+	DefaultEnv   string                       `yaml:"default_env,omitempty"`
 	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
 	ModuleProxy  ModuleProxyConfig            `yaml:"moduleProxy,omitempty"`
 	MCP          MCPConfig                    `yaml:"mcp,omitempty"`
@@ -66,6 +67,9 @@ func mergeConfig(base, override *TentacularConfig) {
 	}
 	if override.RuntimeClass != "" {
 		base.RuntimeClass = override.RuntimeClass
+	}
+	if override.DefaultEnv != "" {
+		base.DefaultEnv = override.DefaultEnv
 	}
 	if len(override.Environments) > 0 {
 		if base.Environments == nil {

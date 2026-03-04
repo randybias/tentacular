@@ -2,12 +2,14 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/randybias/tentacular/pkg/k8s"
+	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/spf13/cobra"
 )
 
@@ -46,7 +48,6 @@ Profiles are automatically generated when running 'tntc configure'. Rebuild manu
 when the agent detects environment drift (new RuntimeClass, changed CNI, cluster upgrade).`,
 		RunE: runProfile,
 	}
-	cmd.Flags().String("env", "", "Environment name from .tentacular/config.yaml")
 	cmd.Flags().Bool("all", false, "Profile all configured environments")
 	cmd.Flags().String("output", "markdown", "Output format: markdown|json")
 	cmd.Flags().Bool("save", false, "Write profiles to .tentacular/envprofiles/")
@@ -55,19 +56,35 @@ when the agent detects environment drift (new RuntimeClass, changed CNI, cluster
 }
 
 func runProfile(cmd *cobra.Command, args []string) error {
-	envName, _ := cmd.Flags().GetString("env")
+	envName := flagString(cmd, "env")
 	all, _ := cmd.Flags().GetBool("all")
 	output, _ := cmd.Flags().GetString("output")
 	save, _ := cmd.Flags().GetBool("save")
 	force, _ := cmd.Flags().GetBool("force")
 
-	if all {
-		return runProfileAll(output, save, force)
+	mcpClient, err := requireMCPClient(cmd)
+	if err != nil {
+		return err
 	}
-	return runProfileForEnv(envName, output, save, force)
+
+	profileFn := func(ctx context.Context, namespace string) ([]byte, error) {
+		result, err := mcpClient.ClusterProfile(ctx, namespace)
+		if err != nil {
+			return nil, err
+		}
+		return result.Raw, nil
+	}
+
+	if all {
+		return runProfileAll(profileFn, output, save, force)
+	}
+	return runProfileForEnv(envName, output, save, force, profileFn)
 }
 
-func runProfileAll(output string, save, force bool) error {
+// clusterProfileFn is the signature for the MCP-based profile function, injectable for tests.
+type clusterProfileFn func(ctx context.Context, namespace string) ([]byte, error)
+
+func runProfileAll(profileFn clusterProfileFn, output string, save, force bool) error {
 	cfg := LoadConfig()
 	if len(cfg.Environments) == 0 {
 		return fmt.Errorf("no environments configured in .tentacular/config.yaml")
@@ -76,8 +93,8 @@ func runProfileAll(output string, save, force bool) error {
 	var errs []string
 	for envName := range cfg.Environments {
 		fmt.Printf("Profiling environment %q...\n", envName)
-		if err := runProfileForEnv(envName, output, save, force); err != nil {
-			fmt.Fprintf(os.Stderr, "  ⚠ %s: %s\n", envName, err)
+		if err := runProfileForEnv(envName, output, save, force, profileFn); err != nil {
+			fmt.Fprintf(os.Stderr, "  \u26a0 %s: %s\n", envName, err)
 			errs = append(errs, envName)
 		}
 	}
@@ -87,7 +104,7 @@ func runProfileAll(output string, save, force bool) error {
 	return nil
 }
 
-func runProfileForEnv(envName, output string, save, force bool) error {
+func runProfileForEnv(envName, output string, save, force bool, profileFn clusterProfileFn) error {
 	// Freshness check
 	if save && !force && envName != "" {
 		mdPath := filepath.Join(resolveProfileDir(), envName+".md")
@@ -115,39 +132,42 @@ func runProfileForEnv(envName, output string, save, force bool) error {
 		namespace = "default"
 	}
 
-	client, err := buildClientForEnv(env)
-	if err != nil {
-		return fmt.Errorf("connecting to cluster: %w", err)
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
-	defer cancel()
-
 	label := envName
 	if label == "" {
 		label = "default"
 	}
 
-	profile, err := client.Profile(ctx, namespace, label)
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+
+	rawJSON, err := profileFn(ctx, namespace)
 	if err != nil {
 		return fmt.Errorf("profiling cluster: %w", err)
 	}
 
-	// Render
+	// Render output
 	var rendered string
 	switch output {
 	case "json":
-		rendered = profile.JSON()
+		rendered = string(rawJSON)
 	default:
-		rendered = profile.Markdown()
+		// Try to unmarshal into ClusterProfile for rich markdown rendering
+		var profile k8s.ClusterProfile
+		if jsonErr := json.Unmarshal(rawJSON, &profile); jsonErr == nil {
+			profile.Environment = label
+			rendered = profile.Markdown()
+		} else {
+			// Fall back to raw JSON if schema doesn't match
+			rendered = string(rawJSON)
+		}
 	}
 
 	if save {
 		dir := resolveProfileDir()
-		if err := saveProfile(profile, label, dir); err != nil {
+		if err := saveProfileRaw(rawJSON, rendered, label, dir); err != nil {
 			return fmt.Errorf("saving profile: %w", err)
 		}
-		fmt.Printf("  ✓ Profile for %q saved to %s/%s.{md,json}\n", label, dir, label)
+		fmt.Printf("  \u2713 Profile for %q saved to %s/%s.{md,json}\n", label, dir, label)
 	} else {
 		fmt.Println(rendered)
 	}
@@ -155,34 +175,23 @@ func runProfileForEnv(envName, output string, save, force bool) error {
 	return nil
 }
 
-// saveProfile writes both markdown and JSON representations to dir.
-func saveProfile(p *k8s.ClusterProfile, envName, dir string) error {
+// saveProfileRaw writes both markdown and JSON representations to dir.
+func saveProfileRaw(rawJSON []byte, markdown, envName, dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating profile directory: %w", err)
 	}
 
 	mdPath := filepath.Join(dir, envName+".md")
-	if err := os.WriteFile(mdPath, []byte(p.Markdown()), 0o644); err != nil {
+	if err := os.WriteFile(mdPath, []byte(markdown), 0o644); err != nil {
 		return fmt.Errorf("writing markdown profile: %w", err)
 	}
 
 	jsonPath := filepath.Join(dir, envName+".json")
-	if err := os.WriteFile(jsonPath, []byte(p.JSON()), 0o644); err != nil {
+	if err := os.WriteFile(jsonPath, rawJSON, 0o644); err != nil {
 		return fmt.Errorf("writing JSON profile: %w", err)
 	}
 
 	return nil
-}
-
-// buildClientForEnv creates a k8s.Client for the given environment config.
-func buildClientForEnv(env *EnvironmentConfig) (*k8s.Client, error) {
-	if env.Kubeconfig != "" {
-		return k8s.NewClientFromConfig(env.Kubeconfig, env.Context)
-	}
-	if env.Context != "" {
-		return k8s.NewClientWithContext(env.Context)
-	}
-	return k8s.NewClient()
 }
 
 // autoProfileTimeout is the maximum time allowed to profile a single environment
@@ -192,6 +201,7 @@ const autoProfileTimeout = 45 * time.Second
 // AutoProfileEnvironments generates profiles for all reachable environments.
 // Called from configure after writing config. Each environment is given a
 // 45s deadline; unreachable or slow clusters emit a warning and are skipped.
+// Environments without an MCP endpoint configured are silently skipped.
 func AutoProfileEnvironments() {
 	cfg := LoadConfig()
 	if len(cfg.Environments) == 0 {
@@ -199,18 +209,64 @@ func AutoProfileEnvironments() {
 	}
 	for envName := range cfg.Environments {
 		fmt.Printf("Profiling environment %q... ", envName)
+
+		profileFn, err := buildProfileFnForEnv(envName, cfg)
+		if err != nil || profileFn == nil {
+			fmt.Printf("\u26a0 skipped (MCP not configured for env %q)\n", envName)
+			continue
+		}
+
 		done := make(chan error, 1)
-		go func(name string) {
-			done <- runProfileForEnv(name, "markdown", true, false)
-		}(envName)
+		fn := profileFn
+		name := envName
+		go func() {
+			done <- runProfileForEnv(name, "markdown", true, false, fn)
+		}()
 
 		select {
 		case err := <-done:
 			if err != nil {
-				fmt.Printf("⚠ skipped (%s)\n", err)
+				fmt.Printf("\u26a0 skipped (%s)\n", err)
 			}
 		case <-time.After(autoProfileTimeout):
-			fmt.Printf("⚠ skipped (timed out after %s)\n", autoProfileTimeout)
+			fmt.Printf("\u26a0 skipped (timed out after %s)\n", autoProfileTimeout)
 		}
 	}
+}
+
+// buildProfileFnForEnv builds a clusterProfileFn for the named environment.
+// Returns (nil, nil) if no MCP endpoint is configured for the environment.
+func buildProfileFnForEnv(envName string, cfg TentacularConfig) (clusterProfileFn, error) {
+	env := cfg.Environments[envName]
+
+	endpoint := env.MCPEndpoint
+	if endpoint == "" {
+		endpoint = cfg.MCP.Endpoint
+	}
+	if endpoint == "" {
+		return nil, nil
+	}
+
+	tokenPath := env.MCPTokenPath
+	if tokenPath == "" {
+		tokenPath = cfg.MCP.TokenPath
+	}
+
+	token := ""
+	if tokenPath != "" {
+		t, err := readTokenFile(expandHome(tokenPath))
+		if err != nil {
+			return nil, fmt.Errorf("reading token: %w", err)
+		}
+		token = t
+	}
+
+	mcpClient := mcp.NewClient(mcp.Config{Endpoint: endpoint, Token: token})
+	return func(ctx context.Context, namespace string) ([]byte, error) {
+		result, err := mcpClient.ClusterProfile(ctx, namespace)
+		if err != nil {
+			return nil, err
+		}
+		return result.Raw, nil
+	}, nil
 }

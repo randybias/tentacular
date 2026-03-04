@@ -117,8 +117,8 @@ func TestRequireMCPClient_ErrorWhenNotConfigured(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error when MCP not configured")
 	}
-	if !strings.Contains(err.Error(), "cluster install") {
-		t.Errorf("expected error to mention cluster install, got: %v", err)
+	if !strings.Contains(err.Error(), "MCP server not configured") {
+		t.Errorf("expected error to mention MCP server not configured, got: %v", err)
 	}
 }
 
@@ -176,12 +176,12 @@ func TestMCPErrorHint_ServerUnavailable(t *testing.T) {
 	}
 }
 
-// TestMCPErrorHint_Unauthorized verifies the hint mentions rotate-token.
+// TestMCPErrorHint_Unauthorized verifies the hint mentions token config.
 func TestMCPErrorHint_Unauthorized(t *testing.T) {
 	authErr := &mcp.Error{Code: 401, Message: "unauthorized"}
 	hint := mcpErrorHint(authErr)
-	if !strings.Contains(hint, "rotate-token") {
-		t.Errorf("expected hint to mention rotate-token for 401, got %q", hint)
+	if !strings.Contains(hint, "token") {
+		t.Errorf("expected hint to mention token for 401, got %q", hint)
 	}
 }
 

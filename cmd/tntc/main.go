@@ -20,6 +20,7 @@ func main() {
 	root.PersistentFlags().StringP("namespace", "n", "default", "Kubernetes namespace")
 	root.PersistentFlags().StringP("registry", "r", "", "Container registry URL")
 	root.PersistentFlags().StringP("output", "o", "text", "Output format: text|json")
+	root.PersistentFlags().StringP("env", "e", "", "Target environment (overrides TENTACULAR_ENV and default_env)")
 
 	// Workflow commands
 	root.AddCommand(cli.NewInitCmd())

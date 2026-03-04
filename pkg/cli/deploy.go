@@ -26,7 +26,6 @@ func NewDeployCmd() *cobra.Command {
 		Args:  cobra.MaximumNArgs(1),
 		RunE:  runDeploy,
 	}
-	cmd.Flags().String("env", "", "Target environment from config (resolves context, namespace, runtime-class)")
 	cmd.Flags().String("image", "", "Base engine image (default: read from .tentacular/base-image.txt or use tentacular-engine:latest)")
 	cmd.Flags().String("cluster-registry", "", "DEPRECATED: Use --image instead")
 	cmd.Flags().String("runtime-class", "gvisor", "RuntimeClass name (empty to disable)")
@@ -68,7 +67,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	envName, _ := cmd.Flags().GetString("env")
+	envName := flagString(cmd, "env")
 	namespace, _ := cmd.Flags().GetString("namespace")
 	imageFlagValue, _ := cmd.Flags().GetString("image")
 	clusterRegistry, _ := cmd.Flags().GetString("cluster-registry")
@@ -453,68 +452,23 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 	}, nil
 }
 
-// buildSecretManifest creates a K8s Secret manifest from local secrets.
-// Cascade: .secrets/ directory -> .secrets.yaml file
-// Returns nil if no local secrets found.
+// buildSecretManifest creates a K8s Secret manifest from a .secrets.yaml file.
+// All secret values must use $shared.<name> references pointing to the repo root
+// .secrets/ directory. Direct secret values are not supported.
+// Returns nil if no .secrets.yaml found.
 func buildSecretManifest(workflowDir, name, namespace string) (*builder.Manifest, error) {
 	secretName := name + "-secrets"
 
-	// Try .secrets/ directory first
-	secretsDir := filepath.Join(workflowDir, ".secrets")
-	if info, err := os.Stat(secretsDir); err == nil && info.IsDir() {
-		return buildSecretFromDir(secretsDir, secretName, namespace)
-	}
-
-	// Fall back to .secrets.yaml
 	secretsFile := filepath.Join(workflowDir, ".secrets.yaml")
-	if _, err := os.Stat(secretsFile); err == nil {
-		return buildSecretFromYAML(secretsFile, secretName, namespace)
-	}
-
-	// No local secrets found -- skip
-	return nil, nil
-}
-
-// buildSecretFromDir creates a K8s Secret from a directory of files.
-func buildSecretFromDir(dirPath, secretName, namespace string) (*builder.Manifest, error) {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return nil, fmt.Errorf("reading secrets directory: %w", err)
-	}
-
-	var dataEntries []string
-	for _, entry := range entries {
-		if entry.IsDir() || strings.HasPrefix(entry.Name(), ".") {
-			continue
-		}
-		content, err := os.ReadFile(filepath.Join(dirPath, entry.Name()))
-		if err != nil {
-			return nil, fmt.Errorf("reading secret file %s: %w", entry.Name(), err)
-		}
-		// Use stringData so we don't need to base64-encode
-		dataEntries = append(dataEntries, fmt.Sprintf("  %s: %q", entry.Name(), strings.TrimSpace(string(content))))
-	}
-
-	if len(dataEntries) == 0 {
+	if _, err := os.Stat(secretsFile); err != nil {
 		return nil, nil
 	}
 
-	manifest := fmt.Sprintf(`apiVersion: v1
-kind: Secret
-metadata:
-  name: %s
-  namespace: %s
-type: Opaque
-stringData:
-%s
-`, secretName, namespace, strings.Join(dataEntries, "\n"))
-
-	return &builder.Manifest{
-		Kind: "Secret", Name: secretName, Content: manifest,
-	}, nil
+	return buildSecretFromYAML(secretsFile, secretName, namespace)
 }
 
 // buildSecretFromYAML creates a K8s Secret from a .secrets.yaml file.
+// All values must be $shared.<name> references -- direct values are rejected.
 func buildSecretFromYAML(filePath, secretName, namespace string) (*builder.Manifest, error) {
 	data, err := os.ReadFile(filePath)
 	if err != nil {
@@ -530,7 +484,15 @@ func buildSecretFromYAML(filePath, secretName, namespace string) (*builder.Manif
 		return nil, nil
 	}
 
-	// Resolve $shared.<name> references
+	// Validate all values are $shared.<name> references
+	for k, v := range secrets {
+		s, ok := v.(string)
+		if !ok || !strings.HasPrefix(s, "$shared.") {
+			return nil, fmt.Errorf("secret %q has a direct value; all secrets must use $shared.<name> references (e.g. $shared.%s)", k, k)
+		}
+	}
+
+	// Resolve $shared.<name> references from repo root .secrets/ directory
 	workflowDir := filepath.Dir(filePath)
 	if err := resolveSharedSecrets(secrets, workflowDir); err != nil {
 		return nil, fmt.Errorf("resolving shared secrets: %w", err)

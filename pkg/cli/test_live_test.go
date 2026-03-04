@@ -27,14 +27,15 @@ func TestNewTestCmdHasLiveFlag(t *testing.T) {
 }
 
 func TestNewTestCmdHasEnvFlag(t *testing.T) {
+	// --env is a persistent root flag; verify it is accessible from the test command via the parent
+	root := &cobra.Command{Use: "tntc"}
+	root.PersistentFlags().StringP("env", "e", "", "Target environment")
 	cmd := NewTestCmd()
+	root.AddCommand(cmd)
 
-	f := cmd.Flags().Lookup("env")
+	f := cmd.Flag("env")
 	if f == nil {
-		t.Fatal("expected --env flag on test command")
-	}
-	if f.DefValue != "dev" {
-		t.Errorf("expected --env default dev, got %s", f.DefValue)
+		t.Fatal("expected --env flag accessible on test command via root")
 	}
 }
 
@@ -63,9 +64,16 @@ func TestNewTestCmdHasTimeoutFlag(t *testing.T) {
 }
 
 func TestNewTestCmdFlagParsing(t *testing.T) {
+	root := &cobra.Command{Use: "tntc"}
+	root.PersistentFlags().StringP("env", "e", "", "Target environment")
 	cmd := NewTestCmd()
-	cmd.SetArgs([]string{"--live", "--env", "staging", "--keep", "--timeout", "5m"})
-	if err := cmd.ParseFlags([]string{"--live", "--env", "staging", "--keep", "--timeout", "5m"}); err != nil {
+	root.AddCommand(cmd)
+
+	root.SetArgs([]string{"test", "--live", "--env", "staging", "--keep", "--timeout", "5m"})
+	if err := root.ParseFlags([]string{"--env", "staging"}); err != nil {
+		t.Fatalf("failed to parse root flags: %v", err)
+	}
+	if err := cmd.ParseFlags([]string{"--live", "--keep", "--timeout", "5m"}); err != nil {
 		t.Fatalf("failed to parse flags: %v", err)
 	}
 
@@ -73,7 +81,7 @@ func TestNewTestCmdFlagParsing(t *testing.T) {
 	if !live {
 		t.Error("expected --live to be true")
 	}
-	env, _ := cmd.Flags().GetString("env")
+	env := flagString(cmd, "env")
 	if env != "staging" {
 		t.Errorf("expected --env staging, got %s", env)
 	}
@@ -298,9 +306,12 @@ func TestLiveTestRequiresEnvironment(t *testing.T) {
 	os.MkdirAll(userDir, 0o755)
 	os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte("registry: test\n"), 0o644)
 
+	root := &cobra.Command{Use: "tntc"}
+	root.PersistentFlags().StringP("env", "e", "", "Target environment")
 	cmd := NewTestCmd()
-	cmd.SetArgs([]string{"--live", "--env", "nonexistent", tmpDir})
-	err := cmd.Execute()
+	root.AddCommand(cmd)
+	root.SetArgs([]string{"test", "--live", "--env", "nonexistent", tmpDir})
+	err := root.Execute()
 	if err == nil {
 		t.Fatal("expected error for non-existent environment")
 	}

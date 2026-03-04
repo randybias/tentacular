@@ -14,13 +14,22 @@ import (
 )
 
 func TestBuildSecretManifestLocalSecretsPresent(t *testing.T) {
-	dir := t.TempDir()
+	// Create a fake repo root with shared secrets
+	repoRoot := t.TempDir()
+	os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
+	sharedDir := filepath.Join(repoRoot, ".secrets")
+	os.MkdirAll(sharedDir, 0o755)
+	os.WriteFile(filepath.Join(sharedDir, "github_token"), []byte(`{"token":"ghp_test123"}`), 0o644)
+	os.WriteFile(filepath.Join(sharedDir, "slack"), []byte(`{"webhook_url":"https://hooks.slack.com/test"}`), 0o644)
 
-	// Create .secrets.yaml with valid YAML
-	yamlContent := "github_token: ghp_test123\nslack:\n  webhook_url: \"https://hooks.slack.com/test\"\n"
-	os.WriteFile(filepath.Join(dir, ".secrets.yaml"), []byte(yamlContent), 0o644)
+	wfDir := filepath.Join(repoRoot, "workflows", "test-wf")
+	os.MkdirAll(wfDir, 0o755)
 
-	m, err := buildSecretManifest(dir, "test-wf", "staging")
+	// Create .secrets.yaml with $shared references
+	yamlContent := "github_token: $shared.github_token\nslack: $shared.slack\n"
+	os.WriteFile(filepath.Join(wfDir, ".secrets.yaml"), []byte(yamlContent), 0o644)
+
+	m, err := buildSecretManifest(wfDir, "test-wf", "staging")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -72,39 +81,54 @@ func TestBuildSecretManifestNoSecretsReturnsNil(t *testing.T) {
 	}
 }
 
-func TestBuildSecretManifestDirPreferredOverYAML(t *testing.T) {
-	dir := t.TempDir()
+func TestBuildSecretManifestDirIgnoredOnlyYAMLUsed(t *testing.T) {
+	// Per-workflow .secrets/ dirs are no longer supported.
+	// Only .secrets.yaml with $shared references works.
+	repoRoot := t.TempDir()
+	os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
+	sharedDir := filepath.Join(repoRoot, ".secrets")
+	os.MkdirAll(sharedDir, 0o755)
+	os.WriteFile(filepath.Join(sharedDir, "from_yaml"), []byte(`{"value":"yaml-resolved"}`), 0o644)
 
-	// Create both .secrets/ dir and .secrets.yaml
-	secretsDir := filepath.Join(dir, ".secrets")
-	os.MkdirAll(secretsDir, 0o755)
-	os.WriteFile(filepath.Join(secretsDir, "from-dir"), []byte("dir-value"), 0o644)
-	os.WriteFile(filepath.Join(dir, ".secrets.yaml"), []byte("from_yaml: yaml-value\n"), 0o644)
+	wfDir := filepath.Join(repoRoot, "workflows", "test-wf")
+	os.MkdirAll(wfDir, 0o755)
 
-	m, err := buildSecretManifest(dir, "test-wf", "default")
+	// Create per-workflow .secrets/ dir (old pattern — should be ignored)
+	localSecretsDir := filepath.Join(wfDir, ".secrets")
+	os.MkdirAll(localSecretsDir, 0o755)
+	os.WriteFile(filepath.Join(localSecretsDir, "from-dir"), []byte("dir-value"), 0o644)
+
+	// Create .secrets.yaml with $shared ref
+	os.WriteFile(filepath.Join(wfDir, ".secrets.yaml"), []byte("from_yaml: $shared.from_yaml\n"), 0o644)
+
+	m, err := buildSecretManifest(wfDir, "test-wf", "default")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if m == nil {
 		t.Fatal("expected non-nil manifest")
 	}
-	// .secrets/ dir should take precedence
-	if !strings.Contains(m.Content, "from-dir") {
-		t.Error("expected .secrets/ dir content to be used")
+	// Should use .secrets.yaml with $shared, NOT per-workflow .secrets/ dir
+	if strings.Contains(m.Content, "from-dir") {
+		t.Error("expected per-workflow .secrets/ dir to be ignored")
 	}
-	if strings.Contains(m.Content, "from_yaml") {
-		t.Error("expected .secrets.yaml to be ignored when .secrets/ dir exists")
+	if !strings.Contains(m.Content, "yaml-resolved") {
+		t.Error("expected $shared reference to be resolved")
 	}
 }
 
 func TestBuildSecretManifestNameSuffix(t *testing.T) {
-	dir := t.TempDir()
+	repoRoot := t.TempDir()
+	os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
+	sharedDir := filepath.Join(repoRoot, ".secrets")
+	os.MkdirAll(sharedDir, 0o755)
+	os.WriteFile(filepath.Join(sharedDir, "token"), []byte(`{"value":"abc"}`), 0o644)
 
-	secretsDir := filepath.Join(dir, ".secrets")
-	os.MkdirAll(secretsDir, 0o755)
-	os.WriteFile(filepath.Join(secretsDir, "token"), []byte("abc"), 0o644)
+	wfDir := filepath.Join(repoRoot, "workflows", "my-workflow")
+	os.MkdirAll(wfDir, 0o755)
+	os.WriteFile(filepath.Join(wfDir, ".secrets.yaml"), []byte("token: $shared.token\n"), 0o644)
 
-	m, err := buildSecretManifest(dir, "my-workflow", "default")
+	m, err := buildSecretManifest(wfDir, "my-workflow", "default")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -327,3 +327,68 @@ func (c *Client) AuditResources(ctx context.Context, namespace, workflowName str
 	}
 	return &result, nil
 }
+
+// --- cluster_profile ---
+
+// ClusterProfileParams are the arguments for the cluster_profile MCP tool.
+type ClusterProfileParams struct {
+	Namespace string `json:"namespace,omitempty"`
+}
+
+// ClusterProfileResult is the raw JSON response from cluster_profile.
+// The exact schema depends on the MCP server version; raw is preserved for
+// flexible rendering in the CLI.
+type ClusterProfileResult struct {
+	Raw json.RawMessage
+}
+
+// ClusterProfile calls the cluster_profile MCP tool and returns the raw JSON result.
+func (c *Client) ClusterProfile(ctx context.Context, namespace string) (*ClusterProfileResult, error) {
+	params := ClusterProfileParams{}
+	if namespace != "" {
+		params.Namespace = namespace
+	}
+	raw, err := c.CallTool(ctx, "cluster_profile", params)
+	if err != nil {
+		return nil, err
+	}
+	return &ClusterProfileResult{Raw: raw}, nil
+}
+
+// --- wf_describe ---
+
+// WfDescribeParams are the arguments for the wf_describe MCP tool.
+type WfDescribeParams struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+// WfDescribeResult is the response from wf_describe.
+type WfDescribeResult struct {
+	Name        string                   `json:"name"`
+	Namespace   string                   `json:"namespace"`
+	Ready       bool                     `json:"ready"`
+	Replicas    int32                    `json:"replicas"`
+	Available   int32                    `json:"available"`
+	Image       string                   `json:"image,omitempty"`
+	Annotations map[string]string        `json:"annotations,omitempty"`
+	Nodes       []PodInfo                `json:"nodes,omitempty"`
+	Triggers    []string                 `json:"triggers,omitempty"`
+	Manifests   []map[string]interface{} `json:"manifests,omitempty"`
+}
+
+// WfDescribe calls the wf_describe MCP tool to get detailed deployment info.
+func (c *Client) WfDescribe(ctx context.Context, namespace, name string) (*WfDescribeResult, error) {
+	raw, err := c.CallTool(ctx, "wf_describe", WfDescribeParams{
+		Namespace: namespace,
+		Name:      name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result WfDescribeResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("parsing wf_describe result: %w", err)
+	}
+	return &result, nil
+}
