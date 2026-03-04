@@ -410,9 +410,9 @@ Items verified as fixed in the current codebase. Kept for historical context.
 
 **Resolved Feb 2026.** All generated K8s resources (ConfigMap, Deployment, Service, CronJob) include `app.kubernetes.io/version` label from workflow.yaml `version` field. `tntc list` displays a VERSION column.
 
-### Secrets Management Overhaul (Phase A + B)
+### Secrets Management Overhaul (Phase A + B + shared-only)
 
-**Resolved Feb 2026.** Phase A: `tntc secrets check` scans node source for `ctx.secrets` references and reports gaps against provisioned secrets. `tntc secrets init` creates `.secrets.yaml` from `.secrets.yaml.example`. Phase B: Shared secrets pool at repo root (`.secrets/`) with `$shared.<name>` references in workflow `.secrets.yaml`, resolved during `tntc deploy`. Phase C (sync/diff) remains on the roadmap.
+**Resolved Feb-Mar 2026.** Phase A: `tntc secrets check` scans node source for `ctx.secrets` references and reports gaps against provisioned secrets. `tntc secrets init` creates `.secrets.yaml` from `.secrets.yaml.example`. Phase B: Shared secrets pool at repo root (`.secrets/`) with `$shared.<name>` references in workflow `.secrets.yaml`, resolved during `tntc deploy`. Phase C (sync/diff) remains on the roadmap. v0.3.5: Direct secret values in `.secrets.yaml` are now rejected; all values must be `$shared.<name>` references.
 
 ### Fixture Config/Secrets Support
 
@@ -441,6 +441,15 @@ Items verified as fixed in the current codebase. Kept for historical context.
 ### `--unstable-net` Flag Added
 
 **Resolved Feb 2026.** ENTRYPOINT includes `--unstable-net`, enabling `Deno.createHttpClient()` for custom TLS (e.g., in-cluster K8s API calls with cluster CA).
+
+### CLI/MCP Separation and Per-Environment Config
+
+**Resolved Mar 2026.** The CLI no longer makes direct Kubernetes API calls. All cluster operations route through the MCP server. `cluster install` subcommand removed (MCP server installed via Helm chart). Each environment declares its own `mcp_endpoint` and `mcp_token_path` in config. Global `mcp:` block removed. `--env` flag added as persistent root flag with cascade: `--env` > `TENTACULAR_ENV` > `default_env` config > error. `cluster profile` routes through MCP `cluster_profile` tool. `Kubeconfig` and `Context` fields in EnvironmentConfig deprecated (removal tracked below).
+
+**Follow-ups:**
+- **Remove deprecated `Kubeconfig`/`Context` fields** from `EnvironmentConfig` struct and any associated dead code paths.
+- **Replace `Ping` healthz check with MCP tool call.** The `/healthz` endpoint is a standard K8s liveness probe for in-cluster use. CLI connectivity checks should use an MCP protocol-level tool call (e.g., `ns_list` or a dedicated `ping` tool) instead.
+- **External secrets backend.** The `$shared` secrets architecture reads from local `.secrets/` files. A future `secrets_source` config option could support external backends (Vault, AWS Secrets Manager, etc.) for production environments.
 
 ### Version Label YAML Quoting
 
