@@ -63,7 +63,7 @@ func makeTestServer(t *testing.T, tools map[string]func(args map[string]any) (st
 
 	srv := httptest.NewServer(mux)
 	client := NewClient(Config{
-		Endpoint: srv.URL,
+		Endpoint: srv.URL + "/mcp",
 		Token:    "test-token",
 		Timeout:  5 * time.Second,
 	})
@@ -135,7 +135,7 @@ func TestCallTool_BearerToken(t *testing.T) {
 	defer srv.Close()
 
 	client := NewClient(Config{
-		Endpoint: srv.URL,
+		Endpoint: srv.URL + "/mcp",
 		Token:    "test-token",
 		Timeout:  2 * time.Second,
 	})
@@ -175,7 +175,7 @@ func TestPing_Non200(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := NewClient(Config{Endpoint: srv.URL, Timeout: 2 * time.Second})
+	client := NewClient(Config{Endpoint: srv.URL + "/mcp", Timeout: 2 * time.Second})
 	err := client.Ping(context.Background())
 	if !IsServerUnavailable(err) {
 		t.Errorf("expected server unavailable for non-200 healthz, got: %v", err)

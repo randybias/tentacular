@@ -16,7 +16,7 @@ import (
 
 // Config holds MCP connection settings.
 type Config struct {
-	Endpoint  string        // e.g. "http://tentacular-mcp.tentacular-system.svc.cluster.local:8080"
+	Endpoint  string        // e.g. "http://tentacular-mcp.tentacular-system.svc.cluster.local:8080/mcp"
 	Token     string        // Bearer token (resolved from TokenPath if empty)
 	TokenPath string        // Path to token file (used when Token is empty)
 	Timeout   time.Duration // Per-request timeout (default: 30s)
@@ -60,7 +60,7 @@ func (c *Client) connect(ctx context.Context) (*mcpsdk.ClientSession, error) {
 	}
 
 	transport := &mcpsdk.StreamableClientTransport{
-		Endpoint: c.baseURL + "/mcp",
+		Endpoint: c.baseURL,
 		HTTPClient: &http.Client{
 			Timeout:   c.timeout,
 			Transport: &bearerTransport{token: c.token, base: http.DefaultTransport},
@@ -135,7 +135,9 @@ func (c *Client) CallTool(ctx context.Context, tool string, params interface{}) 
 // Ping checks if the MCP server is reachable by calling GET /healthz.
 // This does not use the MCP protocol — it's a simple HTTP health check.
 func (c *Client) Ping(ctx context.Context) error {
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/healthz", nil)
+	// Derive the server root from the MCP endpoint (strip /mcp path if present)
+	healthURL := strings.TrimSuffix(c.baseURL, "/mcp") + "/healthz"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodGet, healthURL, nil)
 	if err != nil {
 		return fmt.Errorf("building healthz request: %w", err)
 	}
