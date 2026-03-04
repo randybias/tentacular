@@ -96,45 +96,60 @@ Config resolution order: CLI flags > project config (`.tentacular/config.yaml`) 
 
 ```yaml
 # ~/.tentacular/config.yaml (or .tentacular/config.yaml)
-registry: nats.ospo-dev.miralabs.dev:30500
+registry: ghcr.io/yourorg
 namespace: default
 runtime_class: gvisor
 default_env: dev
 
-mcp:
-  endpoint: http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
-  token_path: ~/.tentacular/mcp-token
-
 environments:
   dev:
     namespace: tentacular-dev
-    mcp_endpoint: http://localhost:8080    # port-forwarded
+    image: ghcr.io/yourorg/tentacular-engine:latest
+    runtime_class: ""
+    mcp_endpoint: http://172.31.29.1:30080/mcp
     mcp_token_path: ~/.tentacular/mcp-token
   prod:
     namespace: tentacular-prod
-    mcp_endpoint: http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
-    mcp_token_path: ~/.tentacular/prod-mcp-token
+    image: ghcr.io/yourorg/tentacular-engine:latest
+    runtime_class: gvisor
+    mcp_endpoint: http://prod-mcp.example.com:30080/mcp
+    mcp_token_path: ~/.tentacular/mcp-token-prod
 ```
+
+### Configuration Fields
+
+| Field | Level | Description |
+|-------|-------|-------------|
+| `registry` | Top | Default container registry for `tntc build --push` |
+| `namespace` | Top / Env | Default K8s namespace for deployments |
+| `runtime_class` | Top / Env | RuntimeClass name (empty disables gVisor) |
+| `default_env` | Top | Environment used when `--env` is not specified |
+| `mcp_endpoint` | Env | Full URL to MCP server `/mcp` path (required) |
+| `mcp_token_path` | Env | Path to bearer token file, `~` expanded (required) |
+| `image` | Env | Engine image (default: `.tentacular/base-image.txt`) |
+| `config_overrides` | Env | Key-value pairs merged into workflow config |
+| `secrets_source` | Env | Secrets backend (default: local `$shared` references) |
+| `enforcement` | Env | Contract enforcement mode (default: strict) |
 
 ### MCP Resolution
 
 MCP endpoint and token are resolved per-environment:
 
 1. Active environment's `mcp_endpoint` / `mcp_token_path` (from `--env` > `TENTACULAR_ENV` > `default_env`)
-2. Global `mcp.endpoint` / `mcp.token_path` from config files
-3. `TNTC_MCP_ENDPOINT` / `TNTC_MCP_TOKEN` environment variables
+2. `TNTC_MCP_ENDPOINT` / `TNTC_MCP_TOKEN` environment variables
 
 ## Secrets Commands
 
 ### `tntc secrets check [dir]`
 
-Scans `nodes/*.ts` for `ctx.secrets` references and compares against locally provisioned secrets (`.secrets.yaml` or `.secrets/` directory).
+Scans `nodes/*.ts` for `ctx.secrets` references and validates that all `$shared` references in `.secrets.yaml` resolve to files in the repo-root `.secrets/` directory.
 
 ```
-$ tntc secrets check example-workflows/uptime-prober
-Secrets check for uptime-prober:
-  slack  provisioned (.secrets.yaml)
-  All 1 required secret(s) provisioned.
+$ tntc secrets check example-workflows/ai-news-roundup
+Secrets check for ai-news-roundup:
+  openai  provisioned (shared)
+  slack  provisioned (shared)
+  All 2 required secret(s) provisioned.
 ```
 
 ### `tntc secrets init [dir]`
@@ -144,6 +159,19 @@ Copies `.secrets.yaml.example` to `.secrets.yaml`, uncommenting example values.
 | Flag | Description |
 |------|-------------|
 | `--force` | Overwrite existing `.secrets.yaml` |
+| `--shared` | Create repo-root `.secrets/` directory with placeholder files |
+
+### Secrets Architecture
+
+All workflow secrets use `$shared.<name>` references pointing to the repo-root `.secrets/` directory. Direct secret values in `.secrets.yaml` are rejected.
+
+```yaml
+# example-workflows/my-workflow/.secrets.yaml
+github: $shared.github    # resolves from <repo-root>/.secrets/github
+slack: $shared.slack       # resolves from <repo-root>/.secrets/slack
+```
+
+At deploy time, referenced files are read, base64-encoded, and applied as a K8s Secret named `<workflow>-secrets`.
 
 ## Cluster Profile Command
 

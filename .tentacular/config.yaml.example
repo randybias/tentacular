@@ -4,7 +4,7 @@
 # Project overrides user. CLI flags override both.
 
 # Default registry for tntc build --push
-registry: "ghcr.io/randybias"
+registry: "ghcr.io/yourorg"
 
 # Default namespace (overridden by workflow.yaml or CLI -n)
 namespace: default
@@ -12,33 +12,40 @@ namespace: default
 # Default RuntimeClass (empty disables gVisor)
 runtime_class: gvisor
 
-# Named environments for tntc deploy --env and tntc test --live --env
+# Default environment when --env is not specified.
+# Resolution: --env flag > TENTACULAR_ENV env var > default_env > error
+default_env: dev
+
+# Named environments for tntc deploy --env, tntc test --live --env, etc.
 #
-# Cluster access: use EITHER kubeconfig OR context (not both).
-#   kubeconfig: path to a standalone kubeconfig file (~ is expanded)
-#   context:    context name within your default kubeconfig (~/.kube/config or $KUBECONFIG)
-# If neither is set, the default kubeconfig and current context are used.
+# Each environment declares its own MCP server connection. The CLI has no
+# direct Kubernetes API access — all cluster operations go through MCP.
+#
+# Required fields:
+#   mcp_endpoint:   Full URL to the MCP server's /mcp path
+#   mcp_token_path: Path to file containing the MCP bearer token (~ expanded)
+#
+# Optional fields:
+#   namespace:       Target K8s namespace for workflow deployments
+#   image:           Engine image (default: read from .tentacular/base-image.txt)
+#   runtime_class:   RuntimeClass name (empty disables gVisor)
+#   config_overrides: Key-value pairs merged into workflow config at deploy time
+#   secrets_source:  Secrets backend (default: local $shared references)
+#   enforcement:     Contract enforcement mode (default: strict)
 environments:
-  # Example: dedicated kubeconfig file (recommended for multi-cluster setups)
   dev:
-    kubeconfig: ~/dev-secrets/kubeconfigs/my-cluster.kubeconfig
-    namespace: dev-workflows
-    runtime_class: ""               # no gVisor in kind
-    # image: ghcr.io/randybias/tentacular-engine:latest  # optional; defaults to base-image.txt
+    namespace: tentacular-dev
+    image: ghcr.io/yourorg/tentacular-engine:latest
+    runtime_class: ""                 # no gVisor in kind/dev clusters
+    mcp_endpoint: http://172.31.29.1:30080/mcp
+    mcp_token_path: ~/.tentacular/mcp-token
 
-  # Example: context within default kubeconfig (simpler single-cluster setups)
-  staging:
-    context: staging-cluster        # context name in ~/.kube/config
-    namespace: staging-workflows
-    runtime_class: gvisor
-
-  # Example: kubeconfig with explicit context (multi-context kubeconfig files)
   prod:
-    kubeconfig: ~/dev-secrets/kubeconfigs/prod.kubeconfig
-    context: prod-admin             # select a specific context within the file
-    namespace: tentacular
+    namespace: tentacular-prod
+    image: ghcr.io/yourorg/tentacular-engine:latest
     runtime_class: gvisor
-    image: ghcr.io/randybias/tentacular-engine:latest
+    mcp_endpoint: http://prod-mcp.example.com:30080/mcp
+    mcp_token_path: ~/.tentacular/mcp-token-prod
     # config_overrides:
     #   pg_host: "postgres.db.svc.cluster.local"
     #   pg_port: 5432
