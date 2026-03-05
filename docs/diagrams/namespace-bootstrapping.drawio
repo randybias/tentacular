@@ -1,0 +1,103 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.5.2 Chrome/142.0.7444.265 Electron/39.6.1 Safari/537.36" version="29.5.2">
+  <diagram id="UX5Ik8C3RVpiafgRJJKY" name="Page-1">
+    <mxGraphModel dx="1080" dy="890" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1800" pageHeight="700" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="title" parent="1" style="text;html=1;align=center;verticalAlign=middle;resizable=0;points=[];autosize=1;fontFamily=Helvetica;fontSize=18;fontStyle=1;fontColor=#333333;" value="System Bootstrapping" vertex="1">
+          <mxGeometry height="40" width="220" x="720" y="20" as="geometry" />
+        </mxCell>
+        <mxCell id="s1" parent="1" style="swimlane;startSize=30;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontStyle=1;fontSize=12;rounded=1;" value="Stage 1: helm install" vertex="1">
+          <mxGeometry height="400" width="440" x="40" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_ns" parent="s1" style="swimlane;startSize=26;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontStyle=1;fontSize=11;rounded=1;" value="tentacular-system" vertex="1">
+          <mxGeometry height="340" width="400" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_namespace" parent="s1_ns" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="Namespace" vertex="1">
+          <mxGeometry height="30" width="170" x="20" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_sa" parent="s1_ns" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="ServiceAccount" vertex="1">
+          <mxGeometry height="30" width="170" x="210" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_crb" parent="s1_ns" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="ClusterRole / ClusterRoleBinding" vertex="1">
+          <mxGeometry height="30" width="360" x="20" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_secret" parent="s1_ns" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="Auth Secret (bearer token)" vertex="1">
+          <mxGeometry height="30" width="360" x="20" y="125" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_deploy" parent="s1_ns" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;fontStyle=1;" value="MCP Deployment (tentacular-mcp)" vertex="1">
+          <mxGeometry height="35" width="360" x="20" y="170" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_svc" parent="s1_ns" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="Service (:8080)" vertex="1">
+          <mxGeometry height="30" width="360" x="20" y="220" as="geometry" />
+        </mxCell>
+        <mxCell id="s1_note" parent="s1_ns" style="shape=note;whiteSpace=wrap;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Helvetica;fontSize=9;fontStyle=2;align=center;" value="Pre-requisite:&#xa;kubectl create namespace tentacular-support" vertex="1">
+          <mxGeometry height="50" width="280" x="60" y="270" as="geometry" />
+        </mxCell>
+        <mxCell id="s2" parent="1" style="swimlane;startSize=30;fillColor=#f5f5f5;strokeColor=#999999;fontFamily=Helvetica;fontStyle=1;fontSize=12;rounded=1;" value="Stage 2: MCP server startup" vertex="1">
+          <mxGeometry height="400" width="360" x="560" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="s2_ns" parent="s2" style="swimlane;startSize=26;fillColor=#f5f5f5;strokeColor=#999999;fontFamily=Helvetica;fontStyle=1;fontSize=11;rounded=1;" value="tentacular-support" vertex="1">
+          <mxGeometry height="200" width="320" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s2_esm_deploy" parent="s2_ns" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;fontFamily=Helvetica;fontSize=10;fontStyle=1;" value="esm-sh Deployment&#xa;(auto-created by proxy reconciler)" vertex="1">
+          <mxGeometry height="50" width="280" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s2_esm_svc" parent="s2_ns" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;fontFamily=Helvetica;fontSize=10;" value="esm-sh Service (:8080)" vertex="1">
+          <mxGeometry height="35" width="280" x="20" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="s2_note" parent="s2" style="shape=note;whiteSpace=wrap;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Helvetica;fontSize=9;fontStyle=2;align=center;" value="Reconciler re-checks every 5 min.&#xa;NS must be pre-created." vertex="1">
+          <mxGeometry height="50" width="280" x="40" y="280" as="geometry" />
+        </mxCell>
+        <mxCell id="s3" parent="1" style="swimlane;startSize=30;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontStyle=1;fontSize=12;rounded=1;" value="Stage 3: tntc deploy (on-demand)" vertex="1">
+          <mxGeometry height="490" width="440" x="1000" y="80" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_ns" parent="s3" style="swimlane;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontStyle=1;fontSize=11;rounded=1;" value="workflow-ns (ns_create)" vertex="1">
+          <mxGeometry height="430" width="400" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_namespace" parent="s3_ns" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="Namespace (managed-by: tentacular label)" vertex="1">
+          <mxGeometry height="30" width="360" x="20" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_deny" parent="s3_ns" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="default-deny NetworkPolicy" vertex="1">
+          <mxGeometry height="35" width="170" x="20" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_dns" parent="s3_ns" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="DNS-allow NetworkPolicy" vertex="1">
+          <mxGeometry height="35" width="170" x="210" y="75" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_quota" parent="s3_ns" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="ResourceQuota" vertex="1">
+          <mxGeometry height="30" width="170" x="20" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_limit" parent="s3_ns" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="LimitRange" vertex="1">
+          <mxGeometry height="30" width="170" x="210" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_sa" parent="s3_ns" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="ServiceAccount + Role + RoleBinding" vertex="1">
+          <mxGeometry height="30" width="360" x="20" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_apply" parent="s3_ns" style="swimlane;startSize=24;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontStyle=1;fontSize=10;rounded=1;" value="wf_apply adds:" vertex="1">
+          <mxGeometry height="195" width="360" x="20" y="215" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_cm" parent="s3_apply" style="rounded=1;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=9;" value="ConfigMap&#xa;(code + import map)" vertex="1">
+          <mxGeometry height="40" width="160" x="10" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_deploy" parent="s3_apply" style="rounded=1;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=9;" value="Deployment&#xa;(gVisor + Deno)" vertex="1">
+          <mxGeometry height="40" width="160" x="190" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_svc" parent="s3_apply" style="rounded=1;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=9;" value="Service&#xa;(ClusterIP :8080)" vertex="1">
+          <mxGeometry height="40" width="160" x="10" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_secret" parent="s3_apply" style="rounded=1;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=9;" value="Secret&#xa;(credentials)" vertex="1">
+          <mxGeometry height="40" width="160" x="190" y="90" as="geometry" />
+        </mxCell>
+        <mxCell id="s3_netpol" parent="s3_apply" style="rounded=1;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=9;" value="NetworkPolicy (contract-derived egress + esm.sh access)" vertex="1">
+          <mxGeometry height="40" width="340" x="10" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow1" edge="1" parent="1" source="s1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=11;fontStyle=1;strokeWidth=3;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s2" value="auto">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="arrow2" edge="1" parent="1" source="s2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#82b366;fontFamily=Helvetica;fontSize=11;fontStyle=1;strokeWidth=3;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="s3" value="on-demand">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

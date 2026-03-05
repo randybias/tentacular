@@ -1,0 +1,126 @@
+<mxfile host="Electron" agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) draw.io/29.5.2 Chrome/142.0.7444.265 Electron/39.6.1 Safari/537.36" version="29.5.2">
+  <diagram id="ABcdwmhOw-9RH-RxPY6n" name="Page-1">
+    <mxGraphModel dx="1080" dy="890" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1500" pageHeight="900" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+        <mxCell id="agent" parent="1" style="swimlane;startSize=28;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Helvetica;fontStyle=1;fontSize=13;rounded=1;" value="AI Agent / Client" vertex="1">
+          <mxGeometry height="130" width="200" x="40" y="240" as="geometry" />
+        </mxCell>
+        <mxCell id="cli" parent="agent" style="rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Helvetica;fontSize=11;" value="tntc CLI" vertex="1">
+          <mxGeometry height="34" width="140" x="30" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="mcpclient" parent="agent" style="rounded=1;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Helvetica;fontSize=11;" value="any MCP client" vertex="1">
+          <mxGeometry height="34" width="140" x="30" y="84" as="geometry" />
+        </mxCell>
+        <mxCell id="cluster" parent="1" style="swimlane;startSize=30;fillColor=#f8f8f8;strokeColor=#666666;fontFamily=Helvetica;fontStyle=1;fontSize=14;rounded=1;strokeWidth=2;dashed=1;" value="Kubernetes Cluster" vertex="1">
+          <mxGeometry height="780" width="800" x="340" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="ns_system" parent="cluster" style="swimlane;startSize=28;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontStyle=1;fontSize=12;rounded=1;" value="tentacular-system" vertex="1">
+          <mxGeometry height="280" width="320" x="40" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="mcp_server" parent="ns_system" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=11;fontStyle=1;" value="MCP Server&#xa;(tentacular-mcp)" vertex="1">
+          <mxGeometry height="50" width="260" x="30" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="bearer" parent="ns_system" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="Bearer auth + scoped RBAC" vertex="1">
+          <mxGeometry height="35" width="260" x="30" y="100" as="geometry" />
+        </mxCell>
+        <mxCell id="cron" parent="ns_system" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="Cron scheduler" vertex="1">
+          <mxGeometry height="35" width="260" x="30" y="145" as="geometry" />
+        </mxCell>
+        <mxCell id="reconciler" parent="ns_system" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;" value="Proxy reconciler" vertex="1">
+          <mxGeometry height="35" width="260" x="30" y="190" as="geometry" />
+        </mxCell>
+        <mxCell id="ns_support" parent="cluster" style="swimlane;startSize=28;fillColor=#f5f5f5;strokeColor=#999999;fontFamily=Helvetica;fontStyle=1;fontSize=12;rounded=1;" value="tentacular-support" vertex="1">
+          <mxGeometry height="180" width="320" x="40" y="400" as="geometry" />
+        </mxCell>
+        <mxCell id="esm" parent="ns_support" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;fontFamily=Helvetica;fontSize=11;fontStyle=1;" value="esm.sh module proxy" vertex="1">
+          <mxGeometry height="45" width="260" x="30" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="cache" parent="ns_support" style="rounded=1;whiteSpace=wrap;fillColor=#f5f5f5;strokeColor=#999999;fontFamily=Helvetica;fontSize=10;" value="Caches jsr/npm modules for workflow pods" vertex="1">
+          <mxGeometry height="35" width="260" x="30" y="95" as="geometry" />
+        </mxCell>
+        <mxCell id="ns_wf" parent="cluster" style="swimlane;startSize=28;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontStyle=1;fontSize=12;rounded=1;" value="workflow-ns (managed-by: tentacular)" vertex="1">
+          <mxGeometry height="530" width="320" x="450" y="50" as="geometry" />
+        </mxCell>
+        <mxCell id="wf_pod" parent="ns_wf" style="swimlane;startSize=26;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontStyle=1;fontSize=11;rounded=1;" value="Workflow Pod" vertex="1">
+          <mxGeometry height="200" width="280" x="20" y="40" as="geometry" />
+        </mxCell>
+        <mxCell id="gvisor_label" parent="wf_pod" style="rounded=1;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;dashed=1;" value="gVisor sandbox" vertex="1">
+          <mxGeometry height="28" width="250" x="15" y="35" as="geometry" />
+        </mxCell>
+        <mxCell id="deno" parent="wf_pod" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;fontStyle=1;" value="Deno Engine (TypeScript)" vertex="1">
+          <mxGeometry height="40" width="250" x="15" y="72" as="geometry" />
+        </mxCell>
+        <mxCell id="dag" parent="wf_pod" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="Workflow DAG (stages + nodes)" vertex="1">
+          <mxGeometry height="40" width="250" x="15" y="120" as="geometry" />
+        </mxCell>
+        <mxCell id="mounts" parent="wf_pod" style="rounded=0;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=9;dashed=1;" value="/app/workflow (CM)  /app/secrets (vol)" vertex="1">
+          <mxGeometry height="25" width="250" x="15" y="165" as="geometry" />
+        </mxCell>
+        <mxCell id="cm" parent="ns_wf" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="ConfigMap&#xa;(code + import map)" vertex="1">
+          <mxGeometry height="50" width="130" x="20" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="secret" parent="ns_wf" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="Secret&#xa;(credentials)" vertex="1">
+          <mxGeometry height="50" width="130" x="170" y="260" as="geometry" />
+        </mxCell>
+        <mxCell id="netpol" parent="ns_wf" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;" value="NetworkPolicy&#xa;(default-deny +&#xa;contract egress)" vertex="1">
+          <mxGeometry height="50" width="280" x="20" y="325" as="geometry" />
+        </mxCell>
+        <mxCell id="svc_wf" parent="ns_wf" style="rounded=1;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;dashed=1;" value="Service :8080 (ClusterIP)" vertex="1">
+          <mxGeometry height="30" width="280" x="20" y="390" as="geometry" />
+        </mxCell>
+        <mxCell id="quota" parent="ns_wf" style="rounded=0;whiteSpace=wrap;fillColor=#e6ffe6;strokeColor=#82b366;fontFamily=Helvetica;fontSize=9;dashed=1;" value="ResourceQuota + LimitRange + SA/Role" vertex="1">
+          <mxGeometry height="28" width="280" x="20" y="435" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" edge="1" parent="cluster" source="mcp_server" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#82b366;fontFamily=Helvetica;fontSize=10;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="wf_pod" value="HTTP POST /run&#xa;(trigger)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="400" y="105" />
+              <mxPoint x="400" y="190" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="e3" edge="1" parent="cluster" source="ns_system" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;fontFamily=Helvetica;fontSize=10;strokeWidth=2;exitX=0.5;exitY=1;exitDx=0;exitDy=0;entryX=0.5;entryY=0;entryDx=0;entryDy=0;" target="ns_support" value="reconcile proxy +&#xa;module pre-warm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" edge="1" parent="cluster" source="ns_wf" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#999999;fontFamily=Helvetica;fontSize=10;strokeWidth=1;dashed=1;exitX=0;exitY=0.85;exitDx=0;exitDy=0;entryX=1;entryY=0.5;entryDx=0;entryDy=0;" target="ns_support" value="module resolution&#xa;(TCP 8080)">
+          <mxGeometry relative="1" x="-0.204" y="-19" as="geometry">
+            <mxPoint x="-19" y="20" as="offset" />
+            <Array as="points">
+              <mxPoint x="410" y="501" />
+              <mxPoint x="410" y="490" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="internet" parent="1" style="ellipse;shape=cloud;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=Helvetica;fontSize=11;" value="Internet&#xa;(jsr.io, npmjs.org)" vertex="1">
+          <mxGeometry height="100" width="200" x="40" y="680" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" edge="1" parent="1" source="ns_support" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#9673a6;fontFamily=Helvetica;fontSize=10;strokeWidth=2;exitX=0;exitY=0.5;exitDx=0;exitDy=0;entryX=1;entryY=0.4;entryDx=0;entryDy=0;" target="internet" value="outbound fetch&#xa;(first request only)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="320" y="530" />
+              <mxPoint x="320" y="720" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+        <mxCell id="callout1" parent="1" style="shape=note;whiteSpace=wrap;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Helvetica;fontSize=10;fontStyle=1;align=center;" value="CLI has NO direct K8s API access" vertex="1">
+          <mxGeometry height="40" width="220" x="40" y="420" as="geometry" />
+        </mxCell>
+        <mxCell id="callout2" parent="1" style="shape=note;whiteSpace=wrap;size=14;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Helvetica;fontSize=10;fontStyle=1;align=center;" value="Default-deny NetworkPolicy +&#xa;contract-derived egress" vertex="1">
+          <mxGeometry height="50" width="220" x="40" y="480" as="geometry" />
+        </mxCell>
+        <mxCell id="P3okgn7fYu4-TX7zegwA-1" edge="1" parent="1" source="agent" style="edgeStyle=orthogonalEdgeStyle;rounded=1;strokeColor=#6c8ebf;fontFamily=Helvetica;fontSize=10;fontStyle=1;strokeWidth=2;exitX=1;exitY=0.5;exitDx=0;exitDy=0;entryX=0;entryY=0.5;entryDx=0;entryDy=0;" target="mcp_server" value="MCP (JSON-RPC 2.0 / HTTP)">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="300" y="305" />
+              <mxPoint x="300" y="155" />
+            </Array>
+            <mxPoint x="80" y="195" as="sourcePoint" />
+            <mxPoint x="250" y="45" as="targetPoint" />
+          </mxGeometry>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

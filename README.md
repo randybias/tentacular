@@ -10,33 +10,17 @@ It runs those workflows on Kubernetes with defense-in-depth sandboxing: distrole
 
 Three components form the system: a Go CLI manages the full lifecycle, an in-cluster MCP server proxies all cluster operations through scoped RBAC, and a Deno engine executes workflow DAGs inside hardened containers.
 
+## Ecosystem
+
+| Repository | Purpose |
+|------------|---------|
+| [tentacular](https://github.com/randybias/tentacular) | Go CLI (`tntc`) + Deno workflow engine |
+| [tentacular-mcp](https://github.com/randybias/tentacular-mcp) | In-cluster MCP server (Helm chart, 32 tools) |
+| [tentacular-skill](https://github.com/randybias/tentacular-skill) | Agent skill definition for AI assistants |
+
 ## Overview
 
-```
-     Developer Machine                          Kubernetes Cluster
-┌──────────────────────────┐     ┌──────────────────────────────────────────────┐
-│                          │     │  tentacular-system namespace                 │
-│  tntc CLI (Go)           │     │  ┌──────────────────────────────────────┐    │
-│  ┌────────────────────┐  │     │  │  tentacular-mcp (MCP Server)        │    │
-│  │ init / validate    │  │ MCP │  │  Bearer auth, scoped RBAC           │    │
-│  │ dev / test         │  │────>│  │  Streamable HTTP on :8080/mcp       │    │
-│  │ build / deploy     │  │     │  └──────────┬───────────────────────────┘    │
-│  │ status / cluster   │  │     │             │ K8s API                        │
-│  │ visualize          │  │     │             v                                │
-│  └────────────────────┘  │     │  ┌──────────────────────────┐                │
-│           │              │     │  │  Pod (gVisor sandbox)    │                │
-│      ┌────┴────┐        │     │  │  ┌──────────────────┐    │                │
-│      │ Docker   │        │     │  │  │ Deno Engine (TS) │    │                │
-│      │ Build    │        │     │  │  │ ┌──────────────┐ │    │                │
-│      └─────────┘        │     │  │  │ │ Workflow DAG │ │    │                │
-│                          │     │  │  │ └──────────────┘ │    │                │
-└──────────────────────────┘     │  │  └──────────────────┘    │                │
-                                 │  │  /app/workflow (CM)      │                │
-                                 │  │  /app/secrets (vol)      │                │
-                                 │  └──────────────────────────┘                │
-                                 │  ConfigMap, Secret, NetworkPolicy            │
-                                 └──────────────────────────────────────────────┘
-```
+![System Architecture](docs/diagrams/system-architecture.svg)
 
 All CLI commands that interact with the cluster route through the MCP server via HTTP. The MCP server is installed separately using its Helm chart (`helm install tentacular-mcp`).
 
@@ -60,6 +44,16 @@ All CLI commands that interact with the cluster route through the MCP server via
 - **Optional:** [gVisor](https://gvisor.dev/) on cluster nodes for kernel-level sandboxing (see [docs/gvisor-setup.md](docs/gvisor-setup.md))
 
 ## Installation
+
+### Recommended
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/randybias/tentacular/main/install.sh | sh
+```
+
+This installs the `tntc` binary and the Deno engine to `~/.local/bin` and `~/.tentacular/engine`.
+
+### Build from Source
 
 ```bash
 git clone git@github.com:randybias/tentacular.git
@@ -93,12 +87,18 @@ tntc dev
 ### 4. Install the MCP server (one-time per cluster)
 
 ```bash
+# Clone the MCP server repo
+git clone git@github.com:randybias/tentacular-mcp.git
+
 # Generate a token and install via Helm
 TOKEN=$(openssl rand -hex 32)
-helm install tentacular-mcp charts/tentacular-mcp \
+kubectl create namespace tentacular-support
+helm install tentacular-mcp ./tentacular-mcp/charts/tentacular-mcp \
   --namespace tentacular-system --create-namespace \
   --set auth.token="${TOKEN}"
 ```
+
+See the [tentacular-mcp README](https://github.com/randybias/tentacular-mcp) for Helm values and configuration options.
 
 ### 5. Configure the CLI
 
@@ -182,6 +182,28 @@ flowchart LR
 | `example-workflows/` | Runnable example workflows |
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |
 | `docs/` | Reference documentation |
+
+### Namespace Model
+
+| Namespace | Purpose | Protection |
+|-----------|---------|------------|
+| `tentacular-system` | MCP server, control plane, cron scheduler | Protected from deletion by self-guard |
+| `tentacular-support` | esm.sh module proxy, caches jsr/npm modules | Protected from deletion by self-guard |
+| Workflow namespaces | One per deployment, `managed-by: tentacular` label | Created/deleted via MCP tools |
+
+Workflow pods run in their own namespaces with default-deny NetworkPolicy and contract-derived egress rules. They never run inside `tentacular-system`. See [ESM Module Proxy](docs/esm-module-proxy.md) for the module proxy architecture.
+
+### Infrastructure Setup
+
+![System Bootstrapping](docs/diagrams/namespace-bootstrapping.svg)
+
+Infrastructure is created in three stages:
+
+1. **Helm install** creates the `tentacular-system` namespace with the MCP server Deployment, ServiceAccount, ClusterRole/Binding, auth Secret, and Service. The `tentacular-support` namespace must be pre-created (`kubectl create namespace tentacular-support`).
+
+2. **MCP server startup** triggers the proxy reconciler, which auto-creates the esm.sh Deployment and Service inside `tentacular-support`. The reconciler re-checks every 5 minutes.
+
+3. **`tntc deploy`** (on-demand) calls `ns_create` to create a workflow namespace with default-deny NetworkPolicy, DNS-allow policy, ResourceQuota, LimitRange, and workflow ServiceAccount/Role/RoleBinding. Then `wf_apply` adds the workflow-specific ConfigMap, Deployment, Service, Secret, and contract-derived NetworkPolicy.
 
 ### Security Model
 

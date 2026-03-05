@@ -4,31 +4,7 @@
 
 Tentacular is a workflow execution platform that runs TypeScript DAGs on Kubernetes with defense-in-depth sandboxing. Three components form the system: a Go CLI manages the full lifecycle, an in-cluster MCP server proxies all cluster operations through scoped RBAC, and a Deno engine executes workflow DAGs inside hardened containers with gVisor kernel isolation.
 
-```
-          Developer Machine                          Kubernetes Cluster
-     ┌──────────────────────────┐     ┌──────────────────────────────────────────────┐
-     │                          │     │  tentacular-system namespace                 │
-     │  tntc CLI (Go)           │     │  ┌──────────────────────────────────────┐    │
-     │  ┌────────────────────┐  │     │  │  tentacular-mcp (MCP Server)        │    │
-     │  │ init / validate    │  │ MCP │  │  Bearer auth, scoped RBAC           │    │
-     │  │ dev / test         │  │────>│  │  Streamable HTTP on :8080/mcp       │    │
-     │  │ build / deploy     │  │     │  └──────────┬───────────────────────────┘    │
-     │  │ status / cluster   │  │     │             │ K8s API                        │
-     │  │ visualize          │  │     │             v                                │
-     │  └────────────────────┘  │     │  ┌──────────────────────────┐                │
-     │           │              │     │  │  Pod (gVisor sandbox)    │                │
-     │      ┌────┴────┐        │     │  │  ┌──────────────────┐    │                │
-     │      │ Docker   │        │     │  │  │ Deno Engine (TS) │    │                │
-     │      │ Build    │        │     │  │  │ ┌──────────────┐ │    │                │
-     │      └─────────┘        │     │  │  │ │ Workflow DAG │ │    │                │
-     │                          │     │  │  │ └──────────────┘ │    │                │
-     └──────────────────────────┘     │  │  └──────────────────┘    │                │
-                                      │  │  /app/workflow (CM)      │                │
-                                      │  │  /app/secrets (vol)      │                │
-                                      │  └──────────────────────────┘                │
-                                      │  ConfigMap, Secret, NetworkPolicy            │
-                                      └──────────────────────────────────────────────┘
-```
+![System Architecture](diagrams/system-architecture.svg)
 
 **CLI-to-MCP Architecture:** The CLI has no direct Kubernetes API access. All cluster-facing commands (deploy, run, list, status, logs, undeploy, audit, cluster check, cluster profile) route through the MCP server using JSON-RPC 2.0 over Streamable HTTP. The MCP server is installed separately via its Helm chart. MCP connection details are configured per-environment in `~/.tentacular/config.yaml` or via `TNTC_MCP_ENDPOINT` / `TNTC_MCP_TOKEN` environment variables.
 
