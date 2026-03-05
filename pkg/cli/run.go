@@ -22,7 +22,7 @@ func NewRunCmd() *cobra.Command {
 
 func runRun(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	namespace, _ := cmd.Flags().GetString("namespace")
+	namespace := resolveNamespace(cmd, ".")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
 	mcpClient, err := requireMCPClient(cmd)

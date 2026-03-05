@@ -14,6 +14,7 @@ import (
 )
 
 func TestBuildSecretManifestLocalSecretsPresent(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	// Create a fake repo root with shared secrets
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
@@ -82,6 +83,7 @@ func TestBuildSecretManifestNoSecretsReturnsNil(t *testing.T) {
 }
 
 func TestBuildSecretManifestDirIgnoredOnlyYAMLUsed(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	// Per-workflow .secrets/ dirs are no longer supported.
 	// Only .secrets.yaml with $shared references works.
 	repoRoot := t.TempDir()
@@ -118,6 +120,7 @@ func TestBuildSecretManifestDirIgnoredOnlyYAMLUsed(t *testing.T) {
 }
 
 func TestBuildSecretManifestNameSuffix(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
 	sharedDir := filepath.Join(repoRoot, ".secrets")

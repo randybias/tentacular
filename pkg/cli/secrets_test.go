@@ -124,6 +124,9 @@ func TestSecretsInitRefusesOverwrite(t *testing.T) {
 }
 
 func TestResolveSharedSecrets(t *testing.T) {
+	// Isolate HOME so LoadConfig() doesn't find real workspace config
+	t.Setenv("HOME", t.TempDir())
+
 	// Create a fake repo structure with .git and .secrets/
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
@@ -159,6 +162,8 @@ func TestResolveSharedSecrets(t *testing.T) {
 }
 
 func TestResolveSharedSecretsMissing(t *testing.T) {
+	// Isolate HOME so LoadConfig() doesn't find real workspace config
+	t.Setenv("HOME", t.TempDir())
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".secrets"), 0o755)
@@ -180,20 +185,25 @@ func TestResolveSharedSecretsMissing(t *testing.T) {
 }
 
 func TestResolveSharedSecretsNoRepoRoot(t *testing.T) {
-	// Use a temp dir with no .git or go.mod
+	// Isolate HOME so LoadConfig() doesn't read user's real workspace config
+	origHome := os.Getenv("HOME")
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	defer func() { _ = os.Setenv("HOME", origHome) }()
+
+	// Use a temp dir with no .git or go.mod and no workspace config
 	dir := t.TempDir()
 	secrets := map[string]interface{}{
 		"slack": "$shared.slack",
 	}
 
-	// Should gracefully skip -- no error, value unchanged
+	// Should return an error when no workspace and no repo root found
 	err := resolveSharedSecrets(secrets, dir)
-	if err != nil {
-		t.Fatalf("expected no error when no repo root, got: %v", err)
+	if err == nil {
+		t.Fatal("expected error when no workspace and no repo root, got nil")
 	}
-	// Value should remain unchanged
-	if secrets["slack"] != "$shared.slack" {
-		t.Errorf("expected value to remain unchanged, got %v", secrets["slack"])
+	if !strings.Contains(err.Error(), "cannot resolve $shared secrets") {
+		t.Errorf("expected clear error message about missing workspace/repo root, got: %v", err)
 	}
 }
 
@@ -224,6 +234,8 @@ func TestFindRepoRootGoMod(t *testing.T) {
 }
 
 func TestResolveSharedSecretsPlainText(t *testing.T) {
+	// Isolate HOME so LoadConfig() doesn't find real workspace config
+	t.Setenv("HOME", t.TempDir())
 	// Shared secret that is NOT valid JSON should fall back to plain string
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)

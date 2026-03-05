@@ -3,10 +3,12 @@ package cli
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 )
 
 // flagString returns the value of a named flag, traversing parent commands for persistent flags.
@@ -16,6 +18,55 @@ func flagString(cmd *cobra.Command, name string) string {
 		return f.Value.String()
 	}
 	return ""
+}
+
+// resolveNamespace determines the target namespace using the cascade:
+// 1. deployment.namespace from workflow.yaml (when workflowDir is provided)
+// 2. env config namespace (from --env or default environment)
+// 3. global config namespace
+// 4. "default"
+func resolveNamespace(cmd *cobra.Command, workflowDir string) string {
+	envName := flagString(cmd, "env")
+
+	// Try workflow.yaml deployment.namespace first
+	if workflowDir != "" {
+		if ns := readWorkflowNamespace(workflowDir); ns != "" {
+			return ns
+		}
+	}
+
+	// Try env config namespace
+	env, err := ResolveEnvironment(envName)
+	if err == nil && env.Namespace != "" {
+		return env.Namespace
+	}
+
+	// Try global config namespace
+	cfg := LoadConfig()
+	if cfg.Namespace != "" {
+		return cfg.Namespace
+	}
+
+	return "default"
+}
+
+// readWorkflowNamespace reads deployment.namespace from workflow.yaml without full validation.
+func readWorkflowNamespace(workflowDir string) string {
+	specPath := filepath.Join(workflowDir, "workflow.yaml")
+	data, err := os.ReadFile(specPath)
+	if err != nil {
+		return ""
+	}
+	// Lenient parse — just extract deployment.namespace
+	var stub struct {
+		Deployment struct {
+			Namespace string `yaml:"namespace"`
+		} `yaml:"deployment"`
+	}
+	if err := yaml.Unmarshal(data, &stub); err != nil {
+		return ""
+	}
+	return stub.Deployment.Namespace
 }
 
 // resolveMCPClient attempts to create an MCP client using the per-env resolution cascade:

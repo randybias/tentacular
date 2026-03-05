@@ -151,7 +151,7 @@ func TestRunConfigureWritesProjectConfig(t *testing.T) {
 	defer func() { _ = os.Chdir(origDir) }()
 
 	cmd := NewConfigureCmd()
-	cmd.SetArgs([]string{"--namespace", "staging", "--project"})
+	cmd.SetArgs([]string{"--default-namespace", "staging", "--project"})
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("configure --project failed: %v", err)
 	}
@@ -186,7 +186,7 @@ func TestRunConfigurePreservesExistingFields(t *testing.T) {
 
 	// Second: set namespace only (registry should be preserved)
 	cmd2 := NewConfigureCmd()
-	cmd2.SetArgs([]string{"--namespace", "production"})
+	cmd2.SetArgs([]string{"--default-namespace", "production"})
 	if err := cmd2.Execute(); err != nil {
 		t.Fatalf("second configure failed: %v", err)
 	}

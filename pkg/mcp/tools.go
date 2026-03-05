@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // --- wf_apply ---
@@ -49,7 +50,27 @@ type WfRemoveParams struct {
 
 // WfRemoveResult is the response from wf_remove.
 type WfRemoveResult struct {
-	Deleted []string `json:"deleted"` // resource names deleted
+	Deleted      []string `json:"deleted"`       // resource names deleted
+	DeletedCount int      `json:"deletedCount"`  // populated when server returns a number
+}
+
+func (r *WfRemoveResult) UnmarshalJSON(data []byte) error {
+	// Try standard format first (deleted as []string).
+	type alias WfRemoveResult
+	var a alias
+	if err := json.Unmarshal(data, &a); err == nil && len(a.Deleted) > 0 {
+		*r = WfRemoveResult(a)
+		return nil
+	}
+	// Server may return deleted as a number (count).
+	var alt struct {
+		Deleted int `json:"deleted"`
+	}
+	if err := json.Unmarshal(data, &alt); err == nil {
+		r.DeletedCount = alt.Deleted
+		return nil
+	}
+	return fmt.Errorf("cannot parse wf_remove result: %s", string(data))
 }
 
 // WfRemove calls the wf_remove MCP tool to delete a workflow's resources.
@@ -154,25 +175,74 @@ func (c *Client) WfList(ctx context.Context, namespace string) ([]WfListItem, er
 	return items, nil
 }
 
+// --- wf_pods ---
+
+// WfPodsParams are the arguments for the wf_pods MCP tool.
+type WfPodsParams struct {
+	Namespace string `json:"namespace"`
+}
+
+// WfPod represents a single pod in the wf_pods response.
+type WfPod struct {
+	Name     string   `json:"name"`
+	Phase    string   `json:"phase"`
+	Ready    bool     `json:"ready"`
+	Restarts int      `json:"restarts"`
+	Images   []string `json:"images"`
+	Age      string   `json:"age"`
+}
+
+// WfPodsResult is the response from wf_pods.
+type WfPodsResult struct {
+	Pods []WfPod `json:"pods"`
+}
+
+// WfPods calls the wf_pods MCP tool to list pods in a namespace.
+func (c *Client) WfPods(ctx context.Context, namespace string) (*WfPodsResult, error) {
+	raw, err := c.CallTool(ctx, "wf_pods", WfPodsParams{
+		Namespace: namespace,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result WfPodsResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("parsing wf_pods result: %w", err)
+	}
+	return &result, nil
+}
+
 // --- wf_logs ---
 
 // WfLogsParams are the arguments for the wf_logs MCP tool.
 type WfLogsParams struct {
 	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-	TailLines int64  `json:"tailLines,omitempty"`
+	Pod       string `json:"pod"`
+	Container string `json:"container,omitempty"`
+	TailLines int64  `json:"tail_lines,omitempty"`
 }
 
 // WfLogsResult is the response from wf_logs.
 type WfLogsResult struct {
-	Logs string `json:"logs"`
+	Logs      string   `json:"logs"`      // legacy: single string
+	Lines     []string `json:"lines"`     // current: array of lines
+	Pod       string   `json:"pod"`
+	Container string   `json:"container"`
+}
+
+// LogText returns the log content as a single string.
+func (r *WfLogsResult) LogText() string {
+	if len(r.Lines) > 0 {
+		return strings.Join(r.Lines, "\n")
+	}
+	return r.Logs
 }
 
 // WfLogs calls the wf_logs MCP tool to retrieve pod logs.
-func (c *Client) WfLogs(ctx context.Context, namespace, name string, tailLines int64) (*WfLogsResult, error) {
+func (c *Client) WfLogs(ctx context.Context, namespace, pod string, tailLines int64) (*WfLogsResult, error) {
 	raw, err := c.CallTool(ctx, "wf_logs", WfLogsParams{
 		Namespace: namespace,
-		Name:      name,
+		Pod:       pod,
 		TailLines: tailLines,
 	})
 	if err != nil {
@@ -241,6 +311,30 @@ type CheckResult struct {
 type ClusterPreflightResult struct {
 	Results []CheckResult `json:"results"`
 	AllPass bool          `json:"allPass"`
+}
+
+// UnmarshalJSON handles both "results" and "checks" field names from the MCP server.
+func (r *ClusterPreflightResult) UnmarshalJSON(data []byte) error {
+	// Try canonical form first
+	type alias ClusterPreflightResult
+	var a alias
+	if err := json.Unmarshal(data, &a); err != nil {
+		return err
+	}
+	*r = ClusterPreflightResult(a)
+
+	// If Results is empty, try "checks" field
+	if len(r.Results) == 0 {
+		var alt struct {
+			Checks  []CheckResult `json:"checks"`
+			AllPass bool          `json:"allPass"`
+		}
+		if err := json.Unmarshal(data, &alt); err == nil && len(alt.Checks) > 0 {
+			r.Results = alt.Checks
+			r.AllPass = alt.AllPass
+		}
+	}
+	return nil
 }
 
 // ClusterPreflight calls the cluster_preflight MCP tool.

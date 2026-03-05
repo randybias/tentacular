@@ -4,7 +4,7 @@ TAG        ?= latest
 PLATFORMS  := linux/amd64,linux/arm64
 DOCKER     ?= docker
 
-.PHONY: help build build-local push test lint clean
+.PHONY: help build build-local push test lint clean install
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":.*?## "}; {printf "  \033[36m%-18s\033[0m %s\n", $$1, $$2}'
@@ -38,6 +38,12 @@ build-cli: ## Build tntc binary for the current platform (output: ./tntc)
 		  -X github.com/randybias/tentacular/pkg/version.Commit=$$(git rev-parse --short HEAD) \
 		  -X github.com/randybias/tentacular/pkg/version.Date=$$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
 		./cmd/tntc
+
+install: build-cli ## Build and install tntc to ~/.local/bin/
+	@mkdir -p $(HOME)/.local/bin
+	cp ./tntc $(HOME)/.local/bin/tntc
+	@echo "Installed tntc to $(HOME)/.local/bin/tntc"
+	@echo "Ensure $(HOME)/.local/bin is in your PATH"
 
 release: ## Tag and push to trigger GHA release workflow (usage: make release TAG=v0.1.0)
 	@test -n "$(TAG)" || (echo "usage: make release TAG=v0.1.0" && exit 1)

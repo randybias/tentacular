@@ -15,6 +15,7 @@ import (
 // buildSecretManifest resolves $shared references when building the K8s secret.
 // This is the core deploy-time integration.
 func TestSharedSecretsE2E_BuildSecretManifestResolvesSharedRef(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	// Set up fake repo structure: repo root + workflow subdir
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
@@ -87,6 +88,7 @@ func TestSharedSecretsE2E_MissingSharedSecretErrors(t *testing.T) {
 // TestSharedSecretsE2E_SharedSecretsDirContainsMultipleSecrets verifies that
 // multiple $shared references in one .secrets.yaml are all resolved correctly.
 func TestSharedSecretsE2E_SharedSecretsDirContainsMultipleSecrets(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
 	sharedDir := filepath.Join(repoRoot, ".secrets")

@@ -25,7 +25,7 @@ func NewClusterCmd() *cobra.Command {
 }
 
 func runClusterCheck(cmd *cobra.Command, args []string) error {
-	namespace, _ := cmd.Flags().GetString("namespace")
+	namespace := resolveNamespace(cmd, "")
 	output, _ := cmd.Flags().GetString("output")
 
 	mcpClient, err := requireMCPClient(cmd)

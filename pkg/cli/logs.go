@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/spf13/cobra"
 )
@@ -19,7 +20,7 @@ func NewLogsCmd() *cobra.Command {
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	namespace, _ := cmd.Flags().GetString("namespace")
+	namespace := resolveNamespace(cmd, ".")
 	tailLines, _ := cmd.Flags().GetInt64("tail")
 
 	mcpClient, err := requireMCPClient(cmd)
@@ -27,7 +28,24 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	result, err := mcpClient.WfLogs(cmd.Context(), namespace, name, tailLines)
+	// Resolve pod name from workflow name via wf_pods
+	pods, err := mcpClient.WfPods(cmd.Context(), namespace)
+	if err != nil {
+		return fmt.Errorf("listing pods: %w", err)
+	}
+
+	var podName string
+	for _, p := range pods.Pods {
+		if strings.HasPrefix(p.Name, name+"-") {
+			podName = p.Name
+			break
+		}
+	}
+	if podName == "" {
+		return fmt.Errorf("no pod found for %s in namespace %s", name, namespace)
+	}
+
+	result, err := mcpClient.WfLogs(cmd.Context(), namespace, podName, tailLines)
 	if err != nil {
 		if hint := mcpErrorHint(err); hint != "" {
 			return fmt.Errorf("getting logs: %w\n  hint: %s", err, hint)
@@ -35,6 +53,6 @@ func runLogs(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("getting logs: %w", err)
 	}
 
-	fmt.Print(result.Logs)
+	fmt.Println(result.LogText())
 	return nil
 }

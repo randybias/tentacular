@@ -45,7 +45,6 @@ type CronJobsAudit struct {
 
 func NewAuditCommand() *cobra.Command {
 	var (
-		namespace    string
 		outputFormat string
 	)
 
@@ -80,12 +79,10 @@ Reports discrepancies and validates that deployed state matches contract intent.
 			expectedEgress := spec.DeriveEgressRules(wf.Contract)
 			expectedIngress := spec.DeriveIngressRules(wf)
 
-			// Use deployment namespace from workflow config or flag
-			if namespace == "" {
-				namespace = wf.Deployment.Namespace
-			}
-			if namespace == "" {
-				return fmt.Errorf("namespace required (use --namespace or set deployment.namespace in workflow)")
+			// Namespace cascade: workflow.yaml > env config > global config > "default"
+			namespace := resolveNamespace(cmd, workflowDir)
+			if namespace == "default" && wf.Deployment.Namespace == "" {
+				return fmt.Errorf("namespace required: set deployment.namespace in workflow.yaml or configure an environment")
 			}
 
 			// Count expected cron triggers
@@ -180,7 +177,6 @@ Reports discrepancies and validates that deployed state matches contract intent.
 		},
 	}
 
-	cmd.Flags().StringVarP(&namespace, "namespace", "n", "", "Kubernetes namespace (overrides workflow deployment.namespace)")
 	cmd.Flags().StringVarP(&outputFormat, "output", "o", "text", "Output format (text or json)")
 
 	return cmd

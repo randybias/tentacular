@@ -59,9 +59,12 @@ This installs the `tntc` binary and the Deno engine to `~/.local/bin` and `~/.te
 ```bash
 git clone git@github.com:randybias/tentacular.git
 cd tentacular
-go build -o tntc ./cmd/tntc/
-./tntc --help
+make install        # builds with version info and installs to ~/.local/bin/
+tntc version        # verify
 ```
+
+> **Note:** `make build-cli` (or `make install`) embeds version, commit, and build date via
+> ldflags. A bare `go build ./cmd/tntc` produces a dev build with `version=dev`.
 
 ## Quick Start
 

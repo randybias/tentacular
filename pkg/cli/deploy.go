@@ -68,7 +68,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	envName := flagString(cmd, "env")
-	namespace, _ := cmd.Flags().GetString("namespace")
 	imageFlagValue, _ := cmd.Flags().GetString("image")
 	clusterRegistry, _ := cmd.Flags().GetString("cluster-registry")
 	runtimeClass, _ := cmd.Flags().GetString("runtime-class")
@@ -86,18 +85,14 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("--cluster-registry is deprecated; use --image instead")
 	}
 
-	// Apply config defaults: CLI flag > workflow.yaml > config file > cobra default
+	// Apply config defaults: workflow.yaml > env config > config file
 	cfg := LoadConfig()
 
-	// Resolve --env: environment config provides context, namespace, runtime-class defaults.
-	// CLI flags still override environment values.
+	// Resolve --env: environment config provides namespace, runtime-class defaults.
 	if envName != "" {
 		env, envErr := cfg.LoadEnvironment(envName)
 		if envErr != nil {
 			return fmt.Errorf("loading environment %q: %w", envName, envErr)
-		}
-		if !cmd.Flags().Changed("namespace") && env.Namespace != "" {
-			namespace = env.Namespace
 		}
 		if !cmd.Flags().Changed("runtime-class") && env.RuntimeClass != "" {
 			runtimeClass = env.RuntimeClass
@@ -141,14 +136,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Namespace cascade: CLI -n > --env > workflow.yaml > config > default
-	if !cmd.Flags().Changed("namespace") && envName == "" {
-		if wf.Deployment.Namespace != "" {
-			namespace = wf.Deployment.Namespace
-		} else if cfg.Namespace != "" {
-			namespace = cfg.Namespace
-		}
-	}
+	// Namespace cascade: workflow.yaml > env config > global config > "default"
+	namespace := resolveNamespace(cmd, absDir)
 	if !cmd.Flags().Changed("runtime-class") && envName == "" && cfg.RuntimeClass != "" {
 		runtimeClass = cfg.RuntimeClass
 	}

@@ -126,9 +126,15 @@ func checkSharedSecrets(workflowDir string) map[string]string {
 		return result
 	}
 
-	repoRoot := findRepoRoot(workflowDir)
-	if repoRoot == "" {
-		return result
+	cfg := LoadConfig()
+	var repoRoot string
+	if cfg.Workspace != "" {
+		repoRoot = expandHome(cfg.Workspace)
+	} else {
+		repoRoot = findRepoRoot(workflowDir)
+		if repoRoot == "" {
+			return result
+		}
 	}
 	sharedDir := filepath.Join(repoRoot, ".secrets")
 
@@ -371,12 +377,32 @@ func parseYAMLMap(data []byte, out *map[string]interface{}) error {
 }
 
 // resolveSharedSecrets resolves $shared.<name> references in secrets map.
-// Shared secrets live at <repo-root>/.secrets/<name> where repo root is
-// detected by walking up from workflowDir to find .git or go.mod.
+// Shared secrets live at <workspace>/.secrets/<name> where workspace is
+// read from config, or falls back to git root detection.
 func resolveSharedSecrets(secrets map[string]interface{}, workflowDir string) error {
-	repoRoot := findRepoRoot(workflowDir)
-	if repoRoot == "" {
+	// Check if any secrets actually use $shared references
+	hasShared := false
+	for _, v := range secrets {
+		if s, ok := v.(string); ok && strings.HasPrefix(s, "$shared.") {
+			hasShared = true
+			break
+		}
+	}
+	if !hasShared {
 		return nil
+	}
+
+	// Try workspace config first
+	cfg := LoadConfig()
+	var repoRoot string
+	if cfg.Workspace != "" {
+		repoRoot = expandHome(cfg.Workspace)
+	} else {
+		repoRoot = findRepoRoot(workflowDir)
+		if repoRoot == "" {
+			return fmt.Errorf("cannot resolve $shared secrets: no workspace configured and no git repository found; set 'workspace' in ~/.tentacular/config.yaml or run 'tntc init-workspace'")
+		}
+		fmt.Fprintf(os.Stderr, "Warning: falling back to git root for $shared secrets. Set 'workspace' in config.\n")
 	}
 	sharedDir := filepath.Join(repoRoot, ".secrets")
 

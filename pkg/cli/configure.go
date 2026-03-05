@@ -17,7 +17,7 @@ func NewConfigureCmd() *cobra.Command {
 		RunE:  runConfigure,
 	}
 	cmd.Flags().String("registry", "", "Default container registry URL")
-	cmd.Flags().String("namespace", "", "Default Kubernetes namespace")
+	cmd.Flags().String("default-namespace", "", "Default Kubernetes namespace")
 	cmd.Flags().String("runtime-class", "", "Default RuntimeClass name")
 	cmd.Flags().Bool("project", false, "Write to project config (.tentacular/config.yaml) instead of user config")
 	return cmd
@@ -25,7 +25,7 @@ func NewConfigureCmd() *cobra.Command {
 
 func runConfigure(cmd *cobra.Command, args []string) error {
 	registry, _ := cmd.Flags().GetString("registry")
-	namespace, _ := cmd.Flags().GetString("namespace")
+	namespace, _ := cmd.Flags().GetString("default-namespace")
 	runtimeClass, _ := cmd.Flags().GetString("runtime-class")
 	project, _ := cmd.Flags().GetBool("project")
 
@@ -51,7 +51,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("registry") {
 		cfg.Registry = registry
 	}
-	if cmd.Flags().Changed("namespace") {
+	if cmd.Flags().Changed("default-namespace") {
 		cfg.Namespace = namespace
 	}
 	if cmd.Flags().Changed("runtime-class") {

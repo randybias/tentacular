@@ -20,7 +20,7 @@ func NewStatusCmd() *cobra.Command {
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	namespace, _ := cmd.Flags().GetString("namespace")
+	namespace := resolveNamespace(cmd, ".")
 	output, _ := cmd.Flags().GetString("output")
 	detail, _ := cmd.Flags().GetBool("detail")
 

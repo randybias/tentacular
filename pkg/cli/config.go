@@ -25,6 +25,7 @@ type MCPConfig struct {
 
 // TentacularConfig holds default configuration values.
 type TentacularConfig struct {
+	Workspace    string                       `yaml:"workspace,omitempty"` // workspace root dir (default: ~/tentacles)
 	Registry     string                       `yaml:"registry,omitempty"`
 	Namespace    string                       `yaml:"namespace,omitempty"`
 	RuntimeClass string                       `yaml:"runtime_class,omitempty"`
@@ -61,6 +62,9 @@ func LoadConfig() TentacularConfig {
 }
 
 func mergeConfig(base, override *TentacularConfig) {
+	if override.Workspace != "" {
+		base.Workspace = override.Workspace
+	}
 	if override.Registry != "" {
 		base.Registry = override.Registry
 	}
@@ -78,7 +82,13 @@ func mergeConfig(base, override *TentacularConfig) {
 			base.Environments = make(map[string]EnvironmentConfig)
 		}
 		for k, v := range override.Environments {
-			base.Environments[k] = v
+			existing, ok := base.Environments[k]
+			if !ok {
+				base.Environments[k] = v
+				continue
+			}
+			mergeEnvConfig(&existing, &v)
+			base.Environments[k] = existing
 		}
 	}
 	if override.ModuleProxy.Enabled {
@@ -107,5 +117,45 @@ func mergeConfig(base, override *TentacularConfig) {
 	}
 	if override.Catalog.CacheTTL != "" {
 		base.Catalog.CacheTTL = override.Catalog.CacheTTL
+	}
+}
+
+// mergeEnvConfig merges individual fields of an EnvironmentConfig override
+// into a base, preserving base fields that the override does not set.
+func mergeEnvConfig(base, override *EnvironmentConfig) {
+	if override.Kubeconfig != "" {
+		base.Kubeconfig = override.Kubeconfig
+	}
+	if override.Context != "" {
+		base.Context = override.Context
+	}
+	if override.Namespace != "" {
+		base.Namespace = override.Namespace
+	}
+	if override.Image != "" {
+		base.Image = override.Image
+	}
+	if override.RuntimeClass != "" {
+		base.RuntimeClass = override.RuntimeClass
+	}
+	if len(override.ConfigOverrides) > 0 {
+		if base.ConfigOverrides == nil {
+			base.ConfigOverrides = make(map[string]interface{})
+		}
+		for k, v := range override.ConfigOverrides {
+			base.ConfigOverrides[k] = v
+		}
+	}
+	if override.SecretsSource != "" {
+		base.SecretsSource = override.SecretsSource
+	}
+	if override.Enforcement != "" {
+		base.Enforcement = override.Enforcement
+	}
+	if override.MCPEndpoint != "" {
+		base.MCPEndpoint = override.MCPEndpoint
+	}
+	if override.MCPTokenPath != "" {
+		base.MCPTokenPath = override.MCPTokenPath
 	}
 }

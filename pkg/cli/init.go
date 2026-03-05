@@ -34,7 +34,7 @@ func runInit(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("creating tests directory: %w", err)
 	}
 
-	// Write workflow.yaml
+	// Write workflow.yaml with contract and deployment sections
 	workflowYAML := fmt.Sprintf(`name: %s
 version: "1.0"
 description: ""
@@ -51,6 +51,13 @@ edges: []
 config:
   timeout: 30s
   retries: 0
+
+contract:
+  version: "1"
+  dependencies: {}
+
+deployment:
+  namespace: ""
 `, name)
 	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowYAML), 0o644); err != nil {
 		return fmt.Errorf("writing workflow.yaml: %w", err)
@@ -69,18 +76,22 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 	}
 
 	// Write .secrets.yaml.example
-	secretsExample := `# Secrets configuration (copy to .secrets.yaml and fill in values)
-# This file is loaded by the engine at startup and injected into Context.
-# In production, secrets are mounted from Kubernetes Secrets.
-
-# example:
-#   github:
-#     token: "ghp_..."
-#   slack:
-#     webhook_url: "https://hooks.slack.com/..."
+	secretsExample := `# Secrets configuration
+# All values must be $shared.<name> references pointing to workspace .secrets/ directory.
+# Example:
+# github: $shared.github
+# slack: $shared.slack
 `
 	if err := os.WriteFile(filepath.Join(dir, ".secrets.yaml.example"), []byte(secretsExample), 0o644); err != nil {
 		return fmt.Errorf("writing secrets example: %w", err)
+	}
+
+	// Write .gitignore
+	gitignore := `.secrets.yaml
+scratch/
+`
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignore), 0o644); err != nil {
+		return fmt.Errorf("writing .gitignore: %w", err)
 	}
 
 	// Write test fixture
@@ -96,9 +107,11 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 	}
 
 	fmt.Printf("Created workflow '%s' in ./%s/\n", name, dir)
-	fmt.Printf("  workflow.yaml     — workflow definition\n")
-	fmt.Printf("  nodes/hello.ts    — example node\n")
-	fmt.Printf("  tests/fixtures/   — test fixtures\n")
+	fmt.Printf("  workflow.yaml          — workflow definition (with contract + deployment)\n")
+	fmt.Printf("  nodes/hello.ts         — example node\n")
+	fmt.Printf("  tests/fixtures/        — test fixtures\n")
+	fmt.Printf("  .secrets.yaml.example  — secrets template\n")
+	fmt.Printf("  .gitignore             — default ignores\n")
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  cd %s\n", dir)
 	fmt.Printf("  tntc validate\n")

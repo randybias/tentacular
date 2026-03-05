@@ -8,6 +8,7 @@ import (
 )
 
 func TestBuildSecretManifestSharedRefsOnly(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	// Create a fake repo root with .git marker and .secrets/ directory
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
@@ -167,6 +168,7 @@ func TestBuildSecretManifestIgnoresPerWorkflowSecretsDir(t *testing.T) {
 }
 
 func TestBuildSecretManifestSecretName(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	repoRoot := t.TempDir()
 	_ = os.MkdirAll(filepath.Join(repoRoot, ".git"), 0o755)
 	sharedDir := filepath.Join(repoRoot, ".secrets")
