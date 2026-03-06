@@ -1,0 +1,160 @@
+# [v2] https://golangci-lint.run/docs/configuration/file/
+version: "2"
+
+run:
+  go: "1.25"
+
+linters:
+  default: none
+  enable:
+    # --- Bug finders ---
+    - asasalint        # []any passed as any in variadic calls
+    - bidichk          # dangerous unicode bidi characters
+    - bodyclose        # unclosed HTTP response bodies
+    - contextcheck     # non-inherited context usage
+    - durationcheck    # incorrect duration multiplication
+    - errcheck         # unchecked error return values
+    - errchkjson       # unchecked JSON encoding errors
+    - errorlint        # error wrapping (Go 1.13+)
+    - exhaustive       # exhaustive enum switch statements
+    - fatcontext       # context.WithValue in loops
+    - govet            # go vet passes
+    - ineffassign      # useless assignments
+    - makezero         # append to non-zero-length init'd slices
+    - nilerr           # returning nil when err is not nil
+    - noctx            # HTTP requests without context
+    - staticcheck      # extensive static analysis
+    - sqlclosecheck    # unclosed SQL rows/statements
+    - unused           # unused code
+
+    # --- Security ---
+    - gosec            # security issues
+
+    # --- Style & correctness ---
+    - asciicheck       # non-ASCII identifiers
+    - canonicalheader  # non-canonical HTTP headers
+    - copyloopvar      # loop variable aliasing
+    - dupword          # duplicate words in comments
+    - errname          # sentinel error naming (Err prefix)
+    - goprintffuncname # printf-like function naming
+    - intrange         # integer range loops
+    - misspell         # English spelling in comments/strings
+    - predeclared      # shadowing predeclared identifiers
+    - reassign         # reassigning package-level variables
+    - revive           # configurable linter (replaces golint)
+    - unconvert        # unnecessary type conversions
+    - unparam          # unused function parameters
+    - usestdlibvars    # use stdlib constants (http.StatusOK, etc.)
+    - wastedassign     # assignments that are never read
+
+    # --- Performance ---
+    - perfsprint       # fmt.Sprintf replaceable with concat
+    - prealloc         # slice pre-allocation hints
+
+  settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - performance
+
+    gosec:
+      severity: medium
+      confidence: medium
+      config:
+        global:
+          nosec: true
+
+    govet:
+      enable-all: true
+
+    misspell:
+      locale: US
+
+    prealloc:
+      simple: true
+      range-loops: true
+      for-loops: false
+
+    revive:
+      severity: warning
+      rules:
+        - name: bool-literal-in-expr
+        - name: call-to-gc
+        - name: confusing-results
+        - name: context-keys-type
+        - name: datarace
+        - name: deep-exit
+        - name: defer
+        - name: early-return
+        - name: empty-block
+        - name: error-return
+        - name: error-strings
+        - name: errorf
+        - name: get-return
+        - name: identical-branches
+        - name: if-return
+        - name: increment-decrement
+        - name: indent-error-flow
+        - name: modifies-parameter
+        - name: modifies-value-receiver
+        - name: redundant-import-alias
+        - name: superfluous-else
+        - name: time-equal
+        - name: time-naming
+        - name: unconditional-recursion
+        - name: unexported-return
+        - name: unnecessary-stmt
+        - name: unreachable-code
+        - name: unused-receiver
+        - name: use-any
+        - name: use-errors-new
+        - name: useless-break
+        - name: var-declaration
+
+  exclusions:
+    generated: lax
+    presets:
+      - std-error-handling
+    rules:
+      # gosec: test files use 0644 permissions and insecure configs by design
+      - linters:
+          - gosec
+        path: _test\.go
+      # noctx: test helpers commonly use http.Get/http.NewRequest for brevity
+      - linters:
+          - noctx
+        path: _test\.go
+      # unparam: cobra RunE signatures require (cmd, args) even when unused
+      - linters:
+          - unparam
+          - revive
+        text: "unused.*(cmd|args)"
+      # errchkjson: test assertions commonly ignore marshal errors
+      - linters:
+          - errchkjson
+        path: _test\.go
+    paths:
+      - vendor/.*
+      - zz_generated\.deepcopy\.go
+
+formatters:
+  enable:
+    - gofumpt
+    - gci
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - blank
+        - localmodule
+    gofumpt:
+      extra-rules: true
+  exclusions:
+    generated: lax
+    paths:
+      - vendor/.*
+      - zz_generated\.deepcopy\.go
