@@ -49,7 +49,12 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 	}
 
 	// Add dependency-derived egress
-	for _, dep := range c.Dependencies {
+	for name, dep := range c.Dependencies {
+		// Exoskeleton-managed deps: MCP server enriches host/port at deploy time.
+		if strings.HasPrefix(name, "tentacular-") {
+			continue
+		}
+
 		// jsr/npm deps are resolved via the in-cluster module proxy — no direct external egress.
 		if dep.Protocol == "jsr" || dep.Protocol == "npm" {
 			continue
@@ -267,7 +272,11 @@ func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 	// Check if any dependency is dynamic-target
 	hasDynamic := false
 	var allowedHosts []string
-	for _, dep := range c.Dependencies {
+	for name, dep := range c.Dependencies {
+		// Exoskeleton-managed deps: MCP server enriches host/port at deploy time.
+		if strings.HasPrefix(name, "tentacular-") {
+			continue
+		}
 		if dep.Type == "dynamic-target" {
 			hasDynamic = true
 			break
@@ -281,7 +290,11 @@ func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 	} else {
 		// Build scoped network access list
 		seen := make(map[string]bool)
-		for _, dep := range c.Dependencies {
+		for name, dep := range c.Dependencies {
+			// Exoskeleton-managed deps: MCP server enriches host/port at deploy time.
+			if strings.HasPrefix(name, "tentacular-") {
+				continue
+			}
 			// jsr/npm deps are served by the module proxy — add proxy host, not the package host
 			if dep.Protocol == "jsr" || dep.Protocol == "npm" {
 				continue

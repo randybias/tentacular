@@ -5,6 +5,7 @@ import (
 	"log"
 	"net"
 	"regexp"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -28,6 +29,7 @@ var validProtocols = map[string]bool{
 	"postgresql": true,
 	"nats":       true,
 	"blob":       true,
+	"s3":         true, // S3-compatible object storage
 	"jsr":        true, // Deno/JSR package — resolved via in-cluster module proxy
 	"npm":        true, // npm package — resolved via in-cluster module proxy
 }
@@ -216,6 +218,12 @@ func ValidateContract(c *Contract) []string {
 		}
 		if !validProtocols[dep.Protocol] {
 			log.Printf("Warning: contract.dependencies[%q]: unknown protocol %q (known protocols: https, postgresql, nats, blob)", name, dep.Protocol)
+		}
+
+		// Exoskeleton-managed dependencies: only protocol is required.
+		// Host, port, database, user, and auth are provisioned by the MCP server.
+		if strings.HasPrefix(name, "tentacular-") {
+			continue
 		}
 
 		// Dynamic-target dependencies have their own validation

@@ -971,3 +971,150 @@ contract:
 	
 	t.Logf("Old key silently ignored (acceptable)")
 }
+
+// --- Exoskeleton Phase 1 Tests ---
+
+func TestExoskeletonDepsOnlyRequireProtocol(t *testing.T) {
+	// tentacular-postgres with only protocol: postgresql should pass validation
+	contract := &Contract{
+		Version: "1",
+		Dependencies: map[string]Dependency{
+			"tentacular-postgres": {
+				Protocol: "postgresql",
+				// No host, database, user, or auth — MCP server provisions these
+			},
+		},
+	}
+
+	errs := ValidateContract(contract)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for exoskeleton dep with only protocol, got: %v", errs)
+	}
+}
+
+func TestExoskeletonDepsWithS3Protocol(t *testing.T) {
+	// tentacular-rustfs with protocol: s3 should pass validation
+	contract := &Contract{
+		Version: "1",
+		Dependencies: map[string]Dependency{
+			"tentacular-rustfs": {
+				Protocol: "s3",
+			},
+		},
+	}
+
+	errs := ValidateContract(contract)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for exoskeleton s3 dep, got: %v", errs)
+	}
+}
+
+func TestExoskeletonNatsDepsOnlyRequireProtocol(t *testing.T) {
+	contract := &Contract{
+		Version: "1",
+		Dependencies: map[string]Dependency{
+			"tentacular-nats": {
+				Protocol: "nats",
+			},
+		},
+	}
+
+	errs := ValidateContract(contract)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for exoskeleton nats dep, got: %v", errs)
+	}
+}
+
+func TestNonExoskeletonDepsStillRequireAllFields(t *testing.T) {
+	// A regular postgres dep without host/database/user should fail
+	contract := &Contract{
+		Version: "1",
+		Dependencies: map[string]Dependency{
+			"postgres": {
+				Protocol: "postgresql",
+				// Missing host, database, user
+			},
+		},
+	}
+
+	errs := ValidateContract(contract)
+	if len(errs) == 0 {
+		t.Fatal("expected errors for non-exoskeleton postgres dep missing required fields")
+	}
+
+	foundHost := false
+	foundDatabase := false
+	foundUser := false
+	for _, e := range errs {
+		if strings.Contains(e, "host") {
+			foundHost = true
+		}
+		if strings.Contains(e, "database") {
+			foundDatabase = true
+		}
+		if strings.Contains(e, "user") {
+			foundUser = true
+		}
+	}
+	if !foundHost {
+		t.Error("expected error for missing host")
+	}
+	if !foundDatabase {
+		t.Error("expected error for missing database")
+	}
+	if !foundUser {
+		t.Error("expected error for missing user")
+	}
+}
+
+func TestMixedExoskeletonAndRegularDeps(t *testing.T) {
+	// One tentacular-* dep (minimal), one regular dep (fully specified) — both should validate
+	contract := &Contract{
+		Version: "1",
+		Dependencies: map[string]Dependency{
+			"tentacular-postgres": {
+				Protocol: "postgresql",
+			},
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+		},
+	}
+
+	errs := ValidateContract(contract)
+	if len(errs) > 0 {
+		t.Fatalf("expected no errors for mixed deps, got: %v", errs)
+	}
+}
+
+func TestS3ProtocolAccepted(t *testing.T) {
+	// Verify s3 is in validProtocols (non-exoskeleton dep with s3 still needs host for blob-like validation)
+	yamlData := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    tentacular-storage:
+      protocol: s3
+`
+	wf, errs := Parse([]byte(yamlData))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected errors: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	dep := wf.Contract.Dependencies["tentacular-storage"]
+	if dep.Protocol != "s3" {
+		t.Errorf("expected protocol s3, got %s", dep.Protocol)
+	}
+}

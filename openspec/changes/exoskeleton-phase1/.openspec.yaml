@@ -1,0 +1,9 @@
+name: exoskeleton-phase1
+status: in-progress
+description: >
+  Phase 1 CLI changes: skip validation for tentacular-* deps, add s3 protocol alias,
+  treat tentacular-* deps as no-op for egress rules and Deno flags.
+artifacts:
+  - proposal
+  - design
+  - tasks

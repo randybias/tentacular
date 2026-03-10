@@ -1,6 +1,7 @@
 package spec
 
 import (
+	"strings"
 	"testing"
 )
 
@@ -527,5 +528,168 @@ func TestDeriveDenoFlagsScopedAllowEnv(t *testing.T) {
 
 	if !foundAllowEnv {
 		t.Errorf("expected --allow-env=DENO_DIR,HOME,TELEMETRY_SINK in derived flags, got %v", flags)
+	}
+}
+
+// --- Exoskeleton Phase 1 Tests ---
+
+func TestEgressRulesSkipExoskeletonDeps(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"tentacular-postgres": {
+				Protocol: "postgresql",
+				// No host/port — MCP provisions these at deploy time
+			},
+			"tentacular-nats": {
+				Protocol: "nats",
+			},
+		},
+	}
+
+	rules := DeriveEgressRules(contract)
+
+	// Should only have DNS rules (2), no rules for tentacular-* deps
+	if len(rules) != 2 {
+		t.Fatalf("expected 2 rules (DNS only), got %d: %+v", len(rules), rules)
+	}
+	for _, r := range rules {
+		if r.Host != "kube-dns.kube-system.svc.cluster.local" {
+			t.Errorf("unexpected non-DNS egress rule: %+v", r)
+		}
+	}
+}
+
+func TestDenoFlagsSkipExoskeletonDeps(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"tentacular-postgres": {
+				Protocol: "postgresql",
+			},
+		},
+	}
+
+	// With only exoskeleton deps (no host/port), DeriveDenoFlags should still
+	// return flags but with no dependency hosts in --allow-net
+	flags := DeriveDenoFlags(contract, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if len(flag) > 11 && flag[:11] == "--allow-net" {
+			allowNetFlag = flag
+		}
+	}
+
+	// Should only contain 0.0.0.0:8080 (health endpoint), no postgres host
+	if allowNetFlag != "--allow-net=0.0.0.0:8080" {
+		t.Errorf("expected --allow-net=0.0.0.0:8080 only, got %s", allowNetFlag)
+	}
+}
+
+func TestMixedDepsEgressRules(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"tentacular-postgres": {
+				Protocol: "postgresql",
+			},
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+		},
+	}
+
+	rules := DeriveEgressRules(contract)
+
+	// Should have DNS (2) + github (1) = 3 rules, no rule for tentacular-postgres
+	if len(rules) != 3 {
+		t.Fatalf("expected 3 rules (DNS + github), got %d: %+v", len(rules), rules)
+	}
+
+	foundGithub := false
+	for _, r := range rules {
+		if r.Host == "api.github.com" && r.Port == 443 {
+			foundGithub = true
+		}
+		// Ensure no postgresql host leaked through
+		if r.Port == 5432 {
+			t.Errorf("unexpected postgresql egress rule from tentacular-* dep: %+v", r)
+		}
+	}
+	if !foundGithub {
+		t.Error("expected egress rule for github:443")
+	}
+}
+
+func TestMixedDepsDenoFlags(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"tentacular-postgres": {
+				Protocol: "postgresql",
+			},
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if len(flag) > 11 && flag[:11] == "--allow-net" {
+			allowNetFlag = flag
+		}
+	}
+
+	// Should include github but not any tentacular-* host
+	if !strings.Contains(allowNetFlag, "api.github.com:443") {
+		t.Errorf("expected api.github.com:443 in allow-net, got %s", allowNetFlag)
+	}
+	// Verify no postgres host leaked (tentacular-postgres has no host anyway, but
+	// confirm the flag looks correct)
+	expected := "--allow-net=0.0.0.0:8080,api.github.com:443"
+	if allowNetFlag != expected {
+		t.Errorf("expected %s, got %s", expected, allowNetFlag)
+	}
+}
+
+func TestExoskeletonDepsWithDynamicTargetDoNotTriggerBroadNet(t *testing.T) {
+	// Ensure tentacular-* deps don't trigger hasDynamic even if they had type set
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"tentacular-external": {
+				Protocol: "https",
+				Type:     "dynamic-target",
+				CIDR:     "0.0.0.0/0",
+				DynPorts: []string{"443/TCP"},
+			},
+			"github": {
+				Protocol: "https",
+				Host:     "api.github.com",
+				Port:     443,
+			},
+		},
+	}
+
+	flags := DeriveDenoFlags(contract, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	// tentacular-external should be skipped, so hasDynamic should be false
+	// and we should get scoped --allow-net
+	for _, flag := range flags {
+		if flag == "--allow-net" {
+			t.Error("expected scoped --allow-net, got broad --allow-net (tentacular-* dynamic dep should be skipped)")
+		}
 	}
 }
