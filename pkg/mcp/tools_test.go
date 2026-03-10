@@ -42,6 +42,7 @@ func makeInvalidTextServer(t *testing.T) (*testServerHandle, *Client) {
 	for _, name := range []string{
 		"wf_apply", "wf_remove", "wf_status", "wf_list", "wf_logs",
 		"wf_run", "cluster_preflight", "ns_create", "audit_resources",
+		"exo_status", "exo_registration",
 	} {
 		tools[name] = func(args map[string]any) (string, bool) {
 			return "not-a-json-object", false
@@ -405,6 +406,24 @@ func TestAuditResources_UnmarshalError(t *testing.T) {
 	}
 }
 
+func TestExoStatus_UnmarshalError(t *testing.T) {
+	h, client := makeInvalidTextServer(t)
+	defer h.Close()
+	_, err := client.ExoStatus(context.Background())
+	if err == nil {
+		t.Error("expected unmarshal error from ExoStatus")
+	}
+}
+
+func TestExoRegistration_UnmarshalError(t *testing.T) {
+	h, client := makeInvalidTextServer(t)
+	defer h.Close()
+	_, err := client.ExoRegistration(context.Background(), "ns", "wf")
+	if err == nil {
+		t.Error("expected unmarshal error from ExoRegistration")
+	}
+}
+
 // --- cluster_profile ---
 
 // TestClusterProfile_Success verifies ClusterProfile returns raw JSON from the tool.
@@ -473,6 +492,109 @@ func TestClusterProfile_NoNamespaceOmitsParam(t *testing.T) {
 	// When namespace is empty, it should be omitted (omitempty)
 	if ns, ok := receivedArgs["namespace"]; ok && ns != "" {
 		t.Errorf("expected namespace to be absent or empty when not provided, got %q", ns)
+	}
+}
+
+// TestWfRemove_WithExoCleanup verifies WfRemoveResult parses exo cleanup fields.
+func TestWfRemove_WithExoCleanup(t *testing.T) {
+	h := makeToolServer(t, "wf_remove", map[string]interface{}{
+		"deleted":            3,
+		"exo_cleaned_up":     true,
+		"exo_cleanup_details": "postgres schema dropped, rustfs user removed",
+	}, false)
+	defer h.Close()
+
+	result, err := h.client.WfRemove(context.Background(), "default", "my-wf")
+	if err != nil {
+		t.Fatalf("WfRemove: %v", err)
+	}
+	if result.DeletedCount != 3 {
+		t.Errorf("expected deletedCount=3, got %d", result.DeletedCount)
+	}
+	if !result.ExoCleanedUp {
+		t.Error("expected ExoCleanedUp=true")
+	}
+	if result.ExoCleanupDetails != "postgres schema dropped, rustfs user removed" {
+		t.Errorf("unexpected ExoCleanupDetails: %q", result.ExoCleanupDetails)
+	}
+}
+
+// TestExoStatus verifies ExoStatus parses the response correctly.
+func TestExoStatus(t *testing.T) {
+	h := makeToolServer(t, "exo_status", map[string]interface{}{
+		"enabled":             true,
+		"cleanup_on_undeploy": true,
+		"postgres_available":  true,
+		"nats_available":      false,
+		"rustfs_available":    true,
+		"auth_enabled":        false,
+	}, false)
+	defer h.Close()
+
+	result, err := h.client.ExoStatus(context.Background())
+	if err != nil {
+		t.Fatalf("ExoStatus: %v", err)
+	}
+	if !result.Enabled {
+		t.Error("expected Enabled=true")
+	}
+	if !result.CleanupOnUndeploy {
+		t.Error("expected CleanupOnUndeploy=true")
+	}
+	if !result.PostgresAvailable {
+		t.Error("expected PostgresAvailable=true")
+	}
+	if result.NATSAvailable {
+		t.Error("expected NATSAvailable=false")
+	}
+	if !result.RustFSAvailable {
+		t.Error("expected RustFSAvailable=true")
+	}
+}
+
+// TestExoRegistration verifies ExoRegistration parses the response correctly.
+func TestExoRegistration(t *testing.T) {
+	h := makeToolServer(t, "exo_registration", map[string]interface{}{
+		"found":     true,
+		"namespace": "my-ns",
+		"name":      "my-wf",
+		"data": map[string]string{
+			"postgres.host": "pg.cluster.local",
+			"postgres.password": "***REDACTED***",
+		},
+	}, false)
+	defer h.Close()
+
+	result, err := h.client.ExoRegistration(context.Background(), "my-ns", "my-wf")
+	if err != nil {
+		t.Fatalf("ExoRegistration: %v", err)
+	}
+	if !result.Found {
+		t.Error("expected Found=true")
+	}
+	if result.Namespace != "my-ns" {
+		t.Errorf("expected namespace=my-ns, got %q", result.Namespace)
+	}
+	if result.Data["postgres.host"] != "pg.cluster.local" {
+		t.Errorf("expected postgres.host in data, got %v", result.Data)
+	}
+}
+
+// TestExoRegistration_NotFound verifies ExoRegistration with no secret.
+func TestExoRegistration_NotFound(t *testing.T) {
+	h := makeToolServer(t, "exo_registration", map[string]interface{}{
+		"found":     false,
+		"namespace": "my-ns",
+		"name":      "my-wf",
+	}, false)
+	defer h.Close()
+
+	result, err := h.client.ExoRegistration(context.Background(), "my-ns", "my-wf")
+	if err != nil {
+		t.Fatalf("ExoRegistration: %v", err)
+	}
+	if result.Found {
+		t.Error("expected Found=false")
 	}
 }
 

@@ -50,8 +50,10 @@ type WfRemoveParams struct {
 
 // WfRemoveResult is the response from wf_remove.
 type WfRemoveResult struct {
-	Deleted      []string `json:"deleted"`       // resource names deleted
-	DeletedCount int      `json:"deletedCount"`  // populated when server returns a number
+	Deleted           []string `json:"deleted"`                        // resource names deleted
+	DeletedCount      int      `json:"deletedCount"`                   // populated when server returns a number
+	ExoCleanedUp      bool     `json:"exo_cleaned_up,omitempty"`       // true if exoskeleton cleanup ran
+	ExoCleanupDetails string   `json:"exo_cleanup_details,omitempty"`  // human-readable cleanup summary
 }
 
 func (r *WfRemoveResult) UnmarshalJSON(data []byte) error {
@@ -62,12 +64,16 @@ func (r *WfRemoveResult) UnmarshalJSON(data []byte) error {
 		*r = WfRemoveResult(a)
 		return nil
 	}
-	// Server may return deleted as a number (count).
+	// Server may return deleted as a number (count) plus optional exo fields.
 	var alt struct {
-		Deleted int `json:"deleted"`
+		Deleted           int    `json:"deleted"`
+		ExoCleanedUp      bool   `json:"exo_cleaned_up"`
+		ExoCleanupDetails string `json:"exo_cleanup_details"`
 	}
 	if err := json.Unmarshal(data, &alt); err == nil {
 		r.DeletedCount = alt.Deleted
+		r.ExoCleanedUp = alt.ExoCleanedUp
+		r.ExoCleanupDetails = alt.ExoCleanupDetails
 		return nil
 	}
 	return fmt.Errorf("cannot parse wf_remove result: %s", string(data))
@@ -483,6 +489,68 @@ func (c *Client) WfDescribe(ctx context.Context, namespace, name string) (*WfDes
 	var result WfDescribeResult
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("parsing wf_describe result: %w", err)
+	}
+	return &result, nil
+}
+
+// --- exo_status ---
+
+// ExoStatusParams are the arguments for the exo_status MCP tool.
+type ExoStatusParams struct{}
+
+// ExoStatusResult is the response from exo_status.
+type ExoStatusResult struct {
+	Enabled           bool   `json:"enabled"`
+	CleanupOnUndeploy bool   `json:"cleanup_on_undeploy"`
+	PostgresAvailable bool   `json:"postgres_available"`
+	NATSAvailable     bool   `json:"nats_available"`
+	RustFSAvailable   bool   `json:"rustfs_available"`
+	AuthEnabled       bool   `json:"auth_enabled"`
+	AuthIssuer        string `json:"auth_issuer,omitempty"`
+}
+
+// ExoStatus calls the exo_status MCP tool to check exoskeleton feature status.
+func (c *Client) ExoStatus(ctx context.Context) (*ExoStatusResult, error) {
+	raw, err := c.CallTool(ctx, "exo_status", ExoStatusParams{})
+	if err != nil {
+		return nil, err
+	}
+	var result ExoStatusResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("parsing exo_status result: %w", err)
+	}
+	return &result, nil
+}
+
+// --- exo_registration ---
+
+// ExoRegistrationParams are the arguments for the exo_registration MCP tool.
+type ExoRegistrationParams struct {
+	Namespace string `json:"namespace"`
+	Name      string `json:"name"`
+}
+
+// ExoRegistrationResult is the response from exo_registration.
+type ExoRegistrationResult struct {
+	Found     bool              `json:"found"`
+	Namespace string            `json:"namespace"`
+	Name      string            `json:"name"`
+	Data      map[string]string `json:"data,omitempty"`
+}
+
+// ExoRegistration calls the exo_registration MCP tool to check if a workflow
+// has an exoskeleton Secret registered.
+func (c *Client) ExoRegistration(ctx context.Context, namespace, name string) (*ExoRegistrationResult, error) {
+	raw, err := c.CallTool(ctx, "exo_registration", ExoRegistrationParams{
+		Namespace: namespace,
+		Name:      name,
+	})
+	if err != nil {
+		return nil, err
+	}
+	var result ExoRegistrationResult
+	if err := json.Unmarshal(raw, &result); err != nil {
+		return nil, fmt.Errorf("parsing exo_registration result: %w", err)
 	}
 	return &result, nil
 }
