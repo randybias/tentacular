@@ -158,4 +158,13 @@ func mergeEnvConfig(base, override *EnvironmentConfig) {
 	if override.MCPTokenPath != "" {
 		base.MCPTokenPath = override.MCPTokenPath
 	}
+	if override.OIDCIssuer != "" {
+		base.OIDCIssuer = override.OIDCIssuer
+	}
+	if override.OIDCClientID != "" {
+		base.OIDCClientID = override.OIDCClientID
+	}
+	if override.OIDCClientSecret != "" {
+		base.OIDCClientSecret = override.OIDCClientSecret
+	}
 }

@@ -51,6 +51,11 @@ func main() {
 	// Catalog commands
 	root.AddCommand(cli.NewCatalogCmd())
 
+	// Auth commands
+	root.AddCommand(cli.NewLoginCmd())
+	root.AddCommand(cli.NewLogoutCmd())
+	root.AddCommand(cli.NewWhoamiCmd())
+
 	// Version
 	root.AddCommand(&cobra.Command{
 		Use:   "version",

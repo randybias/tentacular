@@ -19,6 +19,11 @@ type EnvironmentConfig struct {
 	Enforcement     string                 `yaml:"enforcement,omitempty"` // "strict" (default) or "audit"
 	MCPEndpoint     string                 `yaml:"mcp_endpoint,omitempty"`
 	MCPTokenPath    string                 `yaml:"mcp_token_path,omitempty"`
+
+	// OIDC fields (optional). When present, `tntc login` uses device authorization flow.
+	OIDCIssuer       string `yaml:"oidc_issuer,omitempty"`
+	OIDCClientID     string `yaml:"oidc_client_id,omitempty"`
+	OIDCClientSecret string `yaml:"oidc_client_secret,omitempty"`
 }
 
 // ResolveEnvironment loads the merged config and returns the named environment.
