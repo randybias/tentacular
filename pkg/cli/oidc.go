@@ -105,6 +105,7 @@ func RemoveOIDCToken(envName string) error {
 
 // jwtClaims holds the subset of JWT claims we care about.
 type jwtClaims struct {
+	Iss               string `json:"iss"`
 	Sub               string `json:"sub"`
 	Email             string `json:"email"`
 	Name              string `json:"name"`

@@ -505,6 +505,8 @@ type ExoStatusResult struct {
 	PostgresAvailable bool   `json:"postgres_available"`
 	NATSAvailable     bool   `json:"nats_available"`
 	RustFSAvailable   bool   `json:"rustfs_available"`
+	SPIREAvailable    bool   `json:"spire_available"`
+	NATSSpiffeEnabled bool   `json:"nats_spiffe_enabled"`
 	AuthEnabled       bool   `json:"auth_enabled"`
 	AuthIssuer        string `json:"auth_issuer,omitempty"`
 }

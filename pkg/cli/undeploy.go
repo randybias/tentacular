@@ -119,7 +119,7 @@ func checkExoskeletonCleanup(cmd *cobra.Command, mcpClient *mcp.Client, namespac
 		sb.WriteString("  - RustFS objects, IAM user, and access policy\n")
 	}
 	if exoStatus.NATSAvailable {
-		sb.WriteString("  - NATS cleanup (no-op in Phase 1)\n")
+		sb.WriteString("  - NATS authorization entries and credentials\n")
 	}
 	sb.WriteString("\n")
 	return sb.String()
