@@ -32,7 +32,7 @@ The CLI has zero direct Kubernetes API access. All cluster operations route thro
 
 ## Architecture Documentation
 
-Before making changes, read **[docs/architecture.md](docs/architecture.md)** to understand the system in detail. It covers the two-component design (Go CLI + Deno engine), security model, deployment pipeline, secrets cascade, testing strategy, data flow, and extension points.
+Before making changes, read the **[Architecture docs](https://randybias.github.io/tentacular-docs/concepts/architecture/)** to understand the system in detail. It covers the two-component design (Go CLI + Deno engine), security model, deployment pipeline, secrets cascade, testing strategy, data flow, and extension points.
 
 ## Project Structure
 
