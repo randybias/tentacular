@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -48,10 +49,10 @@ type deviceAuthResponse struct {
 type tokenResponse struct {
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int    `json:"expires_in"`
 	TokenType    string `json:"token_type"`
 	Error        string `json:"error"`
 	ErrorDesc    string `json:"error_description"`
+	ExpiresIn    int    `json:"expires_in"`
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
@@ -129,7 +130,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 
 // resolveOIDCConfig resolves OIDC configuration for the given environment.
 // Returns envName, issuer, clientID, clientSecret.
-func resolveOIDCConfig(envName string) (string, string, string, string, error) {
+func resolveOIDCConfig(envName string) (envResult, issuer, clientID, clientSecret string, err error) {
 	if envName == "" {
 		envName = os.Getenv("TENTACULAR_ENV")
 	}
@@ -139,7 +140,7 @@ func resolveOIDCConfig(envName string) (string, string, string, string, error) {
 	}
 
 	if envName == "" {
-		return "", "", "", "", fmt.Errorf("no environment specified; use -e <env> or set TENTACULAR_ENV")
+		return "", "", "", "", errors.New("no environment specified; use -e <env> or set TENTACULAR_ENV")
 	}
 
 	env, ok := cfg.Environments[envName]
@@ -159,18 +160,18 @@ func resolveOIDCConfig(envName string) (string, string, string, string, error) {
 
 // discoverOIDCEndpoints fetches the OIDC discovery document and returns
 // the device_authorization_endpoint and token_endpoint.
-func discoverOIDCEndpoints(issuer string) (string, string, error) {
+func discoverOIDCEndpoints(issuer string) (deviceEndpoint, tokenEndpoint string, err error) {
 	discoveryURL := strings.TrimSuffix(issuer, "/") + "/.well-known/openid-configuration"
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil) //nolint:gosec // OIDC discovery URL from user config
 	if err != nil {
 		return "", "", err
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //nolint:gosec // OIDC discovery URL from user config
 	if err != nil {
 		return "", "", fmt.Errorf("fetching discovery document: %w", err)
 	}
@@ -194,10 +195,10 @@ func discoverOIDCEndpoints(issuer string) (string, string, error) {
 	}
 
 	if doc.DeviceAuthEndpoint == "" {
-		return "", "", fmt.Errorf("OIDC provider does not support device authorization flow")
+		return "", "", errors.New("OIDC provider does not support device authorization flow")
 	}
 	if doc.TokenEndpoint == "" {
-		return "", "", fmt.Errorf("OIDC provider did not return a token endpoint")
+		return "", "", errors.New("OIDC provider did not return a token endpoint")
 	}
 
 	return doc.DeviceAuthEndpoint, doc.TokenEndpoint, nil
@@ -243,7 +244,7 @@ func requestDeviceAuth(endpoint, clientID, clientSecret string) (*deviceAuthResp
 	}
 
 	if authResp.DeviceCode == "" {
-		return nil, fmt.Errorf("device auth response missing device_code")
+		return nil, errors.New("device auth response missing device_code")
 	}
 
 	return &authResp, nil
@@ -262,7 +263,7 @@ func pollForToken(tokenEndpoint, deviceCode, clientID, clientSecret string, inte
 
 	for {
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("device authorization timed out; please try again")
+			return nil, errors.New("device authorization timed out; please try again")
 		}
 
 		time.Sleep(interval)
@@ -297,7 +298,7 @@ func pollForToken(tokenEndpoint, deviceCode, clientID, clientSecret string, inte
 		case "":
 			// Success
 			if tokenResp.AccessToken == "" {
-				return nil, fmt.Errorf("token response missing access_token")
+				return nil, errors.New("token response missing access_token")
 			}
 			return &tokenResp, nil
 		case "authorization_pending":
@@ -308,9 +309,9 @@ func pollForToken(tokenEndpoint, deviceCode, clientID, clientSecret string, inte
 			interval += 5 * time.Second
 			continue
 		case "expired_token":
-			return nil, fmt.Errorf("device code expired; please run 'tntc login' again")
+			return nil, errors.New("device code expired; please run 'tntc login' again")
 		case "access_denied":
-			return nil, fmt.Errorf("authorization denied by user")
+			return nil, errors.New("authorization denied by user")
 		default:
 			desc := tokenResp.ErrorDesc
 			if desc == "" {
@@ -346,13 +347,13 @@ func RefreshOIDCToken(envName string, store *OIDCTokenStore) (*OIDCTokenStore, e
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(data.Encode()))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, tokenEndpoint, strings.NewReader(data.Encode())) //nolint:gosec // token endpoint from OIDC discovery
 	if err != nil {
 		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := http.DefaultClient.Do(req) //nolint:gosec // user-configured OIDC token endpoint
 	if err != nil {
 		return nil, fmt.Errorf("refreshing token: %w", err)
 	}
@@ -364,8 +365,8 @@ func RefreshOIDCToken(envName string, store *OIDCTokenStore) (*OIDCTokenStore, e
 	}
 
 	var tokenResp tokenResponse
-	if err := json.Unmarshal(body, &tokenResp); err != nil {
-		return nil, fmt.Errorf("parsing refresh response: %w", err)
+	if unmarshalErr := json.Unmarshal(body, &tokenResp); unmarshalErr != nil {
+		return nil, fmt.Errorf("parsing refresh response: %w", unmarshalErr)
 	}
 
 	if tokenResp.Error != "" {
@@ -373,7 +374,7 @@ func RefreshOIDCToken(envName string, store *OIDCTokenStore) (*OIDCTokenStore, e
 	}
 
 	if tokenResp.AccessToken == "" {
-		return nil, fmt.Errorf("refresh response missing access_token")
+		return nil, errors.New("refresh response missing access_token")
 	}
 
 	claims, err := DecodeJWTClaims(tokenResp.AccessToken)
@@ -409,11 +410,11 @@ func openBrowser(url string) {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", url)
+		cmd = exec.CommandContext(context.Background(), "open", url) //nolint:gosec // known command with user URL
 	case "linux":
-		cmd = exec.Command("xdg-open", url)
+		cmd = exec.CommandContext(context.Background(), "xdg-open", url) //nolint:gosec // known command with user URL
 	case "windows":
-		cmd = exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
+		cmd = exec.CommandContext(context.Background(), "rundll32", "url.dll,FileProtocolHandler", url) //nolint:gosec // known command with user URL
 	default:
 		return
 	}

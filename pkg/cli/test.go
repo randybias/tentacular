@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -58,7 +60,7 @@ func runTest(cmd *cobra.Command, args []string) error {
 
 	engineDir := findEngineDir()
 	if engineDir == "" {
-		return fmt.Errorf("cannot find engine directory")
+		return errors.New("cannot find engine directory")
 	}
 
 	pipeline, _ := cmd.Flags().GetBool("pipeline")
@@ -86,10 +88,10 @@ func runTest(cmd *cobra.Command, args []string) error {
 
 	denoBin := findDeno()
 	if denoBin == "" {
-		return fmt.Errorf("deno not found; install from https://deno.land or set PATH to include ~/.deno/bin")
+		return errors.New("deno not found; install from https://deno.land or set PATH to include ~/.deno/bin")
 	}
 
-	denoCmd := exec.Command(denoBin, denoArgs...)
+	denoCmd := exec.CommandContext(context.Background(), denoBin, denoArgs...) //nolint:gosec // known command with user args
 	denoCmd.Dir = absDir
 	denoCmd.Stdout = os.Stdout
 	denoCmd.Stderr = os.Stderr

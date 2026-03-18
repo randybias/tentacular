@@ -12,7 +12,7 @@ import (
 )
 
 func TestStatusCmd_BasicOutput(t *testing.T) {
-	statusJSON, _ := json.Marshal(map[string]interface{}{
+	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
 		"namespace": "staging",
 		"version":   "v1.2.0",
@@ -22,7 +22,7 @@ func TestStatusCmd_BasicOutput(t *testing.T) {
 	})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"wf_status": func(args map[string]any) (string, bool) {
+		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
 		},
 	})
@@ -71,7 +71,7 @@ func TestStatusCmd_BasicOutput(t *testing.T) {
 }
 
 func TestStatusCmd_NotReady(t *testing.T) {
-	statusJSON, _ := json.Marshal(map[string]interface{}{
+	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
 		"namespace": "default",
 		"ready":     false,
@@ -80,7 +80,7 @@ func TestStatusCmd_NotReady(t *testing.T) {
 	})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"wf_status": func(args map[string]any) (string, bool) {
+		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
 		},
 	})
@@ -120,24 +120,24 @@ func TestStatusCmd_NotReady(t *testing.T) {
 }
 
 func TestStatusCmd_DetailMode(t *testing.T) {
-	statusJSON, _ := json.Marshal(map[string]interface{}{
+	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
 		"namespace": "prod",
 		"ready":     true,
 		"replicas":  2,
 		"available": 2,
-		"pods": []map[string]interface{}{
+		"pods": []map[string]any{
 			{"name": "my-app-abc-123", "phase": "Running", "ready": true, "nodeName": "node-1"},
 			{"name": "my-app-def-456", "phase": "Running", "ready": true, "nodeName": "node-2"},
 		},
-		"events": []map[string]interface{}{
+		"events": []map[string]any{
 			{"type": "Normal", "reason": "Scheduled", "message": "Assigned to node-1", "count": 1},
 			{"type": "Warning", "reason": "BackOff", "message": "Back-off restarting failed container", "count": 3},
 		},
 	})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"wf_status": func(args map[string]any) (string, bool) {
+		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
 		},
 	})
@@ -190,7 +190,7 @@ func TestStatusCmd_DetailMode(t *testing.T) {
 }
 
 func TestStatusCmd_JSONOutput(t *testing.T) {
-	statusJSON, _ := json.Marshal(map[string]interface{}{
+	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "json-app",
 		"namespace": "default",
 		"ready":     true,
@@ -199,7 +199,7 @@ func TestStatusCmd_JSONOutput(t *testing.T) {
 	})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"wf_status": func(args map[string]any) (string, bool) {
+		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
 		},
 	})
@@ -244,7 +244,7 @@ func TestStatusCmd_JSONOutput(t *testing.T) {
 
 func TestStatusCmd_ToolError(t *testing.T) {
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"wf_status": func(args map[string]any) (string, bool) {
+		"wf_status": func(_ map[string]any) (string, bool) {
 			return "workflow not found: missing-app", true
 		},
 	})

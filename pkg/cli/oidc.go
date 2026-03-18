@@ -53,11 +53,11 @@ func SaveOIDCToken(envName string, store *OIDCTokenStore) error {
 	}
 
 	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("creating token directory: %w", err)
+	if mkdirErr := os.MkdirAll(dir, 0o700); mkdirErr != nil {
+		return fmt.Errorf("creating token directory: %w", mkdirErr)
 	}
 
-	data, err := json.MarshalIndent(store, "", "  ")
+	data, err := json.MarshalIndent(store, "", "  ") //nolint:gosec // intentional token storage
 	if err != nil {
 		return fmt.Errorf("marshaling token: %w", err)
 	}
@@ -76,7 +76,7 @@ func LoadOIDCToken(envName string) (*OIDCTokenStore, error) {
 		return nil, err
 	}
 
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is derived from known config directory
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil, nil
@@ -103,22 +103,22 @@ func RemoveOIDCToken(envName string) error {
 	return nil
 }
 
-// jwtClaims holds the subset of JWT claims we care about.
-type jwtClaims struct {
+// JWTClaims holds the subset of JWT claims we care about.
+type JWTClaims struct {
 	Iss               string `json:"iss"`
 	Sub               string `json:"sub"`
 	Email             string `json:"email"`
 	Name              string `json:"name"`
-	PreferredUsername  string `json:"preferred_username"`
+	PreferredUsername string `json:"preferred_username"`
+	IdentityProvider  string `json:"identity_provider"`
 	Exp               int64  `json:"exp"`
 	Iat               int64  `json:"iat"`
-	IdentityProvider  string `json:"identity_provider"`
 }
 
 // DecodeJWTClaims decodes the payload of a JWT without signature verification.
 // This is intentional — the server validates signatures; the CLI only needs
 // to extract display information.
-func DecodeJWTClaims(tokenStr string) (*jwtClaims, error) {
+func DecodeJWTClaims(tokenStr string) (*JWTClaims, error) {
 	parts := strings.Split(tokenStr, ".")
 	if len(parts) != 3 {
 		return nil, fmt.Errorf("invalid JWT: expected 3 parts, got %d", len(parts))
@@ -138,7 +138,7 @@ func DecodeJWTClaims(tokenStr string) (*jwtClaims, error) {
 		return nil, fmt.Errorf("decoding JWT payload: %w", err)
 	}
 
-	var claims jwtClaims
+	var claims JWTClaims
 	if err := json.Unmarshal(decoded, &claims); err != nil {
 		return nil, fmt.Errorf("parsing JWT claims: %w", err)
 	}

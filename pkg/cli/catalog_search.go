@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/randybias/tentacular/pkg/catalog"
 	"github.com/spf13/cobra"
+
+	"github.com/randybias/tentacular/pkg/catalog"
 )
 
 func newCatalogSearchCmd() *cobra.Command {

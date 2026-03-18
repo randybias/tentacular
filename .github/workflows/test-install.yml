@@ -6,13 +6,11 @@ on:
       - main
     paths:
       - install.sh
-      - stable.txt
       - cmd/tntc/**
       - pkg/**
   pull_request:
     paths:
       - install.sh
-      - stable.txt
       - cmd/tntc/**
       - pkg/**
 
@@ -49,22 +47,39 @@ jobs:
 
       - name: Set up mock release server
         run: |
-          VERSION=$(cat stable.txt)
+          VERSION="v0.0.0-test"
+          VERSION_CLEAN="${VERSION#v}"
+
+          # Mock the GitHub Releases API response
+          mkdir -p mock-releases/repos/${GITHUB_REPO}/releases
+          echo "{\"tag_name\": \"${VERSION}\"}" > mock-releases/repos/${GITHUB_REPO}/releases/latest
+
+          # Mock the tntc binary download
           mkdir -p mock-releases/${VERSION}
           cp tntc_linux_amd64 mock-releases/${VERSION}/tntc_linux_amd64
-          cp stable.txt mock-releases/stable.txt
+
+          # Mock the engine source tarball (archive/refs/tags/<version>.tar.gz)
+          mkdir -p mock-releases/archive/refs/tags
+          mkdir -p mock-tarball/tentacular-${VERSION_CLEAN}/engine
+          cp -r engine/* mock-tarball/tentacular-${VERSION_CLEAN}/engine/
+          tar -czf mock-releases/archive/refs/tags/${VERSION}.tar.gz \
+            -C mock-tarball tentacular-${VERSION_CLEAN}
+
           cd mock-releases && python3 -m http.server 8888 &
           # Wait for server to be ready
           for i in $(seq 1 10); do
-            curl -sf http://localhost:8888/stable.txt && break
+            curl -sf http://localhost:8888/repos/${GITHUB_REPO}/releases/latest && break
             sleep 1
           done
+        env:
+          GITHUB_REPO: randybias/tentacular
 
       - name: Patch and run install script
         run: |
           sed \
             -e 's|https://github.com/${GITHUB_REPO}/releases/download|http://localhost:8888|g' \
-            -e 's|https://raw.githubusercontent.com/${GITHUB_REPO}/main/stable.txt|http://localhost:8888/stable.txt|g' \
+            -e 's|https://github.com/${GITHUB_REPO}/archive|http://localhost:8888/archive|g' \
+            -e 's|https://api.github.com|http://localhost:8888|g' \
             install.sh > install-test.sh
           TNTC_INSTALL_DIR=$HOME/.local/bin sh install-test.sh
 

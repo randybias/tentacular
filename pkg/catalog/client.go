@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net/http"
@@ -66,7 +67,7 @@ func (c *Client) FetchIndex(noCache bool) (*CatalogIndex, error) {
 	if !noCache && cachePath != "" {
 		if info, err := os.Stat(cachePath); err == nil {
 			if time.Since(info.ModTime()) < c.CacheTTL {
-				data, err := os.ReadFile(cachePath)
+				data, err := os.ReadFile(cachePath) //nolint:gosec // reading catalog cache file by computed path
 				if err == nil {
 					var idx CatalogIndex
 					if err := yaml.Unmarshal(data, &idx); err == nil {
@@ -91,8 +92,8 @@ func (c *Client) FetchIndex(noCache bool) (*CatalogIndex, error) {
 
 	// Write to cache
 	if cachePath != "" {
-		if err := os.MkdirAll(c.CacheDir, 0o755); err == nil {
-			_ = os.WriteFile(cachePath, data, 0o644)
+		if err := os.MkdirAll(c.CacheDir, 0o755); err == nil { //nolint:gosec // 0o755 for user cache directory
+			_ = os.WriteFile(cachePath, data, 0o644) //nolint:gosec // 0o644 for user cache file
 		}
 	}
 
@@ -109,8 +110,12 @@ func (c *Client) FetchFile(path string) ([]byte, error) {
 	return data, nil
 }
 
-func (c *Client) httpGet(url string) ([]byte, error) {
-	resp, err := http.Get(url) //nolint:gosec
+func (*Client) httpGet(url string) ([]byte, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, err
 	}

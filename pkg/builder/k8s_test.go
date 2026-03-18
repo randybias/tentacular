@@ -791,9 +791,9 @@ func TestDeploymentNoInitContainers(t *testing.T) {
 	// The proxy pre-warm initContainer has been removed. Module pre-warming is now
 	// handled server-side by the MCP server's PrewarmModules function after wf_apply.
 	wf := &spec.Workflow{
-		Name:    "prewarm-test",
-		Version: "1.0",
-		Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Name:     "prewarm-test",
+		Version:  "1.0",
+		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
 		Triggers: []spec.Trigger{{Type: "manual"}},
 		Contract: &spec.Contract{
 			Version: "1",
@@ -833,9 +833,9 @@ func TestDeploymentImportMapMountPath(t *testing.T) {
 	// deno.json must be mounted at /app/deno.json so Deno's config discovery
 	// finds it when the entrypoint is /app/mod.ts and "tentacular" resolves to ./mod.ts.
 	wf := &spec.Workflow{
-		Name:    "mount-path-test",
-		Version: "1.0",
-		Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Name:     "mount-path-test",
+		Version:  "1.0",
+		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
 		Triggers: []spec.Trigger{{Type: "manual"}},
 		Contract: &spec.Contract{
 			Version: "1",

@@ -85,25 +85,25 @@ contract:
 // TestHasModuleProxyDepsSpec verifies HasModuleProxyDeps in the spec package.
 func TestHasModuleProxyDepsSpec(t *testing.T) {
 	tests := []struct {
-		name string
 		wf   *Workflow
+		name string
 		want bool
 	}{
-		{"nil workflow", nil, false},
-		{"no contract", &Workflow{Name: "x"}, false},
-		{"https only", &Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
+		{nil, "nil workflow", false},
+		{&Workflow{Name: "x"}, "no contract", false},
+		{&Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
 			"api": {Protocol: "https"},
-		}}}, false},
-		{"jsr dep", &Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
+		}}}, "https only", false},
+		{&Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
 			"pg": {Protocol: "jsr", Host: "@db/postgres"},
-		}}}, true},
-		{"npm dep", &Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
+		}}}, "jsr dep", true},
+		{&Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
 			"zod": {Protocol: "npm", Host: "zod"},
-		}}}, true},
-		{"mixed — has jsr", &Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
+		}}}, "npm dep", true},
+		{&Workflow{Contract: &Contract{Dependencies: map[string]Dependency{
 			"api": {Protocol: "https"},
 			"pg":  {Protocol: "jsr", Host: "@db/postgres"},
-		}}}, true},
+		}}}, "mixed — has jsr", true},
 	}
 
 	for _, tc := range tests {

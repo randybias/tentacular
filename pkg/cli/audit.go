@@ -2,51 +2,51 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 
-	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
+
+	"github.com/randybias/tentacular/pkg/spec"
 )
 
 // AuditResult holds the comparison results for all resources.
 type AuditResult struct {
+	Overall       string             `json:"overall"` // "pass" or "fail"
 	NetworkPolicy NetworkPolicyAudit `json:"networkPolicy"`
 	Secrets       SecretsAudit       `json:"secrets"`
 	CronJobs      CronJobsAudit      `json:"cronJobs"`
-	Overall       string             `json:"overall"` // "pass" or "fail"
 }
 
 // NetworkPolicyAudit holds NetworkPolicy comparison results.
 type NetworkPolicyAudit struct {
-	Expected interface{} `json:"expected"`
-	Actual   interface{} `json:"actual"`
-	Status   string      `json:"status"` // "match", "mismatch", "missing"
-	Details  []string    `json:"details,omitempty"`
+	Expected any      `json:"expected"`
+	Actual   any      `json:"actual"`
+	Status   string   `json:"status"` // "match", "mismatch", "missing"
+	Details  []string `json:"details,omitempty"`
 }
 
 // SecretsAudit holds Secrets comparison results.
 type SecretsAudit struct {
+	Status       string   `json:"status"`
 	ExpectedKeys []string `json:"expectedKeys"`
 	ActualKeys   []string `json:"actualKeys"`
 	Missing      []string `json:"missing,omitempty"`
 	Extra        []string `json:"extra,omitempty"`
-	Status       string   `json:"status"` // "match", "mismatch", "missing"
 }
 
 // CronJobsAudit holds CronJob comparison results.
 type CronJobsAudit struct {
-	ExpectedCount int      `json:"expectedCount"`
-	ActualCount   int      `json:"actualCount"`
 	Status        string   `json:"status"` // "match", "mismatch"
 	Details       []string `json:"details,omitempty"`
+	ExpectedCount int      `json:"expectedCount"`
+	ActualCount   int      `json:"actualCount"`
 }
 
 func NewAuditCommand() *cobra.Command {
-	var (
-		outputFormat string
-	)
+	var outputFormat string
 
 	cmd := &cobra.Command{
 		Use:   "audit <workflow-dir>",
@@ -61,7 +61,7 @@ Reports discrepancies and validates that deployed state matches contract intent.
 
 			// Phase 1: Resolve - parse workflow and derive expected resources
 			specPath := filepath.Join(workflowDir, "workflow.yaml")
-			data, err := os.ReadFile(specPath)
+			data, err := os.ReadFile(specPath) //nolint:gosec // reading user-specified workflow file
 			if err != nil {
 				return fmt.Errorf("reading %s: %w", specPath, err)
 			}
@@ -72,7 +72,7 @@ Reports discrepancies and validates that deployed state matches contract intent.
 			}
 
 			if wf.Contract == nil {
-				return fmt.Errorf("workflow has no contract section - audit requires contract")
+				return errors.New("workflow has no contract section - audit requires contract")
 			}
 
 			expectedSecrets := spec.DeriveSecrets(wf.Contract)
@@ -82,7 +82,7 @@ Reports discrepancies and validates that deployed state matches contract intent.
 			// Namespace cascade: workflow.yaml > env config > global config > "default"
 			namespace := resolveNamespace(cmd, workflowDir)
 			if namespace == "default" && wf.Deployment.Namespace == "" {
-				return fmt.Errorf("namespace required: set deployment.namespace in workflow.yaml or configure an environment")
+				return errors.New("namespace required: set deployment.namespace in workflow.yaml or configure an environment")
 			}
 
 			// Count expected cron triggers
@@ -99,11 +99,11 @@ Reports discrepancies and validates that deployed state matches contract intent.
 				return err
 			}
 
-			expected := map[string]interface{}{
-				"secrets":           expectedSecrets,
-				"egressRuleCount":   len(expectedEgress),
-				"ingressRuleCount":  len(expectedIngress),
-				"cronJobCount":      expectedCronCount,
+			expected := map[string]any{
+				"secrets":          expectedSecrets,
+				"egressRuleCount":  len(expectedEgress),
+				"ingressRuleCount": len(expectedIngress),
+				"cronJobCount":     expectedCronCount,
 			}
 
 			mcpResult, err := mcpClient.AuditResources(cmd.Context(), namespace, wf.Name, expected)
@@ -120,7 +120,7 @@ Reports discrepancies and validates that deployed state matches contract intent.
 				NetworkPolicy: NetworkPolicyAudit{
 					Status:  mcpResult.NetworkPolicy.Status,
 					Details: mcpResult.NetworkPolicy.Details,
-					Expected: map[string]interface{}{
+					Expected: map[string]any{
 						"egressRuleCount":  len(expectedEgress),
 						"ingressRuleCount": len(expectedIngress),
 					},
@@ -170,7 +170,7 @@ Reports discrepancies and validates that deployed state matches contract intent.
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "\nOverall: %s\n", result.Overall)
 
 			if result.Overall == "fail" {
-				return fmt.Errorf("audit failed - deployed resources do not match contract expectations")
+				return errors.New("audit failed - deployed resources do not match contract expectations")
 			}
 
 			return nil

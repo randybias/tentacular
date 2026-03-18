@@ -36,8 +36,9 @@ _detect_arch() {
     esac
 }
 
-_stable_version() {
-    _fetch "https://raw.githubusercontent.com/${GITHUB_REPO}/main/stable.txt"
+_latest_version() {
+    _fetch "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" \
+        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p'
 }
 
 _install_engine() {
@@ -72,7 +73,7 @@ _install_engine() {
 main() {
     OS=$(_detect_os)
     ARCH=$(_detect_arch)
-    VERSION=${TNTC_VERSION:-$(_stable_version)}
+    VERSION=${TNTC_VERSION:-$(_latest_version)}
 
     # Install tntc binary
     URL="https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/${BINARY}_${OS}_${ARCH}"

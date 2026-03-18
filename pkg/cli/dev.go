@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"path/filepath"
+	"strconv"
 	"syscall"
 
 	"github.com/spf13/cobra"
@@ -41,21 +44,21 @@ func runDev(cmd *cobra.Command, args []string) error {
 
 	engineDir := findEngineDir()
 	if engineDir == "" {
-		return fmt.Errorf("cannot find engine directory; ensure tentacular is installed correctly")
+		return errors.New("cannot find engine directory; ensure tentacular is installed correctly")
 	}
 
 	denoBin := findDeno()
 	if denoBin == "" {
-		return fmt.Errorf("deno not found; install from https://deno.land or set PATH to include ~/.deno/bin")
+		return errors.New("deno not found; install from https://deno.land or set PATH to include ~/.deno/bin")
 	}
 
 	fmt.Printf("Starting dev server for %s on port %d...\n", absDir, port)
 
-	denoCmd := exec.Command(denoBin, "run",
+	denoCmd := exec.CommandContext(context.Background(), denoBin, "run", //nolint:gosec // known command with user args
 		"--allow-net", "--allow-read", "--allow-write=/tmp", "--allow-env",
 		filepath.Join(engineDir, "main.ts"),
 		"--workflow", specPath,
-		"--port", fmt.Sprintf("%d", port),
+		"--port", strconv.Itoa(port),
 		"--watch",
 	)
 	denoCmd.Dir = absDir

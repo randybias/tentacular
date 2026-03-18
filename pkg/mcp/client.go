@@ -24,13 +24,12 @@ type Config struct {
 
 // Client communicates with the tentacular-mcp server via the MCP protocol.
 type Client struct {
+	httpClient *http.Client // used for Ping (healthz) only
+	session    *mcpsdk.ClientSession
 	baseURL    string
 	token      string
+	mu         sync.Mutex
 	timeout    time.Duration
-	httpClient *http.Client // used for Ping (healthz) only
-
-	mu      sync.Mutex
-	session *mcpsdk.ClientSession
 }
 
 // NewClient creates an MCP client from config. The MCP session is established
@@ -83,8 +82,8 @@ func (c *Client) connect(ctx context.Context) (*mcpsdk.ClientSession, error) {
 
 // bearerTransport injects the Authorization header into every HTTP request.
 type bearerTransport struct {
-	token string
 	base  http.RoundTripper
+	token string
 }
 
 func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -101,7 +100,7 @@ func (t *bearerTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 
 // CallTool invokes a named MCP tool with typed params and returns the raw JSON result.
 // The MCP session is established on first call.
-func (c *Client) CallTool(ctx context.Context, tool string, params interface{}) (json.RawMessage, error) {
+func (c *Client) CallTool(ctx context.Context, tool string, params any) (json.RawMessage, error) {
 	session, err := c.connect(ctx)
 	if err != nil {
 		return nil, err
@@ -175,7 +174,7 @@ func (c *Client) Close() error {
 
 // toArgsMap converts a typed struct or map to map[string]any via JSON round-trip.
 // The MCP SDK requires map[string]any for tool arguments.
-func toArgsMap(params interface{}) (map[string]any, error) {
+func toArgsMap(params any) (map[string]any, error) {
 	if params == nil {
 		return map[string]any{}, nil
 	}
@@ -218,7 +217,7 @@ func mapConnectError(endpoint string, err error) error {
 }
 
 // mapCallError maps errors from session.CallTool to our error types.
-func mapCallError(endpoint string, err error) error {
+func mapCallError(_ string, err error) error {
 	msg := err.Error()
 	if strings.Contains(msg, "401") || strings.Contains(msg, "Unauthorized") {
 		return &Error{Code: 401, Message: "unauthorized: invalid or missing token"}

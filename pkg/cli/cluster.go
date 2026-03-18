@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -49,7 +50,7 @@ func runClusterCheck(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Println(string(data))
 		if !preflightResult.AllPass {
-			return fmt.Errorf("cluster check failed")
+			return errors.New("cluster check failed")
 		}
 		return nil
 	}
@@ -70,11 +71,9 @@ func runClusterCheck(cmd *cobra.Command, args []string) error {
 	}
 
 	if !preflightResult.AllPass {
-		return fmt.Errorf("cluster check failed \u2014 see above for details")
+		return errors.New("cluster check failed \u2014 see above for details")
 	}
 
 	fmt.Println("\n\u2713 Cluster is ready for deployment")
 	return nil
 }
-
-

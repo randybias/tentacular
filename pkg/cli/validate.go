@@ -7,8 +7,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
+
+	"github.com/randybias/tentacular/pkg/spec"
 )
 
 func NewValidateCmd() *cobra.Command {
@@ -30,7 +31,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	specPath := filepath.Join(dir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) //nolint:gosec // specPath is derived from workflow directory
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", specPath, err)
 	}
@@ -110,27 +111,27 @@ func runValidate(cmd *cobra.Command, args []string) error {
 type ValidateResult struct {
 	Workflow     string            `json:"workflow"`
 	Version      string            `json:"version"`
+	Secrets      []string          `json:"secrets,omitempty"`
+	EgressRules  []EgressRuleJSON  `json:"egressRules,omitempty"`
+	IngressRules []IngressRuleJSON `json:"ingressRules,omitempty"`
 	Nodes        int               `json:"nodes"`
 	Edges        int               `json:"edges"`
 	Triggers     int               `json:"triggers"`
 	HasContract  bool              `json:"hasContract"`
-	Secrets      []string          `json:"secrets,omitempty"`
-	EgressRules  []EgressRuleJSON  `json:"egressRules,omitempty"`
-	IngressRules []IngressRuleJSON `json:"ingressRules,omitempty"`
 }
 
 // EgressRuleJSON is the JSON representation of an egress rule.
 type EgressRuleJSON struct {
 	Host     string `json:"host"`
-	Port     int    `json:"port"`
 	Protocol string `json:"protocol"`
+	Port     int    `json:"port"`
 }
 
 // IngressRuleJSON is the JSON representation of an ingress rule.
 type IngressRuleJSON struct {
-	Port       int               `json:"port"`
-	Protocol   string            `json:"protocol"`
 	FromLabels map[string]string `json:"fromLabels,omitempty"`
+	Protocol   string            `json:"protocol"`
+	Port       int               `json:"port"`
 }
 
 // outputValidateJSON outputs validation results in JSON format.

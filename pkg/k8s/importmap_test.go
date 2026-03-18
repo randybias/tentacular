@@ -235,8 +235,8 @@ func TestRewriteDenoLandURL(t *testing.T) {
 		{"https://deno.land/std@0.224.0/yaml/mod.ts", proxy + "/gh/denoland/deno_std@0.224.0/yaml/mod.ts"},
 		{"https://deno.land/std@0.224.0/", proxy + "/gh/denoland/deno_std@0.224.0/"},
 		{"https://deno.land/std@0.224.0/path/mod.ts", proxy + "/gh/denoland/deno_std@0.224.0/path/mod.ts"},
-		{"./mod.ts", ""},          // not a deno.land URL
-		{"jsr:@std/yaml", ""},     // jsr, not deno.land
+		{"./mod.ts", ""},            // not a deno.land URL
+		{"jsr:@std/yaml", ""},       // jsr, not deno.land
 		{"https://example.com", ""}, // not deno.land
 	}
 	for _, tt := range tests {
@@ -278,8 +278,8 @@ func TestEngineDenoImportsTentacularPath(t *testing.T) {
 
 func TestHasModuleProxyDeps(t *testing.T) {
 	tests := []struct {
-		name string
 		wf   *spec.Workflow
+		name string
 		want bool
 	}{
 		{
@@ -422,7 +422,7 @@ func TestScanNodeImports(t *testing.T) {
 	t.Run("detects jsr and npm imports from TypeScript", func(t *testing.T) {
 		dir := t.TempDir()
 		nodesDir := filepath.Join(dir, "nodes")
-		if err := os.Mkdir(nodesDir, 0755); err != nil {
+		if err := os.Mkdir(nodesDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		src := `import { Client } from "jsr:@db/postgres@0.19.5";
@@ -430,7 +430,7 @@ import { z } from "npm:zod@3.22.0";
 import { join } from "std/path"; // not jsr/npm, should be ignored
 const x = await import("jsr:@std/encoding@1.0.0/base64");
 `
-		if err := os.WriteFile(filepath.Join(nodesDir, "main.ts"), []byte(src), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(nodesDir, "main.ts"), []byte(src), 0o644); err != nil {
 			t.Fatal(err)
 		}
 
@@ -464,12 +464,12 @@ const x = await import("jsr:@std/encoding@1.0.0/base64");
 	t.Run("deduplicates repeated imports across files", func(t *testing.T) {
 		dir := t.TempDir()
 		nodesDir := filepath.Join(dir, "nodes")
-		if err := os.Mkdir(nodesDir, 0755); err != nil {
+		if err := os.Mkdir(nodesDir, 0o755); err != nil {
 			t.Fatal(err)
 		}
 		for _, name := range []string{"a.ts", "b.ts"} {
 			if err := os.WriteFile(filepath.Join(nodesDir, name),
-				[]byte(`import { x } from "jsr:@db/postgres@0.19.5";`), 0644); err != nil {
+				[]byte(`import { x } from "jsr:@db/postgres@0.19.5";`), 0o644); err != nil {
 				t.Fatal(err)
 			}
 		}

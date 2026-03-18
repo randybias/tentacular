@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -13,9 +14,9 @@ import (
 
 // ClusterInfo holds details about the current K8s cluster.
 type ClusterInfo struct {
-	IsKind      bool
 	ClusterName string
 	Context     string
+	IsKind      bool
 }
 
 // DetectKindCluster reads the kubeconfig and checks whether the current context
@@ -29,7 +30,7 @@ func DetectKindCluster() (*ClusterInfo, error) {
 
 	config, err := clientcmd.LoadFromFile(kubeconfig)
 	if err != nil {
-		return &ClusterInfo{}, nil // No kubeconfig, not kind
+		return &ClusterInfo{}, nil //nolint:nilerr // no kubeconfig means this is not a kind cluster
 	}
 
 	currentContext := config.CurrentContext
@@ -82,7 +83,7 @@ func LoadImageToKind(imageName, clusterName string) error {
 		args = append(args, "--name", clusterName)
 	}
 
-	cmd := exec.Command("kind", args...)
+	cmd := exec.CommandContext(context.Background(), "kind", args...) //nolint:gosec // kind command with user-specified args
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 

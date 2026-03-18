@@ -33,13 +33,14 @@ type CommandResult struct {
 	Status  string   `json:"status"`
 	Summary string   `json:"summary"`
 	Hints   []string `json:"hints"`
-	Timing  TimingInfo `json:"timing"`
 
 	// Command-specific fields (set by individual commands)
-	Results   interface{} `json:"results,omitempty"`
-	Phases    interface{} `json:"phases,omitempty"`
-	Execution interface{} `json:"execution,omitempty"`
-	Manifests interface{} `json:"manifests,omitempty"`
+	Results   any `json:"results,omitempty"`
+	Phases    any `json:"phases,omitempty"`
+	Execution any `json:"execution,omitempty"`
+	Manifests any `json:"manifests,omitempty"`
+
+	Timing TimingInfo `json:"timing"`
 }
 
 // EmitResult writes the CommandResult in the format requested by the -o flag.

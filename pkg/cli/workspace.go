@@ -46,46 +46,46 @@ func runInitWorkspace(cmd *cobra.Command, args []string) error {
 	}
 
 	// Create workspace directory
-	if err := os.MkdirAll(absPath, 0o755); err != nil {
-		return fmt.Errorf("creating workspace directory: %w", err)
+	if mkdirErr := os.MkdirAll(absPath, 0o755); mkdirErr != nil { //nolint:gosec // non-sensitive directory
+		return fmt.Errorf("creating workspace directory: %w", mkdirErr)
 	}
 
 	// Create .secrets/ pool
 	secretsDir := filepath.Join(absPath, ".secrets")
-	if err := os.MkdirAll(secretsDir, 0o755); err != nil {
-		return fmt.Errorf("creating .secrets directory: %w", err)
+	if mkdirErr2 := os.MkdirAll(secretsDir, 0o755); mkdirErr2 != nil { //nolint:gosec // non-sensitive directory
+		return fmt.Errorf("creating .secrets directory: %w", mkdirErr2)
 	}
 
 	// Create .gitignore
 	gitignorePath := filepath.Join(absPath, ".gitignore")
-	if _, err := os.Stat(gitignorePath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(gitignorePath); os.IsNotExist(statErr) {
 		gitignore := `.secrets.yaml
 scratch/
 .secrets/
 `
-		if err := os.WriteFile(gitignorePath, []byte(gitignore), 0o644); err != nil {
-			return fmt.Errorf("writing .gitignore: %w", err)
+		if writeErr := os.WriteFile(gitignorePath, []byte(gitignore), 0o644); writeErr != nil { //nolint:gosec // non-sensitive gitignore file
+			return fmt.Errorf("writing .gitignore: %w", writeErr)
 		}
 	}
 
 	// Write workspace to config
 	configPath := filepath.Join(home, ".tentacular", "config.yaml")
 	cfg := TentacularConfig{}
-	if data, err := os.ReadFile(configPath); err == nil {
-		_ = yaml.Unmarshal(data, &cfg)
+	if cfgData, readErr := os.ReadFile(configPath); readErr == nil { //nolint:gosec // configPath is known config file
+		_ = yaml.Unmarshal(cfgData, &cfg)
 	}
 
 	cfg.Workspace = absPath
 
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
-		return fmt.Errorf("creating config directory: %w", err)
+	if mkdirErr3 := os.MkdirAll(filepath.Dir(configPath), 0o755); mkdirErr3 != nil { //nolint:gosec // non-sensitive config directory
+		return fmt.Errorf("creating config directory: %w", mkdirErr3)
 	}
 
 	data, err := yaml.Marshal(&cfg)
 	if err != nil {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
-	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+	if err := os.WriteFile(configPath, data, 0o644); err != nil { //nolint:gosec // non-sensitive config file
 		return fmt.Errorf("writing config: %w", err)
 	}
 

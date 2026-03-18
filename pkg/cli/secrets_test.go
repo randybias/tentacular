@@ -93,7 +93,7 @@ func TestSecretsInitCreatesFile(t *testing.T) {
 	}
 
 	lines := strings.Split(string(data), "\n")
-	var uncommented []string
+	uncommented := make([]string, 0, len(lines))
 	for _, line := range lines {
 		uncommented = append(uncommented, strings.TrimPrefix(line, "# "))
 	}
@@ -138,7 +138,7 @@ func TestResolveSharedSecrets(t *testing.T) {
 	workflowDir := filepath.Join(repoRoot, "workflows", "test")
 	_ = os.MkdirAll(workflowDir, 0o755)
 
-	secrets := map[string]interface{}{
+	secrets := map[string]any{
 		"slack": "$shared.slack",
 	}
 
@@ -152,7 +152,7 @@ func TestResolveSharedSecrets(t *testing.T) {
 	if !ok {
 		t.Fatal("expected slack key to exist")
 	}
-	slackMap, ok := slackVal.(map[string]interface{})
+	slackMap, ok := slackVal.(map[string]any)
 	if !ok {
 		t.Fatalf("expected slack value to be a map, got %T", slackVal)
 	}
@@ -171,7 +171,7 @@ func TestResolveSharedSecretsMissing(t *testing.T) {
 	workflowDir := filepath.Join(repoRoot, "workflows", "test")
 	_ = os.MkdirAll(workflowDir, 0o755)
 
-	secrets := map[string]interface{}{
+	secrets := map[string]any{
 		"slack": "$shared.nonexistent",
 	}
 
@@ -193,7 +193,7 @@ func TestResolveSharedSecretsNoRepoRoot(t *testing.T) {
 
 	// Use a temp dir with no .git or go.mod and no workspace config
 	dir := t.TempDir()
-	secrets := map[string]interface{}{
+	secrets := map[string]any{
 		"slack": "$shared.slack",
 	}
 
@@ -246,7 +246,7 @@ func TestResolveSharedSecretsPlainText(t *testing.T) {
 	wfDir := filepath.Join(repoRoot, "workflows", "test")
 	_ = os.MkdirAll(wfDir, 0o755)
 
-	secrets := map[string]interface{}{
+	secrets := map[string]any{
 		"api_key": "$shared.api-key",
 	}
 
@@ -328,7 +328,7 @@ func TestResolveSharedSecretsPathTraversal(t *testing.T) {
 	_ = os.MkdirAll(wfDir, 0o755)
 
 	// Attempt path traversal via $shared name
-	secrets := map[string]interface{}{
+	secrets := map[string]any{
 		"steal": "$shared.../../etc/passwd",
 	}
 
@@ -350,9 +350,9 @@ func TestResolveSharedSecretsNonSharedSkipped(t *testing.T) {
 	wfDir := filepath.Join(repoRoot, "workflows", "test")
 	_ = os.MkdirAll(wfDir, 0o755)
 
-	secrets := map[string]interface{}{
+	secrets := map[string]any{
 		"plain":  "just-a-string",
-		"nested": map[string]interface{}{"key": "value"},
+		"nested": map[string]any{"key": "value"},
 	}
 
 	err := resolveSharedSecrets(secrets, wfDir)
@@ -363,7 +363,7 @@ func TestResolveSharedSecretsNonSharedSkipped(t *testing.T) {
 	if secrets["plain"] != "just-a-string" {
 		t.Errorf("expected plain string to be unchanged, got %v", secrets["plain"])
 	}
-	nested, ok := secrets["nested"].(map[string]interface{})
+	nested, ok := secrets["nested"].(map[string]any)
 	if !ok {
 		t.Fatalf("expected nested to remain a map, got %T", secrets["nested"])
 	}

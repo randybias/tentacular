@@ -27,7 +27,7 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 	}
 
 	specPath := filepath.Join(absDir, "workflow.yaml")
-	if _, err := os.Stat(specPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(specPath); os.IsNotExist(statErr) {
 		return fmt.Errorf("no workflow.yaml found in %s", absDir)
 	}
 
@@ -56,7 +56,7 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 	imageTag := env.Image
 	if imageTag == "" {
 		tagFilePath := filepath.Join(absDir, ".tentacular", "base-image.txt")
-		if tagData, err := os.ReadFile(tagFilePath); err == nil {
+		if tagData, readErr := os.ReadFile(tagFilePath); readErr == nil { //nolint:gosec // tagFilePath is derived from workflow directory
 			imageTag = strings.TrimSpace(string(tagData))
 		}
 	}
@@ -101,11 +101,11 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 	}
 
 	// Parse execution result
-	var execution map[string]interface{}
+	var execution map[string]any
 	if err := json.Unmarshal(runResult.Output, &execution); err != nil {
 		// Not valid JSON -- still a pass if we got output
 		fmt.Printf("Workflow output (raw): %s\n", string(runResult.Output))
-		return emitLiveResult(cmd, "pass", "workflow completed (raw output)", map[string]interface{}{"raw": string(runResult.Output)}, startedAt)
+		return emitLiveResult(cmd, "pass", "workflow completed (raw output)", map[string]any{"raw": string(runResult.Output)}, startedAt)
 	}
 
 	// Check for success field in the execution result
@@ -121,7 +121,7 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 }
 
 // emitLiveResult outputs the live test result in the appropriate format.
-func emitLiveResult(cmd *cobra.Command, status, summary string, execution interface{}, startedAt time.Time) error {
+func emitLiveResult(cmd *cobra.Command, status, summary string, execution any, startedAt time.Time) error {
 	result := CommandResult{
 		Version: "1",
 		Command: "test",

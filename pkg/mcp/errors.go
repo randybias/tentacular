@@ -7,8 +7,8 @@ import (
 
 // Error represents an MCP JSON-RPC error response.
 type Error struct {
-	Code    int    `json:"code"`
 	Message string `json:"message"`
+	Code    int    `json:"code"`
 }
 
 func (e *Error) Error() string {
@@ -27,8 +27,8 @@ func (e *ToolError) Error() string {
 
 // ServerUnavailableError indicates the MCP server could not be reached.
 type ServerUnavailableError struct {
-	Endpoint string
 	Cause    error
+	Endpoint string
 }
 
 func (e *ServerUnavailableError) Error() string {

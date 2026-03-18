@@ -3,14 +3,16 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
+	"github.com/spf13/cobra"
+
 	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/randybias/tentacular/pkg/mcp"
-	"github.com/spf13/cobra"
 )
 
 const profileFreshnessThreshold = time.Hour
@@ -87,7 +89,7 @@ type clusterProfileFn func(ctx context.Context, namespace string) ([]byte, error
 func runProfileAll(profileFn clusterProfileFn, output string, save, force bool) error {
 	cfg := LoadConfig()
 	if len(cfg.Environments) == 0 {
-		return fmt.Errorf("no environments configured in .tentacular/config.yaml")
+		return errors.New("no environments configured in .tentacular/config.yaml")
 	}
 
 	var errs []string
@@ -99,7 +101,7 @@ func runProfileAll(profileFn clusterProfileFn, output string, save, force bool) 
 		}
 	}
 	if len(errs) == len(cfg.Environments) {
-		return fmt.Errorf("all environments failed to profile")
+		return errors.New("all environments failed to profile")
 	}
 	return nil
 }
@@ -177,17 +179,17 @@ func runProfileForEnv(envName, output string, save, force bool, profileFn cluste
 
 // saveProfileRaw writes both markdown and JSON representations to dir.
 func saveProfileRaw(rawJSON []byte, markdown, envName, dir string) error {
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil { //nolint:gosec // non-sensitive directory
 		return fmt.Errorf("creating profile directory: %w", err)
 	}
 
 	mdPath := filepath.Join(dir, envName+".md")
-	if err := os.WriteFile(mdPath, []byte(markdown), 0o644); err != nil {
+	if err := os.WriteFile(mdPath, []byte(markdown), 0o644); err != nil { //nolint:gosec // non-sensitive file
 		return fmt.Errorf("writing markdown profile: %w", err)
 	}
 
 	jsonPath := filepath.Join(dir, envName+".json")
-	if err := os.WriteFile(jsonPath, rawJSON, 0o644); err != nil {
+	if err := os.WriteFile(jsonPath, rawJSON, 0o644); err != nil { //nolint:gosec // non-sensitive profile file
 		return fmt.Errorf("writing JSON profile: %w", err)
 	}
 

@@ -36,6 +36,12 @@ func TestCommandResultEnvelopeFields(t *testing.T) {
 	if result.Status != "pass" {
 		t.Errorf("expected status pass, got %s", result.Status)
 	}
+	if result.Summary != "5/5 tests passed" {
+		t.Errorf("expected summary '5/5 tests passed', got %s", result.Summary)
+	}
+	if len(result.Hints) != 0 {
+		t.Errorf("expected empty hints, got %v", result.Hints)
+	}
 }
 
 func TestCommandResultJSONSerialization(t *testing.T) {
@@ -127,7 +133,7 @@ func TestEmitResultJSONMode(t *testing.T) {
 	output := buf.String()
 
 	// Should be valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal([]byte(output), &parsed); err != nil {
 		t.Fatalf("EmitResult JSON output is not valid JSON: %v\nOutput: %s", err, output)
 	}
@@ -172,7 +178,7 @@ func TestEmitResultTextMode(t *testing.T) {
 	}
 
 	// Text mode should NOT be valid JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if json.Unmarshal([]byte(output), &parsed) == nil {
 		t.Error("expected text output to NOT be valid JSON")
 	}
@@ -198,7 +204,7 @@ func TestEmitResultDefaultIsText(t *testing.T) {
 	}
 
 	// Default mode is text, so output should not be JSON
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if json.Unmarshal(buf.Bytes(), &parsed) == nil {
 		t.Error("expected default output to be text, not JSON")
 	}

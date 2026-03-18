@@ -49,7 +49,7 @@ func runUndeployWith(cmd *cobra.Command, args []string, stdin io.Reader) error {
 		answer, _ := reader.ReadString('\n')
 		answer = strings.TrimSpace(strings.ToLower(answer))
 		if answer != "y" && answer != "yes" {
-			fmt.Println("Cancelled.")
+			fmt.Println("Canceled.")
 			return nil
 		}
 	}
@@ -62,7 +62,7 @@ func runUndeployWith(cmd *cobra.Command, args []string, stdin io.Reader) error {
 		answer, _ := reader.ReadString('\n')
 		answer = strings.TrimSpace(strings.ToLower(answer))
 		if answer != "y" && answer != "yes" {
-			fmt.Println("Cancelled.")
+			fmt.Println("Canceled.")
 			return nil
 		}
 	}
