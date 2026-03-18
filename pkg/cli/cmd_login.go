@@ -68,7 +68,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	// Step 1: Discover device auth and token endpoints
 	deviceEndpoint, tokenEndpoint, err := discoverOIDCEndpoints(issuer)
 	if err != nil {
-		return fmt.Errorf("OIDC discovery failed: %w", err)
+		return fmt.Errorf("OIDC discovery failed: %w\n\nVerify the issuer URL is correct and reachable:\n  tntc configure -e %s --oidc-issuer <correct-url>", err, env)
 	}
 
 	// Step 2: Request device authorization
@@ -125,6 +125,9 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\nAuthenticated as %s\n", email)
+	fmt.Fprintf(cmd.OutOrStdout(), "\nNext steps:\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "  tntc whoami          -- verify your identity\n")
+	fmt.Fprintf(cmd.OutOrStdout(), "  tntc cluster check   -- check cluster connectivity\n")
 	return nil
 }
 
@@ -145,14 +148,14 @@ func resolveOIDCConfig(envName string) (envResult, issuer, clientID, clientSecre
 
 	env, ok := cfg.Environments[envName]
 	if !ok {
-		return "", "", "", "", fmt.Errorf("environment %q not found in config", envName)
+		return "", "", "", "", fmt.Errorf("environment %q not found in config; create it with:\n  tntc configure -e %s --oidc-issuer <url> --oidc-client-id <id>", envName, envName)
 	}
 
 	if env.OIDCIssuer == "" {
-		return "", "", "", "", fmt.Errorf("OIDC not configured for environment %q; add oidc_issuer, oidc_client_id, oidc_client_secret to environment config", envName)
+		return "", "", "", "", fmt.Errorf("OIDC not configured for environment %q; run:\n  tntc configure -e %s --oidc-issuer <url> --oidc-client-id <id>\nor use interactive setup:\n  tntc configure --sso -e %s", envName, envName, envName)
 	}
 	if env.OIDCClientID == "" {
-		return "", "", "", "", fmt.Errorf("oidc_client_id not configured for environment %q", envName)
+		return "", "", "", "", fmt.Errorf("oidc_client_id not configured for environment %q; run:\n  tntc configure -e %s --oidc-client-id <id>", envName, envName)
 	}
 
 	return envName, env.OIDCIssuer, env.OIDCClientID, env.OIDCClientSecret, nil
