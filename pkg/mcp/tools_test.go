@@ -110,9 +110,12 @@ func TestWfStatus(t *testing.T) {
 }
 
 func TestWfList(t *testing.T) {
-	h := makeToolServer(t, "wf_list", []WfListItem{
-		{Name: "wf-a", Namespace: "default", Ready: true, Replicas: 1, Available: 1},
-		{Name: "wf-b", Namespace: "default", Ready: false, Replicas: 1, Available: 0},
+	// Server returns envelope format: {"workflows": [...]}
+	h := makeToolServer(t, "wf_list", wfListResult{
+		Workflows: []WfListItem{
+			{Name: "wf-a", Namespace: "default", Ready: true, Replicas: 1, Available: 1},
+			{Name: "wf-b", Namespace: "default", Ready: false, Replicas: 1, Available: 0},
+		},
 	}, false)
 	defer h.Close()
 
@@ -125,6 +128,22 @@ func TestWfList(t *testing.T) {
 	}
 	if items[0].Name != "wf-a" {
 		t.Errorf("expected first item wf-a, got %q", items[0].Name)
+	}
+}
+
+func TestWfList_BareArray(t *testing.T) {
+	// Older servers may return a bare array (backwards compat).
+	h := makeToolServer(t, "wf_list", []WfListItem{
+		{Name: "wf-a", Namespace: "default", Ready: true},
+	}, false)
+	defer h.Close()
+
+	items, err := h.client.WfList(context.Background(), "default")
+	if err != nil {
+		t.Fatalf("WfList bare array: %v", err)
+	}
+	if len(items) != 1 {
+		t.Errorf("expected 1 item, got %d", len(items))
 	}
 }
 

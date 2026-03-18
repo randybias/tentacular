@@ -158,13 +158,24 @@ type WfListParams struct {
 
 // WfListItem represents a single workflow in the list response.
 type WfListItem struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Version   string `json:"version,omitempty"`
-	CreatedAt string `json:"createdAt,omitempty"`
-	Replicas  int32  `json:"replicas"`
-	Available int32  `json:"available"`
-	Ready     bool   `json:"ready"`
+	Name        string `json:"name"`
+	Namespace   string `json:"namespace"`
+	Version     string `json:"version,omitempty"`
+	Owner       string `json:"owner,omitempty"`
+	Team        string `json:"team,omitempty"`
+	Environment string `json:"environment,omitempty"`
+	DeployedBy  string `json:"deployed_by,omitempty"`
+	DeployedVia string `json:"deployed_via,omitempty"`
+	Age         string `json:"age,omitempty"`
+	CreatedAt   string `json:"createdAt,omitempty"`
+	Replicas    int32  `json:"replicas,omitempty"`
+	Available   int32  `json:"available,omitempty"`
+	Ready       bool   `json:"ready"`
+}
+
+// wfListResult is the envelope returned by the MCP server for wf_list.
+type wfListResult struct {
+	Workflows []WfListItem `json:"workflows"`
 }
 
 // WfList calls the wf_list MCP tool to enumerate deployed workflows.
@@ -173,6 +184,12 @@ func (c *Client) WfList(ctx context.Context, namespace string) ([]WfListItem, er
 	if err != nil {
 		return nil, err
 	}
+	// Try envelope format first: {"workflows": [...]}
+	var envelope wfListResult
+	if err := json.Unmarshal(raw, &envelope); err == nil && envelope.Workflows != nil {
+		return envelope.Workflows, nil
+	}
+	// Fall back to bare array for older servers.
 	var items []WfListItem
 	if err := json.Unmarshal(raw, &items); err != nil {
 		return nil, fmt.Errorf("parsing wf_list result: %w", err)

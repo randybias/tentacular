@@ -54,8 +54,8 @@ func runList(cmd *cobra.Command, args []string) error {
 		if w.Ready {
 			status = "ready"
 		}
-		age := ""
-		if w.CreatedAt != "" {
+		age := w.Age
+		if age == "" && w.CreatedAt != "" {
 			if t, err := time.Parse(time.RFC3339, w.CreatedAt); err == nil {
 				age = formatAge(time.Since(t))
 			}
