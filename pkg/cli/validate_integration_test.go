@@ -33,7 +33,7 @@ contract:
 `
 	dir := t.TempDir()
 	workflowPath := filepath.Join(dir, "workflow.yaml")
-	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0o644); err != nil {
 		t.Fatalf("failed to create workflow: %v", err)
 	}
 
@@ -102,7 +102,7 @@ contract:
 `
 	dir := t.TempDir()
 	workflowPath := filepath.Join(dir, "workflow.yaml")
-	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0o644); err != nil {
 		t.Fatalf("failed to create workflow: %v", err)
 	}
 
@@ -155,7 +155,7 @@ nodes:
 `
 	dir := t.TempDir()
 	workflowPath := filepath.Join(dir, "workflow.yaml")
-	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0644); err != nil {
+	if err := os.WriteFile(workflowPath, []byte(yamlContent), 0o644); err != nil {
 		t.Fatalf("failed to create workflow: %v", err)
 	}
 

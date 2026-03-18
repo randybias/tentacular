@@ -380,8 +380,8 @@ func TestGenerateNetworkPolicyPolicyTypes(t *testing.T) {
 
 func TestGenerateNetworkPolicyDNSAlwaysIncluded(t *testing.T) {
 	tests := []struct {
-		name         string
 		dependencies map[string]spec.Dependency
+		name         string
 	}{
 		{
 			name:         "empty dependencies",

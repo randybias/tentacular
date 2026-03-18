@@ -11,10 +11,10 @@ import (
 )
 
 var (
-	kebabRe      = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
-	identRe      = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
-	semverRe     = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
-	secretKeyRe  = regexp.MustCompile(`^[a-z][a-z0-9_-]*\.[a-z][a-z0-9_-]*$`)
+	kebabRe     = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
+	identRe     = regexp.MustCompile(`^[a-z][a-z0-9_-]*$`)
+	semverRe    = regexp.MustCompile(`^[0-9]+\.[0-9]+$`)
+	secretKeyRe = regexp.MustCompile(`^[a-z][a-z0-9_-]*\.[a-z][a-z0-9_-]*$`)
 )
 
 var validTriggerTypes = map[string]bool{

@@ -43,7 +43,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 
 	// Load existing config
 	cfg := TentacularConfig{}
-	if data, err := os.ReadFile(configPath); err == nil {
+	if data, err := os.ReadFile(configPath); err == nil { //nolint:gosec // reading config file
 		_ = yaml.Unmarshal(data, &cfg)
 	}
 
@@ -59,7 +59,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write config
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil { //nolint:gosec // non-sensitive config directory
 		return fmt.Errorf("creating config directory: %w", err)
 	}
 
@@ -68,7 +68,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("marshaling config: %w", err)
 	}
 
-	if err := os.WriteFile(configPath, data, 0o644); err != nil {
+	if err := os.WriteFile(configPath, data, 0o644); err != nil { //nolint:gosec // non-sensitive config file
 		return fmt.Errorf("writing config: %w", err)
 	}
 

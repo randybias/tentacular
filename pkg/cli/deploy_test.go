@@ -9,8 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/randybias/tentacular/pkg/spec"
 	"github.com/spf13/cobra"
+
+	"github.com/randybias/tentacular/pkg/spec"
 )
 
 func TestBuildSecretManifestLocalSecretsPresent(t *testing.T) {
@@ -260,7 +261,7 @@ func TestEmitDeployResultPassStatus(t *testing.T) {
 		t.Fatalf("EmitResult failed: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -271,7 +272,7 @@ func TestEmitDeployResultPassStatus(t *testing.T) {
 		t.Errorf("expected command deploy, got %v", parsed["command"])
 	}
 	// Pass status should have no hints
-	hints, ok := parsed["hints"].([]interface{})
+	hints, ok := parsed["hints"].([]any)
 	if ok && len(hints) > 0 {
 		t.Errorf("expected empty hints for pass status, got %v", hints)
 	}
@@ -302,7 +303,7 @@ func TestEmitDeployResultFailIncludesForceHint(t *testing.T) {
 		t.Fatalf("EmitResult failed: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
@@ -310,7 +311,7 @@ func TestEmitDeployResultFailIncludesForceHint(t *testing.T) {
 		t.Errorf("expected status fail, got %v", parsed["status"])
 	}
 
-	hints, ok := parsed["hints"].([]interface{})
+	hints, ok := parsed["hints"].([]any)
 	if !ok || len(hints) < 2 {
 		t.Fatal("expected at least 2 hints for failed deploy")
 	}

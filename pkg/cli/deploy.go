@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,14 +11,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
 	"github.com/randybias/tentacular/pkg/builder"
 	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/randybias/tentacular/pkg/spec"
-	"github.com/spf13/cobra"
-	"gopkg.in/yaml.v3"
 )
-
 
 func NewDeployCmd() *cobra.Command {
 	cmd := &cobra.Command{
@@ -38,20 +39,20 @@ func NewDeployCmd() *cobra.Command {
 
 // InternalDeployOptions controls deployment behavior when called programmatically.
 type InternalDeployOptions struct {
+	StatusOut       io.Writer // writer for progress messages (nil defaults to os.Stdout)
 	Namespace       string
 	Image           string
 	RuntimeClass    string
 	ImagePullPolicy string
-	Kubeconfig      string    // explicit kubeconfig file path (bootstrap-only)
-	Context         string    // kubeconfig context override (bootstrap-only)
-	StatusOut       io.Writer // writer for progress messages (nil defaults to os.Stdout)
+	Kubeconfig      string // explicit kubeconfig file path (bootstrap-only)
+	Context         string // kubeconfig context override (bootstrap-only)
 }
 
 // DeployResult holds the result of a deployment.
 type DeployResult struct {
+	MCPClient    *mcp.Client
 	WorkflowName string
 	Namespace    string
-	MCPClient    *mcp.Client
 }
 
 func runDeploy(cmd *cobra.Command, args []string) error {
@@ -82,7 +83,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 
 	// Check for deprecated --cluster-registry flag
 	if clusterRegistry != "" {
-		return fmt.Errorf("--cluster-registry is deprecated; use --image instead")
+		return errors.New("--cluster-registry is deprecated; use --image instead")
 	}
 
 	// Apply config defaults: workflow.yaml > env config > config file
@@ -106,7 +107,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	}
 
 	specPath := filepath.Join(absDir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) //nolint:gosec // specPath is derived from user's workflow directory
 	if err != nil {
 		return fmt.Errorf("reading workflow spec: %w", err)
 	}
@@ -120,19 +121,18 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	if wf.Contract != nil {
 		contractErrs := spec.ValidateContract(wf.Contract)
 		if len(contractErrs) > 0 {
-			if warnMode {
-				fmt.Fprintf(os.Stderr, "WARNING: Contract validation failed with %d error(s):\n", len(contractErrs))
-				for _, e := range contractErrs {
-					fmt.Fprintf(os.Stderr, "  - %s\n", e)
-				}
-				fmt.Fprintf(os.Stderr, "Proceeding with deploy in audit mode (use strict mode in production)\n\n")
-			} else {
+			if !warnMode {
 				fmt.Fprintf(os.Stderr, "Contract validation failed with %d error(s):\n", len(contractErrs))
 				for _, e := range contractErrs {
 					fmt.Fprintf(os.Stderr, "  - %s\n", e)
 				}
-				return fmt.Errorf("deploy aborted: contract validation failed (use --warn for audit mode)")
+				return errors.New("deploy aborted: contract validation failed (use --warn for audit mode)")
 			}
+			fmt.Fprintf(os.Stderr, "WARNING: Contract validation failed with %d error(s):\n", len(contractErrs))
+			for _, e := range contractErrs {
+				fmt.Fprintf(os.Stderr, "  - %s\n", e)
+			}
+			fmt.Fprintf(os.Stderr, "Proceeding with deploy in audit mode (use strict mode in production)\n\n")
 		}
 	}
 
@@ -146,7 +146,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	imageTag := imageFlagValue
 	if imageTag == "" {
 		tagFilePath := filepath.Join(absDir, ".tentacular", "base-image.txt")
-		if tagData, err := os.ReadFile(tagFilePath); err == nil {
+		if tagData, readErr := os.ReadFile(tagFilePath); readErr == nil { //nolint:gosec // tagFilePath is derived from workflow directory
 			imageTag = strings.TrimSpace(string(tagData))
 		}
 	}
@@ -188,10 +188,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 				return fmt.Errorf("pre-deploy live test: workflow run failed (use --force to skip): %w", runErr)
 			}
 
-			var execResult map[string]interface{}
+			var execResult map[string]any
 			if json.Unmarshal(runResult.Output, &execResult) == nil {
 				if success, ok := execResult["success"].(bool); ok && !success {
-					return fmt.Errorf("pre-deploy live test: workflow returned success=false (use --force to skip)")
+					return errors.New("pre-deploy live test: workflow returned success=false (use --force to skip)")
 				}
 			}
 			_, _ = fmt.Fprintln(w, "  Pre-deploy live test passed")
@@ -219,7 +219,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 			return emitDeployResult(cmd, "fail", "verification: workflow run failed: "+runErr.Error(), nil, startedAt)
 		}
 
-		var execResult map[string]interface{}
+		var execResult map[string]any
 		if json.Unmarshal(runResult.Output, &execResult) == nil {
 			if success, ok := execResult["success"].(bool); ok && !success {
 				return emitDeployResult(cmd, "fail", "verification: workflow returned success=false", execResult, startedAt)
@@ -232,7 +232,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 }
 
 // emitDeployResult outputs the deploy result in the appropriate format.
-func emitDeployResult(cmd *cobra.Command, status, summary string, execution interface{}, startedAt time.Time) error {
+func emitDeployResult(cmd *cobra.Command, status, summary string, execution any, startedAt time.Time) error {
 	result := CommandResult{
 		Version: "1",
 		Command: "deploy",
@@ -380,7 +380,7 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 	}
 
 	specPath := filepath.Join(workflowDir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) //nolint:gosec // specPath is derived from workflow directory
 	if err != nil {
 		return nil, fmt.Errorf("reading workflow spec: %w", err)
 	}
@@ -406,12 +406,12 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 
 	_, _ = fmt.Fprintf(w, "Deploying %s to namespace %s...\n", wf.Name, opts.Namespace)
 
-	// Phase 2: Convert manifests to map[string]interface{} for MCP transport
-	mcpManifests := make([]map[string]interface{}, 0, len(manifests))
+	// Phase 2: Convert manifests to map[string]any for MCP transport
+	mcpManifests := make([]map[string]any, 0, len(manifests))
 	for _, m := range manifests {
-		var obj map[string]interface{}
-		if err := yaml.Unmarshal([]byte(m.Content), &obj); err != nil {
-			return nil, fmt.Errorf("serializing manifest %s/%s: %w", m.Kind, m.Name, err)
+		var obj map[string]any
+		if unmarshalErr := yaml.Unmarshal([]byte(m.Content), &obj); unmarshalErr != nil {
+			return nil, fmt.Errorf("serializing manifest %s/%s: %w", m.Kind, m.Name, unmarshalErr)
 		}
 		mcpManifests = append(mcpManifests, obj)
 	}
@@ -450,7 +450,7 @@ func buildSecretManifest(workflowDir, name, namespace string) (*builder.Manifest
 
 	secretsFile := filepath.Join(workflowDir, ".secrets.yaml")
 	if _, err := os.Stat(secretsFile); err != nil {
-		return nil, nil
+		return nil, nil //nolint:nilerr // no .secrets.yaml file means no secret manifest needed
 	}
 
 	return buildSecretFromYAML(secretsFile, secretName, namespace)
@@ -459,12 +459,12 @@ func buildSecretManifest(workflowDir, name, namespace string) (*builder.Manifest
 // buildSecretFromYAML creates a K8s Secret from a .secrets.yaml file.
 // All values must be $shared.<name> references -- direct values are rejected.
 func buildSecretFromYAML(filePath, secretName, namespace string) (*builder.Manifest, error) {
-	data, err := os.ReadFile(filePath)
+	data, err := os.ReadFile(filePath) //nolint:gosec // filePath is derived from workflow directory
 	if err != nil {
 		return nil, fmt.Errorf("reading secrets file: %w", err)
 	}
 
-	var secrets map[string]interface{}
+	var secrets map[string]any
 	if err := yaml.Unmarshal(data, &secrets); err != nil {
 		return nil, fmt.Errorf("parsing secrets YAML: %w", err)
 	}

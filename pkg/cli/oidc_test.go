@@ -62,8 +62,8 @@ func TestOIDCTokenStore_SaveLoadRemove(t *testing.T) {
 	}
 
 	// Remove
-	if err := RemoveOIDCToken(envName); err != nil {
-		t.Fatalf("RemoveOIDCToken: %v", err)
+	if removeErr := RemoveOIDCToken(envName); removeErr != nil {
+		t.Fatalf("RemoveOIDCToken: %v", removeErr)
 	}
 
 	// Verify gone
@@ -133,7 +133,7 @@ func TestOIDCTokenStore_DefaultEnvName(t *testing.T) {
 }
 
 func TestDecodeJWTClaims(t *testing.T) {
-	claims := map[string]interface{}{
+	claims := map[string]any{
 		"sub":                "user-123",
 		"email":              "alice@example.com",
 		"name":               "Alice Smith",
@@ -175,7 +175,7 @@ func TestDecodeJWTClaims_InvalidToken(t *testing.T) {
 }
 
 // buildTestJWT constructs a minimal JWT for testing (no real signature).
-func buildTestJWT(claims map[string]interface{}) string {
+func buildTestJWT(claims map[string]any) string {
 	payload, _ := json.Marshal(claims)
 	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256"}`))
 	body := base64.RawURLEncoding.EncodeToString(payload)
@@ -186,7 +186,7 @@ func buildTestJWT(claims map[string]interface{}) string {
 func TestDeviceAuthFlow_MockServer(t *testing.T) {
 	// Create a mock OIDC server
 	pollCount := 0
-	testJWT := buildTestJWT(map[string]interface{}{
+	testJWT := buildTestJWT(map[string]any{
 		"sub":   "user-abc",
 		"email": "test@example.com",
 		"name":  "Test User",
@@ -198,20 +198,20 @@ func TestDeviceAuthFlow_MockServer(t *testing.T) {
 		case strings.HasSuffix(r.URL.Path, "/.well-known/openid-configuration"):
 			// Discovery endpoint
 			base := "http://" + r.Host
-			json.NewEncoder(w).Encode(map[string]string{
+			_ = json.NewEncoder(w).Encode(map[string]string{
 				"device_authorization_endpoint": base + "/auth/device",
 				"token_endpoint":                base + "/token",
 			})
 
 		case strings.HasSuffix(r.URL.Path, "/auth/device"):
 			// Device auth endpoint
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"device_code":               "test-device-code",
 				"user_code":                 "ABCD-EFGH",
 				"verification_uri":          "http://example.com/verify",
 				"verification_uri_complete": "http://example.com/verify?code=ABCD-EFGH",
-				"expires_in":               300,
-				"interval":                 1,
+				"expires_in":                300,
+				"interval":                  1,
 			})
 
 		case strings.HasSuffix(r.URL.Path, "/token"):
@@ -219,13 +219,13 @@ func TestDeviceAuthFlow_MockServer(t *testing.T) {
 			if pollCount < 2 {
 				// First poll: pending
 				w.WriteHeader(http.StatusBadRequest)
-				json.NewEncoder(w).Encode(map[string]string{
+				_ = json.NewEncoder(w).Encode(map[string]string{
 					"error": "authorization_pending",
 				})
 				return
 			}
 			// Second poll: success
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token":  testJWT,
 				"refresh_token": "test-refresh-token",
 				"expires_in":    3600,
@@ -283,7 +283,7 @@ func TestDeviceAuthFlow_Timeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Always return pending
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "authorization_pending",
 		})
 	}))
@@ -308,7 +308,7 @@ func TestDeviceAuthFlow_Timeout(t *testing.T) {
 func TestDeviceAuthFlow_AccessDenied(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"error": "access_denied",
 		})
 	}))
@@ -331,7 +331,7 @@ func TestDeviceAuthFlow_AccessDenied(t *testing.T) {
 }
 
 func TestTokenRefresh_MockServer(t *testing.T) {
-	refreshedJWT := buildTestJWT(map[string]interface{}{
+	refreshedJWT := buildTestJWT(map[string]any{
 		"sub":   "user-abc",
 		"email": "refreshed@example.com",
 		"exp":   float64(time.Now().Add(1 * time.Hour).Unix()),
@@ -341,7 +341,7 @@ func TestTokenRefresh_MockServer(t *testing.T) {
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/.well-known/openid-configuration"):
 			base := "http://" + r.Host
-			json.NewEncoder(w).Encode(map[string]string{
+			_ = json.NewEncoder(w).Encode(map[string]string{
 				"device_authorization_endpoint": base + "/auth/device",
 				"token_endpoint":                base + "/token",
 			})
@@ -350,7 +350,7 @@ func TestTokenRefresh_MockServer(t *testing.T) {
 			if r.FormValue("grant_type") != "refresh_token" {
 				t.Errorf("expected grant_type=refresh_token, got %q", r.FormValue("grant_type"))
 			}
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			_ = json.NewEncoder(w).Encode(map[string]any{
 				"access_token":  refreshedJWT,
 				"refresh_token": "new-refresh-token",
 				"expires_in":    3600,

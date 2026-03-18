@@ -28,8 +28,8 @@ func DeriveSecrets(c *Contract) []string {
 // EgressRule represents a single egress network policy rule.
 type EgressRule struct {
 	Host     string
-	Port     int
 	Protocol string // "TCP" or "UDP"
+	Port     int
 }
 
 // DeriveEgressRules returns egress rules derived from contract dependencies.
@@ -133,10 +133,10 @@ func DeriveEgressRules(c *Contract) []EgressRule {
 
 // IngressRule represents a single ingress network policy rule.
 type IngressRule struct {
-	Port                int
-	Protocol            string            // "TCP"
 	FromLabels          map[string]string // if non-nil, restrict to matching pods (podSelector)
 	FromNamespaceLabels map[string]string // if non-nil, also allow from matching namespaces (namespaceSelector)
+	Protocol            string            // "TCP"
+	Port                int
 }
 
 // DeriveIngressRules returns ingress rules derived from workflow triggers.
@@ -255,7 +255,6 @@ func HasModuleProxyDeps(wf *Workflow) bool {
 	}
 	return false
 }
-
 
 // DeriveDenoFlags returns the complete Deno command with permission flags based on contract dependencies.
 // Returns nil if contract is nil or has no dependencies.

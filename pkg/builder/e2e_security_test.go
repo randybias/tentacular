@@ -87,17 +87,17 @@ func TestE2E_DeploymentSecurityHardeningComplete(t *testing.T) {
 		"automountServiceAccountToken: false": "SA token mount disabled",
 		"runAsNonRoot: true":                  "runAsNonRoot",
 		"runAsUser: 65534":                    "nobody user (65534)",
-		"type: RuntimeDefault":               "seccomp RuntimeDefault",
+		"type: RuntimeDefault":                "seccomp RuntimeDefault",
 		"runtimeClassName: gvisor":            "gVisor runtime class",
 		// Container-level security
 		"readOnlyRootFilesystem: true":    "read-only root filesystem",
 		"allowPrivilegeEscalation: false": "no privilege escalation",
 		"- ALL":                           "drop ALL capabilities",
 		// Volume security
-		"readOnly: true":    "read-only volume mounts",
-		"sizeLimit: 512Mi":  "emptyDir size limit",
-		"optional: true":    "optional secret volume",
-		"mountPath: /tmp":   "tmp mount",
+		"readOnly: true":   "read-only volume mounts",
+		"sizeLimit: 512Mi": "emptyDir size limit",
+		"optional: true":   "optional secret volume",
+		"mountPath: /tmp":  "tmp mount",
 		// Resources
 		`memory: "64Mi"`:  "memory request",
 		`memory: "256Mi"`: "memory limit",

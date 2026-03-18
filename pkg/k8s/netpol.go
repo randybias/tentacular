@@ -13,7 +13,7 @@ import (
 // Returns nil if workflow has no contract (contract-less workflows skip NetworkPolicy).
 // When the workflow has jsr/npm dependencies, an egress rule to the in-cluster module
 // proxy (esm.sh in tentacular-support) is automatically added.
-func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace string) *builder.Manifest {
+func GenerateNetworkPolicy(wf *spec.Workflow, namespace, proxyNamespace string) *builder.Manifest {
 	if wf.Contract == nil {
 		return nil
 	}
@@ -30,15 +30,15 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace s
 	}
 	externalHostsAnnotation := ""
 	if len(externalHosts) > 0 {
-		externalHostsAnnotation = fmt.Sprintf("\n  annotations:\n    tentacular.dev/intended-hosts: %s", strings.Join(externalHosts, ","))
+		externalHostsAnnotation = "\n  annotations:\n    tentacular.dev/intended-hosts: " + strings.Join(externalHosts, ",")
 	}
 
 	// Build egress rules YAML with proper network isolation
-	var egressYAML string
+	var egressBuf strings.Builder
 	if len(egressRules) > 0 {
-		egressYAML = "  egress:\n"
+		egressBuf.WriteString("  egress:\n")
 		for _, rule := range egressRules {
-			egressYAML += buildEgressRule(rule)
+			egressBuf.WriteString(buildEgressRule(rule))
 		}
 	}
 
@@ -57,72 +57,75 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace string, proxyNamespace s
     - protocol: TCP
       port: 8080
 `
-		if egressYAML == "" {
-			egressYAML = "  egress:\n"
+		if egressBuf.Len() == 0 {
+			egressBuf.WriteString("  egress:\n")
 		}
-		egressYAML += proxyEgress
+		egressBuf.WriteString(proxyEgress)
 	}
+	egressYAML := egressBuf.String()
 
 	// Build ingress rules YAML from derived rules.
 	// DeriveIngressRules always includes the MCP health probe rule (namespaceSelector +
 	// podSelector in one from entry for AND semantics) so no hardcoded rule is needed here.
-	ingressYAML := "  ingress:\n"
+	var ingressBuf strings.Builder
+	ingressBuf.WriteString("  ingress:\n")
 	for _, rule := range ingressRules {
-		ingressYAML += "  - from:\n"
+		ingressBuf.WriteString("  - from:\n")
 		if rule.FromNamespaceLabels != nil && rule.FromLabels != nil {
 			// Both namespace and pod selectors: combine into a single from entry (AND semantics).
 			// K8s treats selectors in the same from entry as AND, separate entries as OR.
-			ingressYAML += "    - namespaceSelector:\n"
-			ingressYAML += "        matchLabels:\n"
+			ingressBuf.WriteString("    - namespaceSelector:\n")
+			ingressBuf.WriteString("        matchLabels:\n")
 			nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
 			for k := range rule.FromNamespaceLabels {
 				nsLabelKeys = append(nsLabelKeys, k)
 			}
 			sort.Strings(nsLabelKeys)
 			for _, k := range nsLabelKeys {
-				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
+				fmt.Fprintf(&ingressBuf, "          %s: %s\n", k, rule.FromNamespaceLabels[k])
 			}
-			ingressYAML += "      podSelector:\n"
-			ingressYAML += "        matchLabels:\n"
+			ingressBuf.WriteString("      podSelector:\n")
+			ingressBuf.WriteString("        matchLabels:\n")
 			labelKeys := make([]string, 0, len(rule.FromLabels))
 			for k := range rule.FromLabels {
 				labelKeys = append(labelKeys, k)
 			}
 			sort.Strings(labelKeys)
 			for _, k := range labelKeys {
-				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromLabels[k])
+				fmt.Fprintf(&ingressBuf, "          %s: %s\n", k, rule.FromLabels[k])
 			}
 		} else if rule.FromLabels != nil {
 			// Pod selector only (same namespace)
-			ingressYAML += "    - podSelector:\n"
-			ingressYAML += "        matchLabels:\n"
+			ingressBuf.WriteString("    - podSelector:\n")
+			ingressBuf.WriteString("        matchLabels:\n")
 			labelKeys := make([]string, 0, len(rule.FromLabels))
 			for k := range rule.FromLabels {
 				labelKeys = append(labelKeys, k)
 			}
 			sort.Strings(labelKeys)
 			for _, k := range labelKeys {
-				ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromLabels[k])
+				fmt.Fprintf(&ingressBuf, "          %s: %s\n", k, rule.FromLabels[k])
 			}
 		} else {
-			ingressYAML += "    - podSelector: {}\n"
+			ingressBuf.WriteString("    - podSelector: {}\n")
 			// Namespace selector only when no pod label filter (e.g. istio-system)
 			if rule.FromNamespaceLabels != nil {
-				ingressYAML += "    - namespaceSelector:\n"
-				ingressYAML += "        matchLabels:\n"
+				ingressBuf.WriteString("    - namespaceSelector:\n")
+				ingressBuf.WriteString("        matchLabels:\n")
 				nsLabelKeys := make([]string, 0, len(rule.FromNamespaceLabels))
 				for k := range rule.FromNamespaceLabels {
 					nsLabelKeys = append(nsLabelKeys, k)
 				}
 				sort.Strings(nsLabelKeys)
 				for _, k := range nsLabelKeys {
-					ingressYAML += fmt.Sprintf("          %s: %s\n", k, rule.FromNamespaceLabels[k])
+					fmt.Fprintf(&ingressBuf, "          %s: %s\n", k, rule.FromNamespaceLabels[k])
 				}
 			}
 		}
-		ingressYAML += fmt.Sprintf("    ports:\n    - protocol: %s\n      port: %d\n",
+		fmt.Fprintf(&ingressBuf, "    ports:\n    - protocol: %s\n      port: %d\n",
 			rule.Protocol, rule.Port)
 	}
+	ingressYAML := ingressBuf.String()
 
 	// Generate NetworkPolicy manifest
 	manifest := fmt.Sprintf(`apiVersion: networking.k8s.io/v1
@@ -202,8 +205,7 @@ func buildEgressRule(rule spec.EgressRule) string {
 	var toBlock string
 	if rule.Host == "0.0.0.0/0" || strings.Contains(rule.Host, "/") {
 		// Already a CIDR (from networkPolicyOverride.additionalEgress)
-		toBlock = fmt.Sprintf(`    - ipBlock:
-        cidr: %s`, rule.Host)
+		toBlock = "    - ipBlock:\n        cidr: " + rule.Host
 	} else {
 		// External hostname - allow to any non-private IP on this port
 		// Excludes RFC1918 ranges to prevent external deps from reaching cluster-internal services

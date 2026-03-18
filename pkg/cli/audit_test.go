@@ -23,11 +23,11 @@ func TestAuditResultJSONStructure(t *testing.T) {
 	// Verify AuditResult struct can be marshaled to JSON
 	result := AuditResult{
 		NetworkPolicy: NetworkPolicyAudit{
-			Expected: map[string]interface{}{
+			Expected: map[string]any{
 				"egressRuleCount":  3,
 				"ingressRuleCount": 1,
 			},
-			Actual: map[string]interface{}{
+			Actual: map[string]any{
 				"rules": "mock",
 			},
 			Status:  "match",
@@ -103,11 +103,11 @@ func TestAuditResultFailureState(t *testing.T) {
 func TestAuditResultJSONRoundTrip(t *testing.T) {
 	original := AuditResult{
 		NetworkPolicy: NetworkPolicyAudit{
-			Expected: map[string]interface{}{
+			Expected: map[string]any{
 				"egressRuleCount":  float64(3),
 				"ingressRuleCount": float64(1),
 			},
-			Actual: map[string]interface{}{
+			Actual: map[string]any{
 				"egressRuleCount":  float64(3),
 				"ingressRuleCount": float64(1),
 			},

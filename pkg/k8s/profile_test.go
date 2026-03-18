@@ -167,8 +167,8 @@ func TestIsRWXCapable(t *testing.T) {
 		{"nfs.k8s.io", true},
 		{"ebs.csi.aws.com", false},
 		{"pd.csi.storage.gke.io", false},
-		{"kubernetes.io/azure-file", true},  // contains "azure-file"
-		{"file.csi.azure.com", false},       // Azure Files CSI — not matched by current heuristic
+		{"kubernetes.io/azure-file", true}, // contains "azure-file"
+		{"file.csi.azure.com", false},      // Azure Files CSI — not matched by current heuristic
 	}
 	for _, c := range cases {
 		if got := isRWXCapable(c.provisioner); got != c.want {
@@ -338,15 +338,15 @@ func TestDeriveGuidance_Quota(t *testing.T) {
 
 func TestMarkdown_ContainsSections(t *testing.T) {
 	p := &ClusterProfile{
-		GeneratedAt:  time.Now(),
-		Environment:  "test",
-		K8sVersion:   "v1.29.0",
-		Distribution: "vanilla",
-		GVisor:       true,
-		CNI:          CNIInfo{Name: "calico", NetworkPolicySupported: true},
+		GeneratedAt:   time.Now(),
+		Environment:   "test",
+		K8sVersion:    "v1.29.0",
+		Distribution:  "vanilla",
+		GVisor:        true,
+		CNI:           CNIInfo{Name: "calico", NetworkPolicySupported: true},
 		NetworkPolicy: NetPolInfo{Supported: true, InUse: true},
-		PodSecurity:  "unknown",
-		Guidance:     []string{"Use runtime_class: gvisor for untrusted workflow steps"},
+		PodSecurity:   "unknown",
+		Guidance:      []string{"Use runtime_class: gvisor for untrusted workflow steps"},
 	}
 	md := p.Markdown()
 	for _, want := range []string{

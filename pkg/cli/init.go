@@ -27,10 +27,10 @@ func runInit(cmd *cobra.Command, args []string) error {
 	}
 
 	dir := name
-	if err := os.MkdirAll(filepath.Join(dir, "nodes"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "nodes"), 0o755); err != nil { //nolint:gosec // non-sensitive directory
 		return fmt.Errorf("creating workflow directory: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Join(dir, "tests", "fixtures"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, "tests", "fixtures"), 0o755); err != nil { //nolint:gosec // non-sensitive directory
 		return fmt.Errorf("creating tests directory: %w", err)
 	}
 
@@ -59,7 +59,7 @@ contract:
 deployment:
   namespace: ""
 `, name)
-	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowYAML), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte(workflowYAML), 0o644); err != nil { //nolint:gosec // non-sensitive file
 		return fmt.Errorf("writing workflow.yaml: %w", err)
 	}
 
@@ -71,7 +71,7 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
   return { message: "Hello from ` + name + `!" };
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, "nodes", "hello.ts"), []byte(helloNode), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "nodes", "hello.ts"), []byte(helloNode), 0o644); err != nil { //nolint:gosec // non-sensitive file
 		return fmt.Errorf("writing hello node: %w", err)
 	}
 
@@ -82,7 +82,7 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 # github: $shared.github
 # slack: $shared.slack
 `
-	if err := os.WriteFile(filepath.Join(dir, ".secrets.yaml.example"), []byte(secretsExample), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".secrets.yaml.example"), []byte(secretsExample), 0o644); err != nil { //nolint:gosec // non-sensitive file
 		return fmt.Errorf("writing secrets example: %w", err)
 	}
 
@@ -90,7 +90,7 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 	gitignore := `.secrets.yaml
 scratch/
 `
-	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignore), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(gitignore), 0o644); err != nil { //nolint:gosec // non-sensitive file
 		return fmt.Errorf("writing .gitignore: %w", err)
 	}
 
@@ -102,7 +102,7 @@ scratch/
   }
 }
 `
-	if err := os.WriteFile(filepath.Join(dir, "tests", "fixtures", "hello.json"), []byte(fixture), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "tests", "fixtures", "hello.json"), []byte(fixture), 0o644); err != nil { //nolint:gosec // non-sensitive file
 		return fmt.Errorf("writing test fixture: %w", err)
 	}
 

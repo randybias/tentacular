@@ -8,7 +8,7 @@ import (
 // TestExoStatus_AllFieldsParsed verifies all ExoStatusResult fields including
 // SPIREAvailable and NATSSpiffeEnabled are correctly parsed.
 func TestExoStatus_AllFieldsParsed(t *testing.T) {
-	h := makeToolServer(t, "exo_status", map[string]interface{}{
+	h := makeToolServer(t, "exo_status", map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
@@ -56,7 +56,7 @@ func TestExoStatus_AllFieldsParsed(t *testing.T) {
 
 // TestExoStatus_DisabledCluster verifies parsing when exoskeleton is not enabled.
 func TestExoStatus_DisabledCluster(t *testing.T) {
-	h := makeToolServer(t, "exo_status", map[string]interface{}{
+	h := makeToolServer(t, "exo_status", map[string]any{
 		"enabled":             false,
 		"cleanup_on_undeploy": false,
 		"postgres_available":  false,
@@ -98,7 +98,7 @@ func TestExoStatus_ToolError(t *testing.T) {
 
 // TestExoRegistration_FoundWithData verifies a registered workflow with data fields.
 func TestExoRegistration_FoundWithData(t *testing.T) {
-	h := makeToolServer(t, "exo_registration", map[string]interface{}{
+	h := makeToolServer(t, "exo_registration", map[string]any{
 		"found":     true,
 		"namespace": "prod",
 		"name":      "api-gateway",
@@ -148,9 +148,9 @@ func TestExoRegistration_ToolError(t *testing.T) {
 // TestWfRemove_WithExoCleanupDetails verifies WfRemoveResult parses
 // exo cleanup fields from the numeric deleted format.
 func TestWfRemove_WithExoCleanupDetails(t *testing.T) {
-	h := makeToolServer(t, "wf_remove", map[string]interface{}{
+	h := makeToolServer(t, "wf_remove", map[string]any{
 		"deleted":             5,
-		"exo_cleaned_up":     true,
+		"exo_cleaned_up":      true,
 		"exo_cleanup_details": "postgres: schema api_gw dropped, role api_gw_user dropped; rustfs: bucket api-gw removed, IAM user removed; nats: auth entries cleared",
 	}, false)
 	defer h.Close()
@@ -173,7 +173,7 @@ func TestWfRemove_WithExoCleanupDetails(t *testing.T) {
 // TestWfRemove_WithoutExoCleanup verifies WfRemoveResult when exoskeleton
 // cleanup did not run.
 func TestWfRemove_WithoutExoCleanup(t *testing.T) {
-	h := makeToolServer(t, "wf_remove", map[string]interface{}{
+	h := makeToolServer(t, "wf_remove", map[string]any{
 		"deleted": 2,
 	}, false)
 	defer h.Close()
@@ -195,7 +195,7 @@ func TestWfRemove_WithoutExoCleanup(t *testing.T) {
 
 // TestWfDescribe_FullResponse verifies WfDescribe parses all fields.
 func TestWfDescribe_FullResponse(t *testing.T) {
-	h := makeToolServer(t, "wf_describe", map[string]interface{}{
+	h := makeToolServer(t, "wf_describe", map[string]any{
 		"name":      "my-wf",
 		"namespace": "staging",
 		"ready":     true,
@@ -205,7 +205,7 @@ func TestWfDescribe_FullResponse(t *testing.T) {
 		"annotations": map[string]string{
 			"tentacular.io/deployer": "alice@example.com",
 		},
-		"nodes": []map[string]interface{}{
+		"nodes": []map[string]any{
 			{"name": "pod-abc", "phase": "Running", "ready": true, "nodeName": "node-1"},
 		},
 		"triggers": []string{"cron:*/5 * * * *"},
@@ -235,7 +235,7 @@ func TestWfDescribe_FullResponse(t *testing.T) {
 
 // TestWfDescribe_MinimalResponse verifies WfDescribe handles minimal response.
 func TestWfDescribe_MinimalResponse(t *testing.T) {
-	h := makeToolServer(t, "wf_describe", map[string]interface{}{
+	h := makeToolServer(t, "wf_describe", map[string]any{
 		"name":      "bare-wf",
 		"namespace": "default",
 		"ready":     false,

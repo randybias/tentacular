@@ -47,9 +47,6 @@ install: build-cli ## Build and install tntc to ~/.local/bin/
 
 release: ## Tag and push to trigger GHA release workflow (usage: make release TAG=v0.1.0)
 	@test -n "$(TAG)" || (echo "usage: make release TAG=v0.1.0" && exit 1)
-	echo "$(TAG)" > stable.txt
-	git add stable.txt
-	git commit -m "release: $(TAG)"
 	git tag $(TAG)
 	git push origin main $(TAG)
 

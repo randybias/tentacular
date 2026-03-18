@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -116,12 +117,12 @@ func checkSharedSecrets(workflowDir string) map[string]string {
 	result := make(map[string]string)
 
 	secretsFile := filepath.Join(workflowDir, ".secrets.yaml")
-	data, err := os.ReadFile(secretsFile)
+	data, err := os.ReadFile(secretsFile) //nolint:gosec // secretsFile is derived from workflow directory
 	if err != nil {
 		return result
 	}
 
-	var secrets map[string]interface{}
+	var secrets map[string]any
 	if err := yaml.Unmarshal(data, &secrets); err != nil {
 		return result
 	}
@@ -179,13 +180,13 @@ func runSecretsInit(cmd *cobra.Command, args []string) error {
 
 	if !force {
 		if _, err := os.Stat(dst); err == nil {
-			return fmt.Errorf(".secrets.yaml already exists (use --force to overwrite)")
+			return errors.New(".secrets.yaml already exists (use --force to overwrite)")
 		}
 	}
 
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) //nolint:gosec // src is derived from workflow directory
 	if err != nil {
-		return fmt.Errorf("no .secrets.yaml.example found -- create one first")
+		return errors.New("no .secrets.yaml.example found -- create one first")
 	}
 
 	// Uncomment the example (remove leading "# " from each line)
@@ -195,7 +196,7 @@ func runSecretsInit(cmd *cobra.Command, args []string) error {
 		uncommented = append(uncommented, strings.TrimPrefix(line, "# "))
 	}
 
-	if err := os.WriteFile(dst, []byte(strings.Join(uncommented, "\n")), 0o644); err != nil {
+	if err := os.WriteFile(dst, []byte(strings.Join(uncommented, "\n")), 0o644); err != nil { //nolint:gosec // non-sensitive secrets template
 		return fmt.Errorf("writing .secrets.yaml: %w", err)
 	}
 
@@ -208,19 +209,19 @@ func runSecretsInit(cmd *cobra.Command, args []string) error {
 // for each key in .secrets.yaml.example at the given directory.
 func runSecretsInitShared(dir string, force bool) error {
 	src := filepath.Join(dir, ".secrets.yaml.example")
-	data, err := os.ReadFile(src)
+	data, err := os.ReadFile(src) //nolint:gosec // src is derived from workflow directory
 	if err != nil {
 		return fmt.Errorf("no .secrets.yaml.example found at %s -- create one first", dir)
 	}
 
 	// Parse the example to get secret names (keys are service names)
-	var example map[string]interface{}
+	var example map[string]any
 	if err := yaml.Unmarshal(data, &example); err != nil {
 		return fmt.Errorf("parsing .secrets.yaml.example: %w", err)
 	}
 
 	sharedDir := filepath.Join(dir, ".secrets")
-	if err := os.MkdirAll(sharedDir, 0o755); err != nil {
+	if err := os.MkdirAll(sharedDir, 0o755); err != nil { //nolint:gosec // non-sensitive directory
 		return fmt.Errorf("creating .secrets/ directory: %w", err)
 	}
 
@@ -277,7 +278,7 @@ func scanRequiredSecrets(workflowDir string) (map[string]bool, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ts") {
 			continue
 		}
-		content, err := os.ReadFile(filepath.Join(nodesDir, entry.Name()))
+		content, err := os.ReadFile(filepath.Join(nodesDir, entry.Name())) //nolint:gosec // nodesDir is workflow directory
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", entry.Name(), err)
 		}
@@ -289,7 +290,7 @@ func scanRequiredSecrets(workflowDir string) (map[string]bool, error) {
 
 	// Also scan workflow.yaml contract dependencies for auth.secret fields.
 	wfPath := filepath.Join(workflowDir, "workflow.yaml")
-	if data, err := os.ReadFile(wfPath); err == nil {
+	if data, err := os.ReadFile(wfPath); err == nil { //nolint:gosec // wfPath is derived from workflow directory
 		contractSecrets, scanErr := scanContractSecrets(data)
 		if scanErr == nil {
 			for k := range contractSecrets {
@@ -347,8 +348,8 @@ func readProvisionedSecrets(workflowDir string) (map[string]bool, string) {
 
 	// Check .secrets.yaml
 	yamlFile := filepath.Join(workflowDir, ".secrets.yaml")
-	if data, err := os.ReadFile(yamlFile); err == nil {
-		var secrets map[string]interface{}
+	if data, err := os.ReadFile(yamlFile); err == nil { //nolint:gosec // yamlFile is derived from workflow directory
+		var secrets map[string]any
 		if err := parseYAMLMap(data, &secrets); err == nil {
 			for k := range secrets {
 				provisioned[k] = true
@@ -372,14 +373,14 @@ func readProvisionedSecrets(workflowDir string) (map[string]bool, string) {
 }
 
 // parseYAMLMap parses YAML data into a map.
-func parseYAMLMap(data []byte, out *map[string]interface{}) error {
+func parseYAMLMap(data []byte, out *map[string]any) error {
 	return yaml.Unmarshal(data, out)
 }
 
 // resolveSharedSecrets resolves $shared.<name> references in secrets map.
 // Shared secrets live at <workspace>/.secrets/<name> where workspace is
 // read from config, or falls back to git root detection.
-func resolveSharedSecrets(secrets map[string]interface{}, workflowDir string) error {
+func resolveSharedSecrets(secrets map[string]any, workflowDir string) error {
 	// Check if any secrets actually use $shared references
 	hasShared := false
 	for _, v := range secrets {
@@ -400,7 +401,7 @@ func resolveSharedSecrets(secrets map[string]interface{}, workflowDir string) er
 	} else {
 		repoRoot = findRepoRoot(workflowDir)
 		if repoRoot == "" {
-			return fmt.Errorf("cannot resolve $shared secrets: no workspace configured and no git repository found; set 'workspace' in ~/.tentacular/config.yaml or run 'tntc init-workspace'")
+			return errors.New("cannot resolve $shared secrets: no workspace configured and no git repository found; set 'workspace' in ~/.tentacular/config.yaml or run 'tntc init-workspace'")
 		}
 		fmt.Fprintf(os.Stderr, "Warning: falling back to git root for $shared secrets. Set 'workspace' in config.\n")
 	}
@@ -422,7 +423,7 @@ func resolveSharedSecrets(secrets map[string]interface{}, workflowDir string) er
 			return fmt.Errorf("shared secret %q referenced but not found at %s/.secrets/%s", strVal, repoRoot, sharedName)
 		}
 		// Try JSON parse first, fall back to plain string
-		var parsed interface{}
+		var parsed any
 		if err := json.Unmarshal(content, &parsed); err == nil {
 			secrets[k] = parsed
 		} else {

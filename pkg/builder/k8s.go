@@ -32,7 +32,7 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 
 	// Read workflow.yaml
 	workflowPath := filepath.Join(workflowDir, "workflow.yaml")
-	workflowContent, err := os.ReadFile(workflowPath)
+	workflowContent, err := os.ReadFile(workflowPath) //nolint:gosec // reading user-specified workflow files
 	if err != nil {
 		return Manifest{}, fmt.Errorf("reading workflow.yaml: %w", err)
 	}
@@ -48,9 +48,9 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 				continue
 			}
 			nodePath := filepath.Join(nodesDir, entry.Name())
-			nodeContent, err := os.ReadFile(nodePath)
-			if err != nil {
-				return Manifest{}, fmt.Errorf("reading %s: %w", nodePath, err)
+			nodeContent, readErr := os.ReadFile(nodePath) //nolint:gosec // reading user-specified workflow files
+			if readErr != nil {
+				return Manifest{}, fmt.Errorf("reading %s: %w", nodePath, readErr)
 			}
 			// Use __ instead of / since K8s ConfigMap keys cannot contain slashes
 			dataKey := "nodes__" + entry.Name()
@@ -135,12 +135,12 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 	if meta != nil {
 		if meta.Owner != "" {
 			if v := sanitizeAnnotationValue(meta.Owner); v != "" {
-				lines = append(lines, fmt.Sprintf("    tentacular.dev/owner: %s", v))
+				lines = append(lines, "    tentacular.dev/owner: "+v)
 			}
 		}
 		if meta.Team != "" {
 			if v := sanitizeAnnotationValue(meta.Team); v != "" {
-				lines = append(lines, fmt.Sprintf("    tentacular.dev/team: %s", v))
+				lines = append(lines, "    tentacular.dev/team: "+v)
 			}
 		}
 		if len(meta.Tags) > 0 {
@@ -151,12 +151,12 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 				}
 			}
 			if len(cleanTags) > 0 {
-				lines = append(lines, fmt.Sprintf("    tentacular.dev/tags: %s", strings.Join(cleanTags, ",")))
+				lines = append(lines, "    tentacular.dev/tags: "+strings.Join(cleanTags, ","))
 			}
 		}
 		if meta.Environment != "" {
 			if v := sanitizeAnnotationValue(meta.Environment); v != "" {
-				lines = append(lines, fmt.Sprintf("    tentacular.dev/environment: %s", v))
+				lines = append(lines, "    tentacular.dev/environment: "+v)
 			}
 		}
 	}
@@ -180,7 +180,7 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 
 // GenerateK8sManifests produces K8s manifests for deploying a workflow.
 func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts DeployOptions) []Manifest {
-	var manifests []Manifest
+	manifests := make([]Manifest, 0, 2)
 
 	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
     app.kubernetes.io/version: "%s"
@@ -200,7 +200,7 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 
 	// Build ConfigMap items to map flattened keys back to proper paths
 	// K8s ConfigMap keys cannot contain slashes, so we use __ as separator
-	var configMapItems []string
+	configMapItems := make([]string, 0, 1+len(wf.Nodes))
 	configMapItems = append(configMapItems, "              - key: workflow.yaml\n                path: workflow.yaml")
 
 	// Sort node names for deterministic output
@@ -246,7 +246,7 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	if len(denoFlags) > 0 {
 		var lines []string
 		lines = append(lines, "          command:")
-		lines = append(lines, fmt.Sprintf("            - %s", denoFlags[0])) // "deno"
+		lines = append(lines, "            - "+denoFlags[0]) // "deno"
 		if len(denoFlags) > 1 {
 			lines = append(lines, "          args:")
 			for _, arg := range denoFlags[1:] {
@@ -254,7 +254,7 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 				if _, err := fmt.Sscanf(arg, "%d", new(int)); err == nil {
 					lines = append(lines, fmt.Sprintf("            - \"%s\"", arg))
 				} else {
-					lines = append(lines, fmt.Sprintf("            - %s", arg))
+					lines = append(lines, "            - "+arg)
 				}
 			}
 		}
@@ -374,4 +374,3 @@ metadata:
 
 	return manifests
 }
-

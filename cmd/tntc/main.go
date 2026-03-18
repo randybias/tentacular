@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/spf13/cobra"
+
 	"github.com/randybias/tentacular/pkg/cli"
 	"github.com/randybias/tentacular/pkg/version"
-	"github.com/spf13/cobra"
 )
 
 func main() {

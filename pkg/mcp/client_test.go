@@ -195,7 +195,7 @@ func TestNewClient_DefaultTimeout(t *testing.T) {
 func TestCallTool_MultipleCalls(t *testing.T) {
 	callCount := 0
 	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
-		"counter": func(args map[string]any) (string, bool) {
+		"counter": func(_ map[string]any) (string, bool) {
 			callCount++
 			return `{"count":1}`, false
 		},
@@ -203,7 +203,7 @@ func TestCallTool_MultipleCalls(t *testing.T) {
 	defer srv.Close()
 	defer func() { _ = client.Close() }()
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		_, err := client.CallTool(context.Background(), "counter", nil)
 		if err != nil {
 			t.Fatalf("call %d failed: %v", i, err)

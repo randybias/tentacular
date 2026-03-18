@@ -113,13 +113,13 @@ func TestEmitLiveResultPass(t *testing.T) {
 			StartedAt:  startedAt.Format(time.RFC3339),
 			DurationMs: time.Since(startedAt).Milliseconds(),
 		},
-		Execution: map[string]interface{}{"success": true},
+		Execution: map[string]any{"success": true},
 	}
 	if err := EmitResult(cmd, result, &buf); err != nil {
 		t.Fatalf("EmitResult failed: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v\nOutput: %s", err, buf.String())
 	}
@@ -156,14 +156,14 @@ func TestEmitLiveResultFailIncludesHints(t *testing.T) {
 		t.Fatalf("EmitResult failed: %v", err)
 	}
 
-	var parsed map[string]interface{}
+	var parsed map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &parsed); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
 	if parsed["status"] != "fail" {
 		t.Errorf("expected status fail, got %v", parsed["status"])
 	}
-	hints, ok := parsed["hints"].([]interface{})
+	hints, ok := parsed["hints"].([]any)
 	if !ok || len(hints) == 0 {
 		t.Fatal("expected hints array with entries")
 	}
@@ -199,7 +199,6 @@ func TestDeployResultFields(t *testing.T) {
 	result := DeployResult{
 		WorkflowName: "sep-tracker",
 		Namespace:    "dev-ns",
-		MCPClient:    nil, // nil is valid for unit test
 	}
 	if result.WorkflowName != "sep-tracker" {
 		t.Errorf("expected sep-tracker, got %s", result.WorkflowName)

@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
+
+	"github.com/spf13/cobra"
 
 	"github.com/randybias/tentacular/pkg/spec"
-	"github.com/spf13/cobra"
 )
 
 func NewVisualizeCmd() *cobra.Command {
@@ -33,7 +35,7 @@ func runVisualize(cmd *cobra.Command, args []string) error {
 	write, _ := cmd.Flags().GetBool("write")
 
 	specPath := filepath.Join(dir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) //nolint:gosec // specPath is derived from workflow directory
 	if err != nil {
 		return fmt.Errorf("reading %s: %w", specPath, err)
 	}
@@ -56,7 +58,7 @@ func runVisualize(cmd *cobra.Command, args []string) error {
 	if write {
 		// Write Mermaid diagram
 		mermaidPath := filepath.Join(dir, "workflow-diagram.md")
-		if err := os.WriteFile(mermaidPath, []byte(mermaidContent), 0644); err != nil {
+		if err := os.WriteFile(mermaidPath, []byte(mermaidContent), 0o644); err != nil { //nolint:gosec // non-sensitive diagram file
 			return fmt.Errorf("writing %s: %w", mermaidPath, err)
 		}
 		fmt.Printf("✓ Wrote Mermaid diagram to %s\n", mermaidPath)
@@ -64,7 +66,7 @@ func runVisualize(cmd *cobra.Command, args []string) error {
 		// Write contract summary if available
 		if contractSummary != "" {
 			summaryPath := filepath.Join(dir, "contract-summary.md")
-			if err := os.WriteFile(summaryPath, []byte(contractSummary), 0644); err != nil {
+			if err := os.WriteFile(summaryPath, []byte(contractSummary), 0o644); err != nil { //nolint:gosec // non-sensitive diagram file
 				return fmt.Errorf("writing %s: %w", summaryPath, err)
 			}
 			fmt.Printf("✓ Wrote contract summary to %s\n", summaryPath)
@@ -161,7 +163,7 @@ func generateContractSummary(wf *spec.Workflow) string {
 		buf.WriteString("| Host | Port | Protocol |\n")
 		buf.WriteString("|------|------|----------|\n")
 		for _, rule := range egressRules {
-			portStr := fmt.Sprintf("%d", rule.Port)
+			portStr := strconv.Itoa(rule.Port)
 			if rule.Port == 0 {
 				portStr = "any"
 			}

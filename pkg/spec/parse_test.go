@@ -179,7 +179,7 @@ func TestConfigToMapMerged(t *testing.T) {
 	cfg := WorkflowConfig{
 		Timeout: "30s",
 		Retries: 2,
-		Extras:  map[string]interface{}{"nats_url": "test"},
+		Extras:  map[string]any{"nats_url": "test"},
 	}
 	m := cfg.ToMap()
 	if m["timeout"] != "30s" {
@@ -195,7 +195,7 @@ func TestConfigToMapMerged(t *testing.T) {
 
 func TestConfigToMapOmitsZero(t *testing.T) {
 	cfg := WorkflowConfig{
-		Extras: map[string]interface{}{"nats_url": "test"},
+		Extras: map[string]any{"nats_url": "test"},
 	}
 	m := cfg.ToMap()
 	if _, ok := m["timeout"]; ok {
@@ -956,7 +956,7 @@ contract:
           - "443/TCP"
 `
 	wf, errs := Parse([]byte(yaml))
-	
+
 	// Should either produce an error OR silently ignore (depending on implementation)
 	if len(errs) > 0 {
 		// Good - old key produces error
@@ -968,7 +968,7 @@ contract:
 	if wf.Contract != nil && wf.Contract.NetworkPolicy != nil {
 		t.Error("old networkPolicyOverride key should be rejected or ignored, but was parsed as NetworkPolicy")
 	}
-	
+
 	t.Logf("Old key silently ignored (acceptable)")
 }
 

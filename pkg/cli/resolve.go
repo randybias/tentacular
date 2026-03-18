@@ -1,14 +1,16 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
+
+	"github.com/randybias/tentacular/pkg/mcp"
 )
 
 // flagString returns the value of a named flag, traversing parent commands for persistent flags.
@@ -53,7 +55,7 @@ func resolveNamespace(cmd *cobra.Command, workflowDir string) string {
 // readWorkflowNamespace reads deployment.namespace from workflow.yaml without full validation.
 func readWorkflowNamespace(workflowDir string) string {
 	specPath := filepath.Join(workflowDir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) //nolint:gosec // specPath is derived from workflow directory
 	if err != nil {
 		return ""
 	}
@@ -156,7 +158,7 @@ func resolveOIDCToken(envName string) (string, error) {
 
 	// Token expired -- try refresh
 	if store.RefreshToken == "" {
-		return "", fmt.Errorf("OIDC token expired and no refresh token available; run 'tntc login'")
+		return "", errors.New("OIDC token expired and no refresh token available; run 'tntc login'")
 	}
 
 	refreshed, err := RefreshOIDCToken(tokenEnv, store)
@@ -201,7 +203,7 @@ func resolveStaticToken(envName string, cfg TentacularConfig) (string, error) {
 
 // readTokenFile reads a bearer token from a file, trimming whitespace.
 func readTokenFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // path is a known config file
 	if err != nil {
 		return "", err
 	}
@@ -216,7 +218,7 @@ func requireMCPClient(cmd *cobra.Command) (*mcp.Client, error) {
 		return nil, err
 	}
 	if client == nil {
-		return nil, fmt.Errorf("MCP server not configured; set mcp_endpoint in your environment config or TNTC_MCP_ENDPOINT")
+		return nil, errors.New("MCP server not configured; set mcp_endpoint in your environment config or TNTC_MCP_ENDPOINT")
 	}
 	return client, nil
 }

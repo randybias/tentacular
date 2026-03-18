@@ -47,9 +47,6 @@ release:
   draft: false
   prerelease: auto
   name_template: "{{.Tag}}"
-  extra_files:
-    - glob: stable.txt
-
 changelog:
   sort: asc
   use: github

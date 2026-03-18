@@ -1,16 +1,19 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/randybias/tentacular/pkg/builder"
 	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/randybias/tentacular/pkg/spec"
-	"github.com/spf13/cobra"
 )
 
 func NewBuildCmd() *cobra.Command {
@@ -39,7 +42,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 
 	specPath := filepath.Join(absDir, "workflow.yaml")
-	data, err := os.ReadFile(specPath)
+	data, err := os.ReadFile(specPath) //nolint:gosec // reading user-specified workflow file
 	if err != nil {
 		return fmt.Errorf("reading workflow spec: %w", err)
 	}
@@ -78,13 +81,13 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	engineDir := findEngineDir()
 	if engineDir == "" {
-		return fmt.Errorf("cannot find engine directory")
+		return errors.New("cannot find engine directory")
 	}
 
 	// Generate Dockerfile
 	dockerfile := builder.GenerateDockerfile()
 	dockerfilePath := filepath.Join(absDir, "Dockerfile.tentacular")
-	if err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644); err != nil {
+	if err := os.WriteFile(dockerfilePath, []byte(dockerfile), 0o644); err != nil { //nolint:gosec // 0o644 for generated Dockerfile
 		return fmt.Errorf("writing Dockerfile: %w", err)
 	}
 	defer func() { _ = os.Remove(dockerfilePath) }()
@@ -104,7 +107,7 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	}
 	buildArgs = append(buildArgs, absDir)
 
-	buildCmd := exec.Command("docker", buildArgs...)
+	buildCmd := exec.CommandContext(context.Background(), "docker", buildArgs...) //nolint:gosec // docker build with user-specified args
 	buildCmd.Stdout = os.Stdout
 	buildCmd.Stderr = os.Stderr
 
@@ -130,10 +133,10 @@ func runBuild(cmd *cobra.Command, args []string) error {
 	// Push if requested
 	if push {
 		if registry == "" {
-			return fmt.Errorf("--push requires --registry (-r) to be set")
+			return errors.New("--push requires --registry (-r) to be set")
 		}
 		fmt.Printf("Pushing image %s...\n", tag)
-		pushCmd := exec.Command("docker", "push", tag)
+		pushCmd := exec.CommandContext(context.Background(), "docker", "push", tag) //nolint:gosec // docker push with user-specified tag
 		pushCmd.Stdout = os.Stdout
 		pushCmd.Stderr = os.Stderr
 		if err := pushCmd.Run(); err != nil {
@@ -144,11 +147,11 @@ func runBuild(cmd *cobra.Command, args []string) error {
 
 	// Save image tag to .tentacular/base-image.txt (relative to workflow directory)
 	tentacularDir := filepath.Join(absDir, ".tentacular")
-	if err := os.MkdirAll(tentacularDir, 0o755); err != nil {
+	if err := os.MkdirAll(tentacularDir, 0o755); err != nil { //nolint:gosec // 0o755 for .tentacular directory
 		return fmt.Errorf("creating .tentacular directory: %w", err)
 	}
 	tagFilePath := filepath.Join(tentacularDir, "base-image.txt")
-	if err := os.WriteFile(tagFilePath, []byte(tag), 0o644); err != nil {
+	if err := os.WriteFile(tagFilePath, []byte(tag), 0o644); err != nil { //nolint:gosec // 0o644 for base-image.txt
 		return fmt.Errorf("writing base-image.txt: %w", err)
 	}
 
@@ -156,6 +159,6 @@ func runBuild(cmd *cobra.Command, args []string) error {
 }
 
 func copyDir(src, dst string) error {
-	cmd := exec.Command("cp", "-r", src, dst)
+	cmd := exec.CommandContext(context.Background(), "cp", "-r", src, dst) //nolint:gosec // copying engine directory with known paths
 	return cmd.Run()
 }

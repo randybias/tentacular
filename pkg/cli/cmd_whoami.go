@@ -27,8 +27,8 @@ type whoamiResult struct {
 	Issuer      string `json:"issuer,omitempty"`
 	Provider    string `json:"provider,omitempty"`
 	Environment string `json:"environment"`
-	Expired     bool   `json:"expired"`
 	ExpiresAt   string `json:"expires_at,omitempty"`
+	Expired     bool   `json:"expired"`
 }
 
 func runWhoami(cmd *cobra.Command, args []string) error {

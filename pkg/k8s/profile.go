@@ -15,27 +15,27 @@ import (
 // Written to .tentacular/envprofiles/<env>.md and <env>.json.
 type ClusterProfile struct {
 	GeneratedAt    time.Time          `json:"generatedAt"          yaml:"generatedAt"`
+	LimitRange     *LimitRangeSummary `json:"limitRange,omitempty" yaml:"limitRange,omitempty"`
+	Quota          *QuotaSummary      `json:"quota,omitempty"      yaml:"quota,omitempty"`
+	PodSecurity    string             `json:"podSecurity"          yaml:"podSecurity"`
+	RWXNote        string             `json:"rwxNote"              yaml:"rwxNote"`
+	Namespace      string             `json:"namespace"            yaml:"namespace"`
+	Distribution   string             `json:"distribution"         yaml:"distribution"`
 	Environment    string             `json:"environment"          yaml:"environment"`
 	K8sVersion     string             `json:"k8sVersion"           yaml:"k8sVersion"`
-	Distribution   string             `json:"distribution"         yaml:"distribution"`
-	Nodes          []NodeInfo         `json:"nodes"                yaml:"nodes"`
-	RuntimeClasses []RuntimeClassInfo `json:"runtimeClasses"       yaml:"runtimeClasses"`
-	GVisor         bool               `json:"gvisor"               yaml:"gvisor"`
 	CNI            CNIInfo            `json:"cni"                  yaml:"cni"`
-	NetworkPolicy  NetPolInfo         `json:"networkPolicy"        yaml:"networkPolicy"`
-	StorageClasses []StorageClassInfo `json:"storageClasses"       yaml:"storageClasses"`
-	RWXNote        string             `json:"rwxNote"              yaml:"rwxNote"`
+	Guidance       []string           `json:"guidance"             yaml:"guidance"`
 	CSIDrivers     []string           `json:"csiDrivers"           yaml:"csiDrivers"`
 	Ingress        []string           `json:"ingress"              yaml:"ingress"`
+	StorageClasses []StorageClassInfo `json:"storageClasses"       yaml:"storageClasses"`
+	RuntimeClasses []RuntimeClassInfo `json:"runtimeClasses"       yaml:"runtimeClasses"`
+	Nodes          []NodeInfo         `json:"nodes"                yaml:"nodes"`
 	Extensions     ExtensionSet       `json:"extensions"           yaml:"extensions"`
-	Namespace      string             `json:"namespace"            yaml:"namespace"`
-	Quota          *QuotaSummary      `json:"quota,omitempty"      yaml:"quota,omitempty"`
-	LimitRange     *LimitRangeSummary `json:"limitRange,omitempty" yaml:"limitRange,omitempty"`
-	PodSecurity    string             `json:"podSecurity"          yaml:"podSecurity"`
-	Guidance       []string           `json:"guidance"             yaml:"guidance"`
+	NetworkPolicy  NetPolInfo         `json:"networkPolicy"        yaml:"networkPolicy"`
+	GVisor         bool               `json:"gvisor"               yaml:"gvisor"`
 }
 
-// NodeInfo summarises a single cluster node.
+// NodeInfo summarizes a single cluster node.
 type NodeInfo struct {
 	Name   string            `json:"name"   yaml:"name"`
 	Arch   string            `json:"arch"   yaml:"arch"`
@@ -70,14 +70,15 @@ type NetPolInfo struct {
 type StorageClassInfo struct {
 	Name                 string `json:"name"                 yaml:"name"`
 	Provisioner          string `json:"provisioner"          yaml:"provisioner"`
-	IsDefault            bool   `json:"isDefault"            yaml:"isDefault"`
 	ReclaimPolicy        string `json:"reclaimPolicy"        yaml:"reclaimPolicy"`
+	IsDefault            bool   `json:"isDefault"            yaml:"isDefault"`
 	AllowVolumeExpansion bool   `json:"allowVolumeExpansion" yaml:"allowVolumeExpansion"`
 	RWXCapable           bool   `json:"rwxCapable"           yaml:"rwxCapable"` // inferred from provisioner name; see RWXNote
 }
 
 // ExtensionSet records which well-known CRD-based extensions are installed.
 type ExtensionSet struct {
+	OtherCRDGroups  []string `json:"otherCRDGroups"  yaml:"otherCRDGroups"`
 	Istio           bool     `json:"istio"           yaml:"istio"`
 	CertManager     bool     `json:"certManager"     yaml:"certManager"`
 	PrometheusOp    bool     `json:"prometheusOp"    yaml:"prometheusOp"`
@@ -85,7 +86,6 @@ type ExtensionSet struct {
 	ArgoCD          bool     `json:"argoCD"          yaml:"argoCD"`
 	GatewayAPI      bool     `json:"gatewayAPI"      yaml:"gatewayAPI"`
 	MetricsServer   bool     `json:"metricsServer"   yaml:"metricsServer"`
-	OtherCRDGroups  []string `json:"otherCRDGroups"  yaml:"otherCRDGroups"`
 }
 
 // QuotaSummary contains resource quota limits for the target namespace.
@@ -303,7 +303,7 @@ func (p *ClusterProfile) Markdown() string {
 	if len(p.RuntimeClasses) == 0 {
 		fmt.Fprintf(&sb, "- **RuntimeClasses:** none\n")
 	} else {
-		var rcs []string
+		rcs := make([]string, 0, len(p.RuntimeClasses))
 		for _, rc := range p.RuntimeClasses {
 			rcs = append(rcs, fmt.Sprintf("%s (%s)", rc.Name, rc.Handler))
 		}

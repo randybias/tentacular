@@ -74,10 +74,10 @@ func TestDeploymentAnnotationsOwnerTruncated(t *testing.T) {
 	// This tests that a very long owner string doesn't cause a panic
 	longOwner := strings.Repeat("a", 250)
 	wf := &spec.Workflow{
-		Name:    "long-owner-wf",
-		Version: "1.0",
+		Name:     "long-owner-wf",
+		Version:  "1.0",
 		Triggers: []spec.Trigger{{Type: "manual"}},
-		Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
 		Metadata: &spec.WorkflowMetadata{
 			Owner: longOwner,
 		},
@@ -137,10 +137,10 @@ func TestDeploymentAnnotationsEmptyMetadata(t *testing.T) {
 // TestDeploymentAnnotationsSpecialChars verifies special characters in annotation values are safe.
 func TestDeploymentAnnotationsSpecialChars(t *testing.T) {
 	wf := &spec.Workflow{
-		Name:    "special-chars-wf",
-		Version: "1.0",
+		Name:     "special-chars-wf",
+		Version:  "1.0",
 		Triggers: []spec.Trigger{{Type: "manual"}},
-		Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
 		Metadata: &spec.WorkflowMetadata{
 			Owner: "team/platform & ops",
 			Team:  "ops & infra <core>",
@@ -157,8 +157,8 @@ func TestDeploymentAnnotationsSpecialChars(t *testing.T) {
 // TestDeploymentAnnotationsPipelineSummary verifies that pipeline summary is derived from edges.
 func TestDeploymentAnnotationsPipelineSummary(t *testing.T) {
 	wf := &spec.Workflow{
-		Name:    "pipeline-wf",
-		Version: "1.0",
+		Name:     "pipeline-wf",
+		Version:  "1.0",
 		Triggers: []spec.Trigger{{Type: "manual"}},
 		Nodes: map[string]spec.NodeSpec{
 			"fetch":     {Path: "./nodes/fetch.ts"},
@@ -206,10 +206,10 @@ func TestDeploymentAnnotationsTriggerSummaryCron(t *testing.T) {
 // TestDeploymentAnnotationsDepsExtracted verifies dependency names appear in annotations.
 func TestDeploymentAnnotationsDepsExtracted(t *testing.T) {
 	wf := &spec.Workflow{
-		Name:    "deps-meta-wf",
-		Version: "1.0",
+		Name:     "deps-meta-wf",
+		Version:  "1.0",
 		Triggers: []spec.Trigger{{Type: "manual"}},
-		Nodes:   map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
 		Contract: &spec.Contract{
 			Dependencies: map[string]spec.Dependency{
 				"github": {Protocol: "https", Host: "api.github.com", Port: 443},

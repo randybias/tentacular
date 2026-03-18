@@ -7,8 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/spf13/cobra"
+
+	"github.com/randybias/tentacular/pkg/mcp"
 )
 
 // newTestCmd creates a minimal cobra command for resolve tests.

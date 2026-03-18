@@ -220,12 +220,12 @@ func TestProjectEnvOverridesUserEnv(t *testing.T) {
 }
 
 func TestApplyConfigOverrides(t *testing.T) {
-	wfConfig := map[string]interface{}{
+	wfConfig := map[string]any{
 		"pg_host":     "default-host",
 		"pg_port":     5432,
 		"pg_database": "appdb",
 	}
-	overrides := map[string]interface{}{
+	overrides := map[string]any{
 		"pg_host": "staging-host",
 		"pg_port": 15432,
 	}
@@ -245,7 +245,7 @@ func TestApplyConfigOverrides(t *testing.T) {
 }
 
 func TestApplyConfigOverridesEmpty(t *testing.T) {
-	wfConfig := map[string]interface{}{
+	wfConfig := map[string]any{
 		"pg_host": "original-host",
 	}
 
@@ -256,7 +256,7 @@ func TestApplyConfigOverridesEmpty(t *testing.T) {
 	}
 
 	// Empty overrides should be safe
-	ApplyConfigOverrides(wfConfig, map[string]interface{}{})
+	ApplyConfigOverrides(wfConfig, map[string]any{})
 	if wfConfig["pg_host"] != "original-host" {
 		t.Errorf("expected original-host preserved, got %v", wfConfig["pg_host"])
 	}
@@ -382,14 +382,14 @@ func TestResolveEnvironmentEquivalentToLoadEnvironment(t *testing.T) {
 
 func TestConfigOverridesShallowMerge(t *testing.T) {
 	// ApplyConfigOverrides does a shallow merge: nested maps are replaced, not deep-merged
-	wfConfig := map[string]interface{}{
-		"database": map[string]interface{}{
+	wfConfig := map[string]any{
+		"database": map[string]any{
 			"host": "original-host",
 			"port": 5432,
 		},
 	}
-	overrides := map[string]interface{}{
-		"database": map[string]interface{}{
+	overrides := map[string]any{
+		"database": map[string]any{
 			"host": "new-host",
 			// port is not specified -- shallow merge replaces entire "database" key
 		},
@@ -397,7 +397,7 @@ func TestConfigOverridesShallowMerge(t *testing.T) {
 
 	ApplyConfigOverrides(wfConfig, overrides)
 
-	db, ok := wfConfig["database"].(map[string]interface{})
+	db, ok := wfConfig["database"].(map[string]any)
 	if !ok {
 		t.Fatal("expected database to be a map")
 	}
@@ -411,10 +411,10 @@ func TestConfigOverridesShallowMerge(t *testing.T) {
 }
 
 func TestConfigOverridesAddsNewKeys(t *testing.T) {
-	wfConfig := map[string]interface{}{
+	wfConfig := map[string]any{
 		"existing_key": "value",
 	}
-	overrides := map[string]interface{}{
+	overrides := map[string]any{
 		"new_key": "new_value",
 	}
 
@@ -466,7 +466,7 @@ func TestEnvironmentConfigOverridesFieldTypes(t *testing.T) {
 	if env.ConfigOverrides["int_val"] != 42 {
 		t.Errorf("expected int_val 42, got %v", env.ConfigOverrides["int_val"])
 	}
-	if env.ConfigOverrides["bool_val"] != true {
+	if bv, ok := env.ConfigOverrides["bool_val"].(bool); !ok || !bv {
 		t.Errorf("expected bool_val true, got %v", env.ConfigOverrides["bool_val"])
 	}
 }

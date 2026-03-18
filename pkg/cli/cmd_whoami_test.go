@@ -43,7 +43,7 @@ func setupWhoamiEnv(t *testing.T, token *OIDCTokenStore) func() {
 }
 
 func TestWhoami_TextOutput_AllFields(t *testing.T) {
-	jwt := buildTestJWT(map[string]interface{}{
+	jwt := buildTestJWT(map[string]any{
 		"sub":                "user-123",
 		"email":              "alice@example.com",
 		"name":               "Alice Smith",
@@ -98,7 +98,7 @@ func TestWhoami_TextOutput_AllFields(t *testing.T) {
 }
 
 func TestWhoami_JSONOutput(t *testing.T) {
-	jwt := buildTestJWT(map[string]interface{}{
+	jwt := buildTestJWT(map[string]any{
 		"sub":                "user-456",
 		"email":              "bob@example.com",
 		"name":               "Bob Jones",
@@ -183,7 +183,7 @@ func TestWhoami_NoToken(t *testing.T) {
 }
 
 func TestWhoami_ExpiredToken(t *testing.T) {
-	jwt := buildTestJWT(map[string]interface{}{
+	jwt := buildTestJWT(map[string]any{
 		"sub":   "user-789",
 		"email": "expired@example.com",
 		"exp":   float64(time.Now().Add(-1 * time.Hour).Unix()),
@@ -217,7 +217,7 @@ func TestWhoami_ExpiredToken(t *testing.T) {
 }
 
 func TestWhoami_JSONOutput_ExpiredToken(t *testing.T) {
-	jwt := buildTestJWT(map[string]interface{}{
+	jwt := buildTestJWT(map[string]any{
 		"sub":   "user-expired",
 		"email": "old@example.com",
 		"exp":   float64(time.Now().Add(-2 * time.Hour).Unix()),

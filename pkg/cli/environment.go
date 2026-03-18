@@ -9,16 +9,16 @@ import (
 
 // EnvironmentConfig holds per-environment overrides.
 type EnvironmentConfig struct {
-	Kubeconfig      string                 `yaml:"kubeconfig,omitempty"`
-	Context         string                 `yaml:"context,omitempty"`
-	Namespace       string                 `yaml:"namespace,omitempty"`
-	Image           string                 `yaml:"image,omitempty"`
-	RuntimeClass    string                 `yaml:"runtime_class,omitempty"`
-	ConfigOverrides map[string]interface{} `yaml:"config_overrides,omitempty"`
-	SecretsSource   string                 `yaml:"secrets_source,omitempty"`
-	Enforcement     string                 `yaml:"enforcement,omitempty"` // "strict" (default) or "audit"
-	MCPEndpoint     string                 `yaml:"mcp_endpoint,omitempty"`
-	MCPTokenPath    string                 `yaml:"mcp_token_path,omitempty"`
+	Kubeconfig      string         `yaml:"kubeconfig,omitempty"`
+	Context         string         `yaml:"context,omitempty"`
+	Namespace       string         `yaml:"namespace,omitempty"`
+	Image           string         `yaml:"image,omitempty"`
+	RuntimeClass    string         `yaml:"runtime_class,omitempty"`
+	ConfigOverrides map[string]any `yaml:"config_overrides,omitempty"`
+	SecretsSource   string         `yaml:"secrets_source,omitempty"`
+	Enforcement     string         `yaml:"enforcement,omitempty"` // "strict" (default) or "audit"
+	MCPEndpoint     string         `yaml:"mcp_endpoint,omitempty"`
+	MCPTokenPath    string         `yaml:"mcp_token_path,omitempty"`
 
 	// OIDC fields (optional). When present, `tntc login` uses device authorization flow.
 	OIDCIssuer       string `yaml:"oidc_issuer,omitempty"`
@@ -84,7 +84,7 @@ func expandHome(path string) string {
 
 // ApplyConfigOverrides merges environment overrides into workflow config.
 // Override values replace existing keys; new keys are added.
-func ApplyConfigOverrides(wfConfig map[string]interface{}, overrides map[string]interface{}) {
+func ApplyConfigOverrides(wfConfig, overrides map[string]any) {
 	for k, v := range overrides {
 		wfConfig[k] = v
 	}

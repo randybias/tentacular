@@ -71,7 +71,7 @@ func LoadConfigFromCluster(ctx context.Context) (*Config, error) {
 // loadMCPFromFile reads mcp config from a YAML file, updating cfg in place.
 // Missing files are silently ignored.
 func loadMCPFromFile(path string, cfg *Config) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // reading config file by computed path
 	if err != nil {
 		return
 	}
@@ -89,7 +89,7 @@ func loadMCPFromFile(path string, cfg *Config) {
 
 // readTokenFile reads a bearer token from a file, trimming whitespace.
 func readTokenFile(path string) (string, error) {
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(path) //nolint:gosec // reading token file by configured path
 	if err != nil {
 		return "", err
 	}
@@ -105,22 +105,22 @@ func SaveConfig(endpoint, tokenPath string) error {
 	}
 
 	dir := filepath.Join(home, ".tentacular")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("creating config directory: %w", err)
+	if mkdirErr := os.MkdirAll(dir, 0o755); mkdirErr != nil { //nolint:gosec // 0o755 for config directory
+		return fmt.Errorf("creating config directory: %w", mkdirErr)
 	}
 
 	cfgPath := filepath.Join(dir, "config.yaml")
 
 	// Load existing config to merge
-	var raw map[string]interface{}
-	if data, err := os.ReadFile(cfgPath); err == nil {
+	var raw map[string]any
+	if data, readErr := os.ReadFile(cfgPath); readErr == nil { //nolint:gosec // reading config file
 		_ = yaml.Unmarshal(data, &raw)
 	}
 	if raw == nil {
-		raw = make(map[string]interface{})
+		raw = make(map[string]any)
 	}
 
-	raw["mcp"] = map[string]interface{}{
+	raw["mcp"] = map[string]any{
 		"endpoint":   endpoint,
 		"token_path": tokenPath,
 	}

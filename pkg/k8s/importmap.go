@@ -115,9 +115,9 @@ func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 		orderedImports[k] = imports[k]
 	}
 
-	denoConfig := map[string]interface{}{
-		"compilerOptions": map[string]interface{}{
-			"strict":                 true,
+	denoConfig := map[string]any{
+		"compilerOptions": map[string]any{
+			"strict":                   true,
 			"noUncheckedIndexedAccess": true,
 		},
 		"imports": orderedImports,
@@ -241,7 +241,7 @@ func ScanNodeImports(nodesDir string) ([]spec.Dependency, error) {
 		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ts") {
 			continue
 		}
-		content, err := os.ReadFile(filepath.Join(nodesDir, entry.Name()))
+		content, err := os.ReadFile(filepath.Join(nodesDir, entry.Name())) //nolint:gosec // nodesDir is a known workflow directory
 		if err != nil {
 			return nil, fmt.Errorf("reading %s: %w", entry.Name(), err)
 		}

@@ -11,9 +11,9 @@ import (
 
 // WfApplyParams are the arguments for the wf_apply MCP tool.
 type WfApplyParams struct {
-	Namespace string                   `json:"namespace"`
-	Name      string                   `json:"name"`
-	Manifests []map[string]interface{} `json:"manifests"`
+	Namespace string           `json:"namespace"`
+	Name      string           `json:"name"`
+	Manifests []map[string]any `json:"manifests"`
 }
 
 // WfApplyResult is the response from wf_apply.
@@ -24,7 +24,7 @@ type WfApplyResult struct {
 }
 
 // WfApply calls the wf_apply MCP tool to apply workflow manifests.
-func (c *Client) WfApply(ctx context.Context, namespace, name string, manifests []map[string]interface{}) (*WfApplyResult, error) {
+func (c *Client) WfApply(ctx context.Context, namespace, name string, manifests []map[string]any) (*WfApplyResult, error) {
 	raw, err := c.CallTool(ctx, "wf_apply", WfApplyParams{
 		Namespace: namespace,
 		Name:      name,
@@ -50,10 +50,10 @@ type WfRemoveParams struct {
 
 // WfRemoveResult is the response from wf_remove.
 type WfRemoveResult struct {
-	Deleted           []string `json:"deleted"`                        // resource names deleted
-	DeletedCount      int      `json:"deletedCount"`                   // populated when server returns a number
-	ExoCleanedUp      bool     `json:"exo_cleaned_up,omitempty"`       // true if exoskeleton cleanup ran
-	ExoCleanupDetails string   `json:"exo_cleanup_details,omitempty"`  // human-readable cleanup summary
+	ExoCleanupDetails string   `json:"exo_cleanup_details,omitempty"`
+	Deleted           []string `json:"deleted"`
+	DeletedCount      int      `json:"deletedCount"`
+	ExoCleanedUp      bool     `json:"exo_cleaned_up,omitempty"`
 }
 
 func (r *WfRemoveResult) UnmarshalJSON(data []byte) error {
@@ -66,9 +66,9 @@ func (r *WfRemoveResult) UnmarshalJSON(data []byte) error {
 	}
 	// Server may return deleted as a number (count) plus optional exo fields.
 	var alt struct {
+		ExoCleanupDetails string `json:"exo_cleanup_details"`
 		Deleted           int    `json:"deleted"`
 		ExoCleanedUp      bool   `json:"exo_cleaned_up"`
-		ExoCleanupDetails string `json:"exo_cleanup_details"`
 	}
 	if err := json.Unmarshal(data, &alt); err == nil {
 		r.DeletedCount = alt.Deleted
@@ -106,23 +106,22 @@ type WfStatusParams struct {
 
 // WfStatusResult is the response from wf_status.
 type WfStatusResult struct {
-	Name      string `json:"name"`
-	Namespace string `json:"namespace"`
-	Version   string `json:"version,omitempty"`
-	Ready     bool   `json:"ready"`
-	Replicas  int32  `json:"replicas"`
-	Available int32  `json:"available"`
-	// Detail fields (when detail=true)
-	Pods   []PodInfo   `json:"pods,omitempty"`
-	Events []EventInfo `json:"events,omitempty"`
+	Name      string      `json:"name"`
+	Namespace string      `json:"namespace"`
+	Version   string      `json:"version,omitempty"`
+	Pods      []PodInfo   `json:"pods,omitempty"`
+	Events    []EventInfo `json:"events,omitempty"`
+	Replicas  int32       `json:"replicas"`
+	Available int32       `json:"available"`
+	Ready     bool        `json:"ready"`
 }
 
 // PodInfo represents a pod in the workflow deployment.
 type PodInfo struct {
-	Name   string `json:"name"`
-	Phase  string `json:"phase"`
-	Ready  bool   `json:"ready"`
+	Name     string `json:"name"`
+	Phase    string `json:"phase"`
 	NodeName string `json:"nodeName,omitempty"`
+	Ready    bool   `json:"ready"`
 }
 
 // EventInfo represents a Kubernetes event.
@@ -162,10 +161,10 @@ type WfListItem struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`
 	Version   string `json:"version,omitempty"`
-	Ready     bool   `json:"ready"`
+	CreatedAt string `json:"createdAt,omitempty"`
 	Replicas  int32  `json:"replicas"`
 	Available int32  `json:"available"`
-	CreatedAt string `json:"createdAt,omitempty"`
+	Ready     bool   `json:"ready"`
 }
 
 // WfList calls the wf_list MCP tool to enumerate deployed workflows.
@@ -192,10 +191,10 @@ type WfPodsParams struct {
 type WfPod struct {
 	Name     string   `json:"name"`
 	Phase    string   `json:"phase"`
-	Ready    bool     `json:"ready"`
-	Restarts int      `json:"restarts"`
-	Images   []string `json:"images"`
 	Age      string   `json:"age"`
+	Images   []string `json:"images"`
+	Restarts int      `json:"restarts"`
+	Ready    bool     `json:"ready"`
 }
 
 // WfPodsResult is the response from wf_pods.
@@ -230,10 +229,10 @@ type WfLogsParams struct {
 
 // WfLogsResult is the response from wf_logs.
 type WfLogsResult struct {
-	Logs      string   `json:"logs"`      // legacy: single string
-	Lines     []string `json:"lines"`     // current: array of lines
+	Logs      string   `json:"logs"`
 	Pod       string   `json:"pod"`
 	Container string   `json:"container"`
+	Lines     []string `json:"lines"`
 }
 
 // LogText returns the log content as a single string.
@@ -275,9 +274,9 @@ type WfRunParams struct {
 type WfRunResult struct {
 	Name       string          `json:"name"`
 	Namespace  string          `json:"namespace"`
+	PodName    string          `json:"pod_name,omitempty"`
 	Output     json.RawMessage `json:"output"`
 	DurationMs int64           `json:"duration_ms"`
-	PodName    string          `json:"pod_name,omitempty"`
 }
 
 // WfRun calls the wf_run MCP tool to trigger a workflow execution.
@@ -308,9 +307,9 @@ type ClusterPreflightParams struct {
 // CheckResult mirrors k8s.CheckResult for deserialization from MCP.
 type CheckResult struct {
 	Name        string `json:"name"`
-	Passed      bool   `json:"passed"`
 	Warning     string `json:"warning,omitempty"`
 	Remediation string `json:"remediation,omitempty"`
+	Passed      bool   `json:"passed"`
 }
 
 // ClusterPreflightResult is the response from cluster_preflight.
@@ -390,17 +389,17 @@ func (c *Client) NsCreate(ctx context.Context, name, quotaPreset string) (*NsCre
 
 // AuditResourcesParams are the arguments for the audit_resources MCP tool.
 type AuditResourcesParams struct {
-	Namespace    string                 `json:"namespace"`
-	WorkflowName string                 `json:"workflowName"`
-	Expected     map[string]interface{} `json:"expected"`
+	Expected     map[string]any `json:"expected"`
+	Namespace    string         `json:"namespace"`
+	WorkflowName string         `json:"workflowName"`
 }
 
 // AuditResourcesResult is the response from audit_resources.
 type AuditResourcesResult struct {
+	Overall       string        `json:"overall"`
 	NetworkPolicy ResourceAudit `json:"networkPolicy"`
 	Secrets       ResourceAudit `json:"secrets"`
 	CronJobs      ResourceAudit `json:"cronJobs"`
-	Overall       string        `json:"overall"`
 }
 
 // ResourceAudit holds audit results for a single resource type.
@@ -412,7 +411,7 @@ type ResourceAudit struct {
 }
 
 // AuditResources calls the audit_resources MCP tool.
-func (c *Client) AuditResources(ctx context.Context, namespace, workflowName string, expected map[string]interface{}) (*AuditResourcesResult, error) {
+func (c *Client) AuditResources(ctx context.Context, namespace, workflowName string, expected map[string]any) (*AuditResourcesResult, error) {
 	raw, err := c.CallTool(ctx, "audit_resources", AuditResourcesParams{
 		Namespace:    namespace,
 		WorkflowName: workflowName,
@@ -465,16 +464,16 @@ type WfDescribeParams struct {
 
 // WfDescribeResult is the response from wf_describe.
 type WfDescribeResult struct {
-	Name        string                   `json:"name"`
-	Namespace   string                   `json:"namespace"`
-	Ready       bool                     `json:"ready"`
-	Replicas    int32                    `json:"replicas"`
-	Available   int32                    `json:"available"`
-	Image       string                   `json:"image,omitempty"`
-	Annotations map[string]string        `json:"annotations,omitempty"`
-	Nodes       []PodInfo                `json:"nodes,omitempty"`
-	Triggers    []string                 `json:"triggers,omitempty"`
-	Manifests   []map[string]interface{} `json:"manifests,omitempty"`
+	Annotations map[string]string `json:"annotations,omitempty"`
+	Name        string            `json:"name"`
+	Namespace   string            `json:"namespace"`
+	Image       string            `json:"image,omitempty"`
+	Nodes       []PodInfo         `json:"nodes,omitempty"`
+	Triggers    []string          `json:"triggers,omitempty"`
+	Manifests   []map[string]any  `json:"manifests,omitempty"`
+	Replicas    int32             `json:"replicas"`
+	Available   int32             `json:"available"`
+	Ready       bool              `json:"ready"`
 }
 
 // WfDescribe calls the wf_describe MCP tool to get detailed deployment info.
@@ -500,6 +499,7 @@ type ExoStatusParams struct{}
 
 // ExoStatusResult is the response from exo_status.
 type ExoStatusResult struct {
+	AuthIssuer        string `json:"auth_issuer,omitempty"`
 	Enabled           bool   `json:"enabled"`
 	CleanupOnUndeploy bool   `json:"cleanup_on_undeploy"`
 	PostgresAvailable bool   `json:"postgres_available"`
@@ -508,7 +508,6 @@ type ExoStatusResult struct {
 	SPIREAvailable    bool   `json:"spire_available"`
 	NATSSpiffeEnabled bool   `json:"nats_spiffe_enabled"`
 	AuthEnabled       bool   `json:"auth_enabled"`
-	AuthIssuer        string `json:"auth_issuer,omitempty"`
 }
 
 // ExoStatus calls the exo_status MCP tool to check exoskeleton feature status.
@@ -534,10 +533,10 @@ type ExoRegistrationParams struct {
 
 // ExoRegistrationResult is the response from exo_registration.
 type ExoRegistrationResult struct {
-	Found     bool              `json:"found"`
+	Data      map[string]string `json:"data,omitempty"`
 	Namespace string            `json:"namespace"`
 	Name      string            `json:"name"`
-	Data      map[string]string `json:"data,omitempty"`
+	Found     bool              `json:"found"`
 }
 
 // ExoRegistration calls the exo_registration MCP tool to check if a workflow

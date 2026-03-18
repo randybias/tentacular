@@ -4,17 +4,18 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/randybias/tentacular/pkg/catalog"
 	"gopkg.in/yaml.v3"
+
+	"github.com/randybias/tentacular/pkg/catalog"
 )
 
 // ModuleProxyConfig configures the in-cluster esm.sh module proxy for jsr/npm deps.
 type ModuleProxyConfig struct {
-	Enabled   bool   `yaml:"enabled,omitempty"`
 	Namespace string `yaml:"namespace,omitempty"` // default: tentacular-support
 	Image     string `yaml:"image,omitempty"`     // default: ghcr.io/esm-dev/esm.sh:v135
 	Storage   string `yaml:"storage,omitempty"`   // "emptydir" (default) or "pvc"
 	PVCSize   string `yaml:"pvcSize,omitempty"`   // default: 5Gi (only when storage: pvc)
+	Enabled   bool   `yaml:"enabled,omitempty"`
 }
 
 // MCPConfig holds MCP server connection settings.
@@ -25,15 +26,15 @@ type MCPConfig struct {
 
 // TentacularConfig holds default configuration values.
 type TentacularConfig struct {
-	Workspace    string                       `yaml:"workspace,omitempty"` // workspace root dir (default: ~/tentacles)
+	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
+	MCP          MCPConfig                    `yaml:"mcp,omitempty"`
+	Catalog      catalog.CatalogConfig        `yaml:"catalog,omitempty"`
+	Workspace    string                       `yaml:"workspace,omitempty"`
 	Registry     string                       `yaml:"registry,omitempty"`
 	Namespace    string                       `yaml:"namespace,omitempty"`
 	RuntimeClass string                       `yaml:"runtime_class,omitempty"`
 	DefaultEnv   string                       `yaml:"default_env,omitempty"`
-	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
 	ModuleProxy  ModuleProxyConfig            `yaml:"moduleProxy,omitempty"`
-	MCP          MCPConfig                    `yaml:"mcp,omitempty"`
-	Catalog      catalog.CatalogConfig        `yaml:"catalog,omitempty"`
 }
 
 // LoadConfig returns merged config: project > user > defaults.
@@ -45,14 +46,14 @@ func LoadConfig() TentacularConfig {
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		userPath := filepath.Join(home, ".tentacular", "config.yaml")
-		if data, err := os.ReadFile(userPath); err == nil {
+		if data, err := os.ReadFile(userPath); err == nil { //nolint:gosec // reading user config file
 			_ = yaml.Unmarshal(data, &cfg)
 		}
 	}
 
 	// 2. Load project-level (.tentacular/config.yaml) — overrides user
 	projPath := filepath.Join(".tentacular", "config.yaml")
-	if data, err := os.ReadFile(projPath); err == nil {
+	if data, err := os.ReadFile(projPath); err == nil { //nolint:gosec // reading project config file
 		var proj TentacularConfig
 		_ = yaml.Unmarshal(data, &proj)
 		mergeConfig(&cfg, &proj)
@@ -140,7 +141,7 @@ func mergeEnvConfig(base, override *EnvironmentConfig) {
 	}
 	if len(override.ConfigOverrides) > 0 {
 		if base.ConfigOverrides == nil {
-			base.ConfigOverrides = make(map[string]interface{})
+			base.ConfigOverrides = make(map[string]any)
 		}
 		for k, v := range override.ConfigOverrides {
 			base.ConfigOverrides[k] = v

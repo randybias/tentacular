@@ -8,7 +8,7 @@ import (
 
 // makeToolServer creates a test server with a single named tool that returns
 // the given result as JSON text content.
-func makeToolServer(t *testing.T, toolName string, result interface{}, isError bool) *testServerHandle {
+func makeToolServer(t *testing.T, toolName string, result any, isError bool) *testServerHandle {
 	t.Helper()
 	resultJSON, err := json.Marshal(result)
 	if err != nil {
@@ -16,7 +16,7 @@ func makeToolServer(t *testing.T, toolName string, result interface{}, isError b
 	}
 
 	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
-		toolName: func(args map[string]any) (string, bool) {
+		toolName: func(_ map[string]any) (string, bool) {
 			return string(resultJSON), isError
 		},
 	})
@@ -60,7 +60,7 @@ func TestWfApply(t *testing.T) {
 	}, false)
 	defer h.Close()
 
-	manifests := []map[string]interface{}{
+	manifests := []map[string]any{
 		{"apiVersion": "v1", "kind": "ConfigMap"},
 	}
 	result, err := h.client.WfApply(context.Background(), "default", "my-wf", manifests)
@@ -216,7 +216,7 @@ func TestAuditResources(t *testing.T) {
 	}, false)
 	defer h.Close()
 
-	expected := map[string]interface{}{"networkPolicy": true, "cronJobs": 1}
+	expected := map[string]any{"networkPolicy": true, "cronJobs": 1}
 	result, err := h.client.AuditResources(context.Background(), "default", "my-wf", expected)
 	if err != nil {
 		t.Fatalf("AuditResources: %v", err)
@@ -430,7 +430,7 @@ func TestExoRegistration_UnmarshalError(t *testing.T) {
 func TestClusterProfile_Success(t *testing.T) {
 	profileJSON := `{"k8sVersion":"v1.29.0","distribution":"k0s","gvisor":true}`
 	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
-		"cluster_profile": func(args map[string]any) (string, bool) {
+		"cluster_profile": func(_ map[string]any) (string, bool) {
 			return profileJSON, false
 		},
 	})
@@ -497,9 +497,9 @@ func TestClusterProfile_NoNamespaceOmitsParam(t *testing.T) {
 
 // TestWfRemove_WithExoCleanup verifies WfRemoveResult parses exo cleanup fields.
 func TestWfRemove_WithExoCleanup(t *testing.T) {
-	h := makeToolServer(t, "wf_remove", map[string]interface{}{
-		"deleted":            3,
-		"exo_cleaned_up":     true,
+	h := makeToolServer(t, "wf_remove", map[string]any{
+		"deleted":             3,
+		"exo_cleaned_up":      true,
 		"exo_cleanup_details": "postgres schema dropped, rustfs user removed",
 	}, false)
 	defer h.Close()
@@ -521,7 +521,7 @@ func TestWfRemove_WithExoCleanup(t *testing.T) {
 
 // TestExoStatus verifies ExoStatus parses the response correctly.
 func TestExoStatus(t *testing.T) {
-	h := makeToolServer(t, "exo_status", map[string]interface{}{
+	h := makeToolServer(t, "exo_status", map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
@@ -554,12 +554,12 @@ func TestExoStatus(t *testing.T) {
 
 // TestExoRegistration verifies ExoRegistration parses the response correctly.
 func TestExoRegistration(t *testing.T) {
-	h := makeToolServer(t, "exo_registration", map[string]interface{}{
+	h := makeToolServer(t, "exo_registration", map[string]any{
 		"found":     true,
 		"namespace": "my-ns",
 		"name":      "my-wf",
 		"data": map[string]string{
-			"postgres.host": "pg.cluster.local",
+			"postgres.host":     "pg.cluster.local",
 			"postgres.password": "***REDACTED***",
 		},
 	}, false)
@@ -582,7 +582,7 @@ func TestExoRegistration(t *testing.T) {
 
 // TestExoRegistration_NotFound verifies ExoRegistration with no secret.
 func TestExoRegistration_NotFound(t *testing.T) {
-	h := makeToolServer(t, "exo_registration", map[string]interface{}{
+	h := makeToolServer(t, "exo_registration", map[string]any{
 		"found":     false,
 		"namespace": "my-ns",
 		"name":      "my-wf",

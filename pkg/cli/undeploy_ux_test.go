@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -14,8 +13,9 @@ import (
 	"time"
 
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
-	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/spf13/cobra"
+
+	"github.com/randybias/tentacular/pkg/mcp"
 )
 
 // makeMCPTestServer creates an httptest.Server backed by a real MCP SDK server
@@ -102,24 +102,24 @@ func newUndeployTestCmd() *cobra.Command {
 // --- checkExoskeletonCleanup tests ---
 
 func TestCheckExoskeletonCleanup_FullWarning(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]interface{}{
+	exoStatusJSON, _ := json.Marshal(map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
 		"nats_available":      true,
 		"rustfs_available":    true,
 	})
-	exoRegJSON, _ := json.Marshal(map[string]interface{}{
+	exoRegJSON, _ := json.Marshal(map[string]any{
 		"found":     true,
 		"namespace": "test-ns",
 		"name":      "my-wf",
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return string(exoStatusJSON), false
 		},
-		"exo_registration": func(args map[string]any) (string, bool) {
+		"exo_registration": func(_ map[string]any) (string, bool) {
 			return string(exoRegJSON), false
 		},
 	})
@@ -148,14 +148,14 @@ func TestCheckExoskeletonCleanup_FullWarning(t *testing.T) {
 }
 
 func TestCheckExoskeletonCleanup_CleanupDisabled(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]interface{}{
+	exoStatusJSON, _ := json.Marshal(map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": false,
 		"postgres_available":  true,
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return string(exoStatusJSON), false
 		},
 	})
@@ -173,7 +173,7 @@ func TestCheckExoskeletonCleanup_CleanupDisabled(t *testing.T) {
 
 func TestCheckExoskeletonCleanup_StatusError(t *testing.T) {
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return "internal server error", true
 		},
 	})
@@ -190,22 +190,22 @@ func TestCheckExoskeletonCleanup_StatusError(t *testing.T) {
 }
 
 func TestCheckExoskeletonCleanup_NotRegistered(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]interface{}{
+	exoStatusJSON, _ := json.Marshal(map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
 	})
-	exoRegJSON, _ := json.Marshal(map[string]interface{}{
+	exoRegJSON, _ := json.Marshal(map[string]any{
 		"found":     false,
 		"namespace": "ns",
 		"name":      "wf",
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return string(exoStatusJSON), false
 		},
-		"exo_registration": func(args map[string]any) (string, bool) {
+		"exo_registration": func(_ map[string]any) (string, bool) {
 			return string(exoRegJSON), false
 		},
 	})
@@ -222,17 +222,17 @@ func TestCheckExoskeletonCleanup_NotRegistered(t *testing.T) {
 }
 
 func TestCheckExoskeletonCleanup_RegistrationError(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]interface{}{
+	exoStatusJSON, _ := json.Marshal(map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return string(exoStatusJSON), false
 		},
-		"exo_registration": func(args map[string]any) (string, bool) {
+		"exo_registration": func(_ map[string]any) (string, bool) {
 			return "not found", true
 		},
 	})
@@ -249,24 +249,24 @@ func TestCheckExoskeletonCleanup_RegistrationError(t *testing.T) {
 }
 
 func TestCheckExoskeletonCleanup_OnlyPostgres(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]interface{}{
+	exoStatusJSON, _ := json.Marshal(map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
 		"nats_available":      false,
 		"rustfs_available":    false,
 	})
-	exoRegJSON, _ := json.Marshal(map[string]interface{}{
+	exoRegJSON, _ := json.Marshal(map[string]any{
 		"found":     true,
 		"namespace": "ns",
 		"name":      "wf",
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return string(exoStatusJSON), false
 		},
-		"exo_registration": func(args map[string]any) (string, bool) {
+		"exo_registration": func(_ map[string]any) (string, bool) {
 			return string(exoRegJSON), false
 		},
 	})
@@ -325,17 +325,17 @@ func setupMCPEnv(t *testing.T, endpoint string) func() {
 }
 
 func TestRunUndeployWith_UserConfirmsY(t *testing.T) {
-	wfRemoveJSON, _ := json.Marshal(map[string]interface{}{
+	wfRemoveJSON, _ := json.Marshal(map[string]any{
 		"deleted": []string{"Deployment/my-wf", "Service/my-wf"},
 	})
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]interface{}{"enabled": false})
+		"exo_status": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"enabled": false})
 			return string(j), false
 		},
-		"wf_remove": func(args map[string]any) (string, bool) {
+		"wf_remove": func(_ map[string]any) (string, bool) {
 			removeCalled = true
 			return string(wfRemoveJSON), false
 		},
@@ -375,11 +375,11 @@ func TestRunUndeployWith_UserConfirmsY(t *testing.T) {
 func TestRunUndeployWith_UserDeclinesN(t *testing.T) {
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]interface{}{"enabled": false})
+		"exo_status": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"enabled": false})
 			return string(j), false
 		},
-		"wf_remove": func(args map[string]any) (string, bool) {
+		"wf_remove": func(_ map[string]any) (string, bool) {
 			removeCalled = true
 			return `{"deleted":[]}`, false
 		},
@@ -413,17 +413,17 @@ func TestRunUndeployWith_UserDeclinesN(t *testing.T) {
 }
 
 func TestRunUndeployWith_YesFlag(t *testing.T) {
-	wfRemoveJSON, _ := json.Marshal(map[string]interface{}{
+	wfRemoveJSON, _ := json.Marshal(map[string]any{
 		"deleted": []string{"Deployment/my-wf"},
 	})
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]interface{}{"enabled": false})
+		"exo_status": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"enabled": false})
 			return string(j), false
 		},
-		"wf_remove": func(args map[string]any) (string, bool) {
+		"wf_remove": func(_ map[string]any) (string, bool) {
 			removeCalled = true
 			return string(wfRemoveJSON), false
 		},
@@ -459,31 +459,31 @@ func TestRunUndeployWith_YesFlag(t *testing.T) {
 
 func TestRunUndeployWith_ForceFlag(t *testing.T) {
 	// Set up a server that reports exo cleanup is active
-	exoStatusJSON, _ := json.Marshal(map[string]interface{}{
+	exoStatusJSON, _ := json.Marshal(map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
 		"nats_available":      true,
 		"rustfs_available":    true,
 	})
-	exoRegJSON, _ := json.Marshal(map[string]interface{}{
+	exoRegJSON, _ := json.Marshal(map[string]any{
 		"found":     true,
 		"namespace": "default",
 		"name":      "my-wf",
 	})
-	wfRemoveJSON, _ := json.Marshal(map[string]interface{}{
+	wfRemoveJSON, _ := json.Marshal(map[string]any{
 		"deleted": []string{"Deployment/my-wf"},
 	})
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return string(exoStatusJSON), false
 		},
-		"exo_registration": func(args map[string]any) (string, bool) {
+		"exo_registration": func(_ map[string]any) (string, bool) {
 			return string(exoRegJSON), false
 		},
-		"wf_remove": func(args map[string]any) (string, bool) {
+		"wf_remove": func(_ map[string]any) (string, bool) {
 			removeCalled = true
 			return string(wfRemoveJSON), false
 		},
@@ -519,12 +519,12 @@ func TestRunUndeployWith_ForceFlag(t *testing.T) {
 }
 
 func TestRunUndeployWith_ExoWarningUserDeclines(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]interface{}{
+	exoStatusJSON, _ := json.Marshal(map[string]any{
 		"enabled":             true,
 		"cleanup_on_undeploy": true,
 		"postgres_available":  true,
 	})
-	exoRegJSON, _ := json.Marshal(map[string]interface{}{
+	exoRegJSON, _ := json.Marshal(map[string]any{
 		"found":     true,
 		"namespace": "default",
 		"name":      "my-wf",
@@ -532,13 +532,13 @@ func TestRunUndeployWith_ExoWarningUserDeclines(t *testing.T) {
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
+		"exo_status": func(_ map[string]any) (string, bool) {
 			return string(exoStatusJSON), false
 		},
-		"exo_registration": func(args map[string]any) (string, bool) {
+		"exo_registration": func(_ map[string]any) (string, bool) {
 			return string(exoRegJSON), false
 		},
-		"wf_remove": func(args map[string]any) (string, bool) {
+		"wf_remove": func(_ map[string]any) (string, bool) {
 			removeCalled = true
 			return `{"deleted":[]}`, false
 		},
@@ -574,18 +574,18 @@ func TestRunUndeployWith_ExoWarningUserDeclines(t *testing.T) {
 }
 
 func TestRunUndeployWith_ExoCleanupResult(t *testing.T) {
-	wfRemoveJSON, _ := json.Marshal(map[string]interface{}{
+	wfRemoveJSON, _ := json.Marshal(map[string]any{
 		"deleted":             3,
-		"exo_cleaned_up":     true,
+		"exo_cleaned_up":      true,
 		"exo_cleanup_details": "postgres schema dropped, rustfs user removed",
 	})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]interface{}{"enabled": false})
+		"exo_status": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"enabled": false})
 			return string(j), false
 		},
-		"wf_remove": func(args map[string]any) (string, bool) {
+		"wf_remove": func(_ map[string]any) (string, bool) {
 			return string(wfRemoveJSON), false
 		},
 	})
@@ -623,11 +623,11 @@ func TestRunUndeployWith_ExoCleanupResult(t *testing.T) {
 
 func TestRunUndeployWith_NoResources(t *testing.T) {
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(args map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]interface{}{"enabled": false})
+		"exo_status": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"enabled": false})
 			return string(j), false
 		},
-		"wf_remove": func(args map[string]any) (string, bool) {
+		"wf_remove": func(_ map[string]any) (string, bool) {
 			return `{"deleted":0}`, false
 		},
 	})
@@ -658,7 +658,7 @@ func TestRunUndeployWith_NoResources(t *testing.T) {
 	}
 
 	out := output.String()
-	_ = fmt.Sprintf("%s", out) // avoid unused
+	_ = out // avoid unused
 	if !strings.Contains(out, "No resources found") {
 		t.Errorf("expected 'No resources found', got: %s", out)
 	}

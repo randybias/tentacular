@@ -8,9 +8,10 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/spf13/cobra"
+
 	"github.com/randybias/tentacular/pkg/catalog"
 	"github.com/randybias/tentacular/pkg/version"
-	"github.com/spf13/cobra"
 )
 
 func newCatalogInitCmd() *cobra.Command {
@@ -65,7 +66,7 @@ func runCatalogInit(cmd *cobra.Command, args []string) error {
 		}
 
 		localPath := filepath.Join(dir, file)
-		if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(localPath), 0o755); err != nil { //nolint:gosec // 0o755 for template directory
 			return fmt.Errorf("creating directory for %s: %w", file, err)
 		}
 
@@ -91,7 +92,7 @@ func runCatalogInit(cmd *cobra.Command, args []string) error {
 			data = []byte(content)
 		}
 
-		if err := os.WriteFile(localPath, data, 0o644); err != nil {
+		if err := os.WriteFile(localPath, data, 0o644); err != nil { //nolint:gosec // non-sensitive template file
 			return fmt.Errorf("writing %s: %w", file, err)
 		}
 	}
@@ -128,7 +129,7 @@ func compareSemver(a, b string) int {
 	if aParts == nil || bParts == nil {
 		return 0
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		if aParts[i] < bParts[i] {
 			return -1
 		}
