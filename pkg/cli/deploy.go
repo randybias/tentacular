@@ -322,16 +322,6 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 		return nil, fmt.Errorf("generating ConfigMap: %w", err)
 	}
 
-	// Detect kind cluster and adjust defaults
-	kindInfo, _ := k8s.DetectKindCluster()
-	if kindInfo != nil && kindInfo.IsKind {
-		_, _ = fmt.Fprintf(w, "  Detected kind cluster '%s', adjusted: no gVisor, imagePullPolicy=IfNotPresent\n", kindInfo.ClusterName)
-		runtimeClass = ""
-		if imagePullPolicy == "" {
-			imagePullPolicy = "IfNotPresent"
-		}
-	}
-
 	// Resolve module proxy URL
 	cfg := LoadConfig()
 	proxyURL := k8s.DefaultModuleProxyURL
