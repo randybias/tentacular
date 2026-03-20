@@ -21,7 +21,6 @@ func NewWhoamiCmd() *cobra.Command {
 
 // whoamiResult is the structured output for JSON mode.
 type whoamiResult struct {
-	Groups      []string `json:"groups,omitempty"`
 	Email       string   `json:"email"`
 	Name        string   `json:"name,omitempty"`
 	Subject     string   `json:"subject"`
@@ -29,6 +28,7 @@ type whoamiResult struct {
 	Provider    string   `json:"provider,omitempty"`
 	Environment string   `json:"environment"`
 	ExpiresAt   string   `json:"expires_at,omitempty"`
+	Groups      []string `json:"groups,omitempty"`
 	Expired     bool     `json:"expired"`
 }
 

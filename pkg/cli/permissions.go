@@ -2,6 +2,7 @@ package cli
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"github.com/spf13/cobra"
@@ -111,7 +112,7 @@ func runPermissionsSet(cmd *cobra.Command, args []string) error {
 	outputFormat := flagString(cmd, "output")
 
 	if group == "" && mode == "" {
-		return fmt.Errorf("at least one of --group or --mode must be specified")
+		return errors.New("at least one of --group or --mode must be specified")
 	}
 
 	mcpClient, err := requireMCPClient(cmd)

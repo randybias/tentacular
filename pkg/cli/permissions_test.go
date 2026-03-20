@@ -15,7 +15,7 @@ import (
 
 func TestPermissionsCmd_HasSubcommands(t *testing.T) {
 	cmd := NewPermissionsCmd()
-	names := make([]string, 0)
+	names := make([]string, 0, len(cmd.Commands()))
 	for _, sub := range cmd.Commands() {
 		names = append(names, sub.Name())
 	}

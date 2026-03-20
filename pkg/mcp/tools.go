@@ -13,9 +13,9 @@ import (
 type WfApplyParams struct {
 	Namespace string           `json:"namespace"`
 	Name      string           `json:"name"`
+	Group     string           `json:"group,omitempty"`
+	Share     string           `json:"share,omitempty"`
 	Manifests []map[string]any `json:"manifests"`
-	Group     string           `json:"group,omitempty"` // optional group for authz annotation stamping
-	Share     string           `json:"share,omitempty"` // optional mode preset (e.g. "group-edit", "private")
 }
 
 // WfApplyResult is the response from wf_apply.
