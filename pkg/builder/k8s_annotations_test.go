@@ -1,12 +1,7 @@
 package builder
 
-// Tests for buildDeployAnnotations() - Phase 2 of "Enrich Workflow Metadata for MCP Reporting"
-//
-// These tests are written proactively based on the task specification and will be
-// enabled once the developer implements buildDeployAnnotations() in k8s.go and
-// adds WorkflowMetadata to pkg/spec/types.go.
-//
-// To activate: remove the build tag below once the implementation is merged.
+// Tests for buildDeployAnnotations() covering the tentacular.io/* annotation domain
+// and the updated WorkflowMetadata schema (Group replaces Owner/Team).
 
 import (
 	"strings"
@@ -32,15 +27,14 @@ func makeWorkflowWithMetadata(name string) *spec.Workflow {
 			{From: "fetch", To: "output"},
 		},
 		Metadata: &spec.WorkflowMetadata{
-			Owner: "platform-team",
-			Team:  "platform",
+			Group: "platform-team",
 			Tags:  []string{"etl", "reporting"},
 		},
 	}
 }
 
 // TestDeploymentAnnotationsPresent verifies that a Deployment with metadata
-// includes tentacular.dev/* annotations.
+// includes tentacular.io/* annotations.
 func TestDeploymentAnnotationsPresent(t *testing.T) {
 	wf := makeWorkflowWithMetadata("meta-wf")
 	manifests := GenerateK8sManifests(wf, "meta-wf:1-0", "default", DeployOptions{})
@@ -49,11 +43,8 @@ func TestDeploymentAnnotationsPresent(t *testing.T) {
 	if !strings.Contains(dep, "annotations:") {
 		t.Error("expected annotations section in Deployment when metadata present")
 	}
-	if !strings.Contains(dep, "tentacular.dev/owner: platform-team") {
-		t.Error("expected tentacular.dev/owner: platform-team annotation")
-	}
-	if !strings.Contains(dep, "tentacular.dev/team: platform") {
-		t.Error("expected tentacular.dev/team: platform annotation")
+	if !strings.Contains(dep, "tentacular.io/group: platform-team") {
+		t.Error("expected tentacular.io/group: platform-team annotation")
 	}
 }
 
@@ -63,46 +54,50 @@ func TestDeploymentAnnotationsTags(t *testing.T) {
 	manifests := GenerateK8sManifests(wf, "tags-wf:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	if !strings.Contains(dep, "tentacular.dev/tags: etl,reporting") {
-		t.Error("expected tentacular.dev/tags: etl,reporting annotation")
+	if !strings.Contains(dep, "tentacular.io/tags: etl,reporting") {
+		t.Error("expected tentacular.io/tags: etl,reporting annotation")
 	}
 }
 
-// TestDeploymentAnnotationsOwnerTruncated verifies long owner values are truncated/safe.
-func TestDeploymentAnnotationsOwnerTruncated(t *testing.T) {
-	// K8s annotation values have a 63-char limit for label values (but not annotation values)
-	// This tests that a very long owner string doesn't cause a panic
-	longOwner := strings.Repeat("a", 250)
+// TestDeploymentAnnotationsNoOwnerTeam verifies that removed owner/team fields
+// produce no annotations.
+func TestDeploymentAnnotationsNoOwnerTeam(t *testing.T) {
 	wf := &spec.Workflow{
-		Name:     "long-owner-wf",
+		Name:     "no-owner-wf",
 		Version:  "1.0",
 		Triggers: []spec.Trigger{{Type: "manual"}},
 		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
 		Metadata: &spec.WorkflowMetadata{
-			Owner: longOwner,
+			Group: "platform-team",
 		},
 	}
-	manifests := GenerateK8sManifests(wf, "long-owner-wf:1-0", "default", DeployOptions{})
+	manifests := GenerateK8sManifests(wf, "no-owner-wf:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
-	// Should not panic and should produce a non-empty manifest
-	if dep == "" {
-		t.Error("expected non-empty manifest even with long owner value")
+	if strings.Contains(dep, "tentacular.io/owner") {
+		t.Error("expected NO tentacular.io/owner annotation (owner is identity-derived, not declared)")
+	}
+	if strings.Contains(dep, "tentacular.io/team") {
+		t.Error("expected NO tentacular.io/team annotation (team field was removed)")
+	}
+	if strings.Contains(dep, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations (domain migrated to tentacular.io)")
 	}
 }
 
 // TestDeploymentAnnotationsNilMetadata verifies no annotation block when metadata is nil.
 func TestDeploymentAnnotationsNilMetadata(t *testing.T) {
 	wf := makeTestWorkflow("no-meta-wf")
-	// makeTestWorkflow creates a Workflow without Metadata (nil)
 	manifests := GenerateK8sManifests(wf, "no-meta-wf:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	// Should not include tentacular.dev/* annotations when metadata is nil
-	if strings.Contains(dep, "tentacular.dev/owner") {
-		t.Error("expected NO tentacular.dev/owner annotation when metadata is nil")
+	if strings.Contains(dep, "tentacular.io/group") {
+		t.Error("expected NO tentacular.io/group annotation when metadata is nil")
 	}
-	if strings.Contains(dep, "tentacular.dev/tags") {
-		t.Error("expected NO tentacular.dev/tags annotation when metadata is nil")
+	if strings.Contains(dep, "tentacular.io/tags") {
+		t.Error("expected NO tentacular.io/tags annotation when metadata is nil")
+	}
+	if strings.Contains(dep, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 }
 
@@ -118,23 +113,18 @@ func TestDeploymentAnnotationsEmptyMetadata(t *testing.T) {
 	manifests := GenerateK8sManifests(wf, "empty-meta-wf:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	// Empty metadata struct should not produce any tentacular.dev/* annotations
-	if strings.Contains(dep, "tentacular.dev/owner") {
-		t.Error("expected NO tentacular.dev/owner annotation for empty metadata")
+	if strings.Contains(dep, "tentacular.io/group") {
+		t.Error("expected NO tentacular.io/group annotation for empty metadata")
 	}
-	if strings.Contains(dep, "tentacular.dev/tags") {
-		t.Error("expected NO tentacular.dev/tags annotation for empty metadata")
+	if strings.Contains(dep, "tentacular.io/tags") {
+		t.Error("expected NO tentacular.io/tags annotation for empty metadata")
 	}
-	if strings.Contains(dep, "tentacular.dev/team") {
-		t.Error("expected NO tentacular.dev/team annotation for empty metadata")
-	}
-	// 'annotations:' block should be absent (no annotation block for empty metadata)
 	if strings.Contains(dep, "tentacular.dev/") {
 		t.Error("expected NO tentacular.dev/* annotations for empty metadata struct")
 	}
 }
 
-// TestDeploymentAnnotationsSpecialChars verifies special characters in annotation values are safe.
+// TestDeploymentAnnotationsSpecialChars verifies special characters in group values are safe.
 func TestDeploymentAnnotationsSpecialChars(t *testing.T) {
 	wf := &spec.Workflow{
 		Name:     "special-chars-wf",
@@ -142,12 +132,10 @@ func TestDeploymentAnnotationsSpecialChars(t *testing.T) {
 		Triggers: []spec.Trigger{{Type: "manual"}},
 		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
 		Metadata: &spec.WorkflowMetadata{
-			Owner: "team/platform & ops",
-			Team:  "ops & infra <core>",
+			Group: "team/platform & ops",
 		},
 	}
 	manifests := GenerateK8sManifests(wf, "special-chars-wf:1-0", "default", DeployOptions{})
-	// Should not panic, should produce valid YAML
 	dep := manifests[0].Content
 	if dep == "" {
 		t.Error("expected non-empty deployment manifest")
@@ -170,14 +158,13 @@ func TestDeploymentAnnotationsPipelineSummary(t *testing.T) {
 			{From: "transform", To: "load"},
 		},
 		Metadata: &spec.WorkflowMetadata{
-			Owner: "data-team",
+			Group: "data-team",
 		},
 	}
 	manifests := GenerateK8sManifests(wf, "pipeline-wf:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	// Should have some annotation indicating node count or pipeline structure
-	if !strings.Contains(dep, "tentacular.dev/node-count") && !strings.Contains(dep, "tentacular.dev/pipeline") {
+	if !strings.Contains(dep, "tentacular.io/node-count") && !strings.Contains(dep, "tentacular.io/pipeline") {
 		t.Log("note: no pipeline summary annotation found (optional feature)")
 	}
 }
@@ -190,15 +177,13 @@ func TestDeploymentAnnotationsTriggerSummaryCron(t *testing.T) {
 		Triggers: []spec.Trigger{
 			{Type: "cron", Schedule: "0 9 * * *"},
 		},
-		Nodes: map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
-		Metadata: &spec.WorkflowMetadata{
-			Owner: "platform-team",
-		},
+		Nodes:    map[string]spec.NodeSpec{"n": {Path: "./nodes/n.ts"}},
+		Metadata: &spec.WorkflowMetadata{Group: "platform-team"},
 	}
 	manifests := GenerateK8sManifests(wf, "cron-meta-wf:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	if !strings.Contains(dep, "tentacular.dev/triggers") {
+	if !strings.Contains(dep, "tentacular.io/triggers") {
 		t.Log("note: no triggers annotation found (optional feature)")
 	}
 }
@@ -216,19 +201,18 @@ func TestDeploymentAnnotationsDepsExtracted(t *testing.T) {
 				"slack":  {Protocol: "https", Host: "slack.com", Port: 443},
 			},
 		},
-		Metadata: &spec.WorkflowMetadata{
-			Owner: "platform-team",
-		},
+		Metadata: &spec.WorkflowMetadata{Group: "platform-team"},
 	}
 	manifests := GenerateK8sManifests(wf, "deps-meta-wf:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	if !strings.Contains(dep, "tentacular.dev/dependencies") {
+	if !strings.Contains(dep, "tentacular.io/dependencies") {
 		t.Log("note: no dependencies annotation found (optional feature)")
 	}
 }
 
 // TestWorkflowMetadataParsedFromYAML verifies WorkflowMetadata is parsed correctly.
+// owner/team fields in YAML are silently ignored (no error, no emission).
 func TestWorkflowMetadataParsedFromYAML(t *testing.T) {
 	yamlContent := `name: meta-parse-test
 version: "1.0"
@@ -239,8 +223,7 @@ nodes:
     path: ./nodes/fetch.ts
 edges: []
 metadata:
-  owner: platform-team
-  team: platform
+  group: platform-team
   tags:
     - etl
     - reporting
@@ -252,17 +235,47 @@ metadata:
 	if wf.Metadata == nil {
 		t.Fatal("expected Metadata to be parsed, got nil")
 	}
-	if wf.Metadata.Owner != "platform-team" {
-		t.Errorf("expected owner 'platform-team', got %q", wf.Metadata.Owner)
-	}
-	if wf.Metadata.Team != "platform" {
-		t.Errorf("expected team 'platform', got %q", wf.Metadata.Team)
+	if wf.Metadata.Group != "platform-team" {
+		t.Errorf("expected group 'platform-team', got %q", wf.Metadata.Group)
 	}
 	if len(wf.Metadata.Tags) != 2 {
 		t.Errorf("expected 2 tags, got %d: %v", len(wf.Metadata.Tags), wf.Metadata.Tags)
 	}
 	if wf.Metadata.Tags[0] != "etl" {
 		t.Errorf("expected first tag 'etl', got %q", wf.Metadata.Tags[0])
+	}
+}
+
+// TestWorkflowMetadataOwnerTeamIgnored verifies old owner/team keys in YAML are silently ignored.
+func TestWorkflowMetadataOwnerTeamIgnored(t *testing.T) {
+	yamlContent := `name: legacy-meta
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+metadata:
+  owner: old-owner
+  team: old-team
+  tags:
+    - legacy
+`
+	wf, errs := spec.Parse([]byte(yamlContent))
+	if len(errs) > 0 {
+		t.Fatalf("unexpected parse errors for legacy metadata: %v", errs)
+	}
+	if wf.Metadata == nil {
+		t.Fatal("expected Metadata to be non-nil")
+	}
+	manifests := GenerateK8sManifests(wf, "legacy-meta:1-0", "default", DeployOptions{})
+	dep := manifests[0].Content
+	if strings.Contains(dep, "tentacular.io/owner") || strings.Contains(dep, "tentacular.dev/owner") {
+		t.Error("expected legacy owner key to produce no annotation")
+	}
+	if strings.Contains(dep, "tentacular.io/team") || strings.Contains(dep, "tentacular.dev/team") {
+		t.Error("expected legacy team key to produce no annotation")
 	}
 }
 
@@ -297,7 +310,7 @@ nodes:
     path: ./nodes/fetch.ts
 edges: []
 metadata:
-  owner: team-a
+  group: team-a
   tags: []
 `
 	wf, errs := spec.Parse([]byte(yamlContent))
@@ -330,44 +343,43 @@ func TestBuildDeployAnnotationsEmpty(t *testing.T) {
 	}
 }
 
-// TestBuildDeployAnnotationsOwnerOnly verifies annotations block with just owner.
-func TestBuildDeployAnnotationsOwnerOnly(t *testing.T) {
-	meta := &spec.WorkflowMetadata{Owner: "platform-team"}
+// TestBuildDeployAnnotationsGroupOnly verifies annotations block with just group.
+func TestBuildDeployAnnotationsGroupOnly(t *testing.T) {
+	meta := &spec.WorkflowMetadata{Group: "platform-team"}
 	result := buildDeployAnnotations(meta, nil)
 	if !strings.Contains(result, "annotations:") {
 		t.Error("expected 'annotations:' in result")
 	}
-	if !strings.Contains(result, "tentacular.dev/owner: platform-team") {
-		t.Error("expected tentacular.dev/owner: platform-team")
+	if !strings.Contains(result, "tentacular.io/group: platform-team") {
+		t.Error("expected tentacular.io/group: platform-team")
 	}
-	if strings.Contains(result, "tentacular.dev/team") {
-		t.Error("expected NO tentacular.dev/team when team field is empty")
+	if strings.Contains(result, "tentacular.io/tags") {
+		t.Error("expected NO tentacular.io/tags when tags field is empty")
 	}
-	if strings.Contains(result, "tentacular.dev/tags") {
-		t.Error("expected NO tentacular.dev/tags when tags field is empty")
+	if strings.Contains(result, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 }
 
-// TestBuildDeployAnnotationsAllFields verifies all metadata fields appear.
+// TestBuildDeployAnnotationsAllFields verifies all supported metadata fields appear.
 func TestBuildDeployAnnotationsAllFields(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
-		Owner:       "platform-team",
-		Team:        "infra",
+		Group:       "platform-team",
 		Tags:        []string{"etl", "daily", "reporting"},
 		Environment: "production",
 	}
 	result := buildDeployAnnotations(meta, nil)
-	if !strings.Contains(result, "tentacular.dev/owner: platform-team") {
-		t.Error("expected tentacular.dev/owner annotation")
+	if !strings.Contains(result, "tentacular.io/group: platform-team") {
+		t.Error("expected tentacular.io/group annotation")
 	}
-	if !strings.Contains(result, "tentacular.dev/team: infra") {
-		t.Error("expected tentacular.dev/team annotation")
+	if !strings.Contains(result, "tentacular.io/tags: etl,daily,reporting") {
+		t.Error("expected tentacular.io/tags with comma-separated values")
 	}
-	if !strings.Contains(result, "tentacular.dev/tags: etl,daily,reporting") {
-		t.Error("expected tentacular.dev/tags with comma-separated values")
+	if !strings.Contains(result, "tentacular.io/environment: production") {
+		t.Error("expected tentacular.io/environment annotation")
 	}
-	if !strings.Contains(result, "tentacular.dev/environment: production") {
-		t.Error("expected tentacular.dev/environment annotation")
+	if strings.Contains(result, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 }
 
@@ -377,10 +389,24 @@ func TestBuildDeployAnnotationsSingleTag(t *testing.T) {
 		Tags: []string{"etl"},
 	}
 	result := buildDeployAnnotations(meta, nil)
-	if !strings.Contains(result, "tentacular.dev/tags: etl") {
-		t.Error("expected tentacular.dev/tags: etl")
+	if !strings.Contains(result, "tentacular.io/tags: etl") {
+		t.Error("expected tentacular.io/tags: etl")
 	}
-	if strings.Contains(result, "tentacular.dev/tags: etl,") {
+	if strings.Contains(result, "tentacular.io/tags: etl,") {
 		t.Error("expected no trailing comma for single tag")
+	}
+}
+
+// TestBuildDeployAnnotationsCronSchedule verifies cron-schedule annotation uses tentacular.io domain.
+func TestBuildDeployAnnotationsCronSchedule(t *testing.T) {
+	triggers := []spec.Trigger{
+		{Type: "cron", Schedule: "0 9 * * *"},
+	}
+	result := buildDeployAnnotations(nil, triggers)
+	if !strings.Contains(result, `tentacular.io/cron-schedule: "0 9 * * *"`) {
+		t.Error("expected tentacular.io/cron-schedule annotation")
+	}
+	if strings.Contains(result, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 }

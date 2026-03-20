@@ -119,7 +119,7 @@ func TestE2E_DeploymentSecurityHardeningComplete(t *testing.T) {
 }
 
 // TestE2E_CronTriggerAnnotationOnDeployment verifies that cron triggers produce
-// a tentacular.dev/cron-schedule annotation on the Deployment instead of CronJob manifests.
+// a tentacular.io/cron-schedule annotation on the Deployment instead of CronJob manifests.
 // Pre-warming is now handled server-side by the MCP server after wf_apply.
 func TestE2E_CronTriggerAnnotationOnDeployment(t *testing.T) {
 	wf := &spec.Workflow{
@@ -144,7 +144,7 @@ func TestE2E_CronTriggerAnnotationOnDeployment(t *testing.T) {
 
 	// The cron schedule should appear as an annotation on the Deployment.
 	dep := manifests[0].Content
-	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 8 * * *"`) {
+	if !strings.Contains(dep, `tentacular.io/cron-schedule: "0 8 * * *"`) {
 		t.Error("expected cron-schedule annotation on Deployment with schedule")
 	}
 }
@@ -166,7 +166,7 @@ func TestE2E_NoCronNoAnnotation(t *testing.T) {
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 
 	dep := manifests[0].Content
-	if strings.Contains(dep, "tentacular.dev/cron-schedule") {
+	if strings.Contains(dep, "tentacular.io/cron-schedule") {
 		t.Error("expected no cron-schedule annotation for manual-only workflow")
 	}
 

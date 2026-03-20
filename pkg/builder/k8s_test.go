@@ -287,7 +287,7 @@ func TestK8sManifestCronTriggerSingle(t *testing.T) {
 		}
 	}
 	dep := manifests[0].Content
-	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
+	if !strings.Contains(dep, `tentacular.io/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation on Deployment with schedule")
 	}
 }
@@ -316,7 +316,7 @@ func TestK8sManifestCronTriggerMultiple(t *testing.T) {
 		}
 	}
 	dep := manifests[0].Content
-	if !strings.Contains(dep, "tentacular.dev/cron-schedule:") {
+	if !strings.Contains(dep, "tentacular.io/cron-schedule:") {
 		t.Error("expected cron-schedule annotation on Deployment")
 	}
 	// Both schedules should appear in the annotation (comma-joined)
@@ -343,7 +343,7 @@ func TestK8sManifestCronTriggerNamedScheduleAnnotation(t *testing.T) {
 	manifests := GenerateK8sManifests(wf, "named-cron:1-0", "default", DeployOptions{})
 
 	dep := manifests[0].Content
-	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
+	if !strings.Contains(dep, `tentacular.io/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation with schedule on Deployment")
 	}
 }
@@ -383,7 +383,7 @@ func TestK8sManifestManualOnlyNoRegression(t *testing.T) {
 	}
 	// Manual-only workflows should not have the cron-schedule annotation
 	dep := manifests[0].Content
-	if strings.Contains(dep, "tentacular.dev/cron-schedule") {
+	if strings.Contains(dep, "tentacular.io/cron-schedule") {
 		t.Error("expected no cron-schedule annotation for manual-only workflow")
 	}
 }
@@ -407,7 +407,7 @@ func TestK8sManifestCronTriggerAnnotationOnlyTwoManifests(t *testing.T) {
 		t.Fatalf("expected 2 manifests (Deployment+Service), got %d", len(manifests))
 	}
 	dep := manifests[0].Content
-	if !strings.Contains(dep, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
+	if !strings.Contains(dep, `tentacular.io/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation on Deployment")
 	}
 }
@@ -870,23 +870,22 @@ func TestBuildDeployAnnotationsAllEmpty(t *testing.T) {
 
 func TestBuildDeployAnnotationsFullMetadata(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
-		Owner:       "platform-team",
-		Team:        "infra",
+		Group:       "platform-team",
 		Tags:        []string{"production", "critical"},
 		Environment: "prod",
 	}
 	result := buildDeployAnnotations(meta, nil)
-	if !strings.Contains(result, "tentacular.dev/owner: platform-team") {
-		t.Error("expected owner annotation")
+	if !strings.Contains(result, "tentacular.io/group: platform-team") {
+		t.Error("expected group annotation")
 	}
-	if !strings.Contains(result, "tentacular.dev/team: infra") {
-		t.Error("expected team annotation")
-	}
-	if !strings.Contains(result, "tentacular.dev/tags: production,critical") {
+	if !strings.Contains(result, "tentacular.io/tags: production,critical") {
 		t.Error("expected tags annotation")
 	}
-	if !strings.Contains(result, "tentacular.dev/environment: prod") {
+	if !strings.Contains(result, "tentacular.io/environment: prod") {
 		t.Error("expected environment annotation")
+	}
+	if strings.Contains(result, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 	if !strings.HasPrefix(result, "  annotations:\n") {
 		t.Error("expected result to start with annotations block")
@@ -895,21 +894,21 @@ func TestBuildDeployAnnotationsFullMetadata(t *testing.T) {
 
 func TestBuildDeployAnnotationsPartialMetadata(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
-		Owner: "data-team",
-		// Team, Tags, Environment intentionally omitted
+		Group: "data-team",
+		// Tags, Environment intentionally omitted
 	}
 	result := buildDeployAnnotations(meta, nil)
-	if !strings.Contains(result, "tentacular.dev/owner: data-team") {
-		t.Error("expected owner annotation")
+	if !strings.Contains(result, "tentacular.io/group: data-team") {
+		t.Error("expected group annotation")
 	}
-	if strings.Contains(result, "tentacular.dev/team:") {
-		t.Error("expected no team annotation when Team is empty")
-	}
-	if strings.Contains(result, "tentacular.dev/tags:") {
+	if strings.Contains(result, "tentacular.io/tags:") {
 		t.Error("expected no tags annotation when Tags is nil")
 	}
-	if strings.Contains(result, "tentacular.dev/environment:") {
+	if strings.Contains(result, "tentacular.io/environment:") {
 		t.Error("expected no environment annotation when Environment is empty")
+	}
+	if strings.Contains(result, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 }
 
@@ -918,8 +917,11 @@ func TestBuildDeployAnnotationsCronScheduleSingle(t *testing.T) {
 		{Type: "cron", Schedule: "0 9 * * *"},
 	}
 	result := buildDeployAnnotations(nil, triggers)
-	if !strings.Contains(result, `tentacular.dev/cron-schedule: "0 9 * * *"`) {
+	if !strings.Contains(result, `tentacular.io/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation with single schedule")
+	}
+	if strings.Contains(result, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 }
 
@@ -930,39 +932,38 @@ func TestBuildDeployAnnotationsCronScheduleMultiple(t *testing.T) {
 		{Type: "cron", Schedule: "0 * * * *"},
 	}
 	result := buildDeployAnnotations(nil, triggers)
-	if !strings.Contains(result, `tentacular.dev/cron-schedule: "0 9 * * *,0 * * * *"`) {
+	if !strings.Contains(result, `tentacular.io/cron-schedule: "0 9 * * *,0 * * * *"`) {
 		t.Errorf("expected comma-joined schedules in cron-schedule annotation, got: %q", result)
 	}
 }
 
 func TestBuildDeployAnnotationsNewlineInjectionBlocked(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
-		Owner: "foo\n    injected.key: evil-value",
-		Team:  "bar\r\nbaz",
+		Group: "foo\n    injected.key: evil-value",
 	}
 	result := buildDeployAnnotations(meta, nil)
 
 	// Verify no additional YAML lines were injected. After sanitization the
 	// newlines are removed, so the only annotation lines should be
-	// tentacular.dev/owner and tentacular.dev/team.
+	// tentacular.io/group.
 	lines := strings.Split(strings.TrimSpace(result), "\n")
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" || trimmed == "annotations:" {
 			continue
 		}
-		if !strings.HasPrefix(trimmed, "tentacular.dev/") {
+		if !strings.HasPrefix(trimmed, "tentacular.io/") {
 			t.Errorf("unexpected annotation line (possible injection): %q", line)
 		}
 	}
 
-	// The tentacular.dev/owner line should still be present (value is sanitized but non-empty)
-	if !strings.Contains(result, "tentacular.dev/owner:") {
-		t.Error("expected tentacular.dev/owner annotation to be present")
+	// The tentacular.io/group line should still be present (value is sanitized but non-empty)
+	if !strings.Contains(result, "tentacular.io/group:") {
+		t.Error("expected tentacular.io/group annotation to be present")
 	}
 
 	// No bare newlines should appear inside an annotation value
-	if strings.Contains(result, "tentacular.dev/owner: foo\n") {
+	if strings.Contains(result, "tentacular.io/group: foo\n") {
 		t.Error("expected no trailing newline within annotation value")
 	}
 }
@@ -970,25 +971,24 @@ func TestBuildDeployAnnotationsNewlineInjectionBlocked(t *testing.T) {
 func TestK8sManifestMetadataAnnotations(t *testing.T) {
 	wf := makeTestWorkflow("meta-test")
 	wf.Metadata = &spec.WorkflowMetadata{
-		Owner: "platform-team",
-		Team:  "infra",
+		Group: "platform-team",
 		Tags:  []string{"production", "critical"},
 	}
 	manifests := GenerateK8sManifests(wf, "meta-test:1-0", "default", DeployOptions{})
 	dep := manifests[0].Content
 	svc := manifests[1].Content
 
-	if !strings.Contains(dep, "tentacular.dev/owner: platform-team") {
-		t.Error("expected owner annotation in Deployment")
+	if !strings.Contains(dep, "tentacular.io/group: platform-team") {
+		t.Error("expected group annotation in Deployment")
 	}
-	if !strings.Contains(dep, "tentacular.dev/team: infra") {
-		t.Error("expected team annotation in Deployment")
-	}
-	if !strings.Contains(dep, "tentacular.dev/tags: production,critical") {
+	if !strings.Contains(dep, "tentacular.io/tags: production,critical") {
 		t.Error("expected tags annotation in Deployment")
 	}
-	if !strings.Contains(svc, "tentacular.dev/owner: platform-team") {
-		t.Error("expected owner annotation in Service")
+	if !strings.Contains(svc, "tentacular.io/group: platform-team") {
+		t.Error("expected group annotation in Service")
+	}
+	if strings.Contains(dep, "tentacular.dev/") || strings.Contains(svc, "tentacular.dev/") {
+		t.Error("expected NO tentacular.dev/* annotations")
 	}
 }
 

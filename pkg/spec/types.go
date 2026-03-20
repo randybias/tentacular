@@ -16,8 +16,7 @@ type Workflow struct {
 
 // WorkflowMetadata provides optional descriptive metadata for MCP reporting.
 type WorkflowMetadata struct {
-	Owner       string   `yaml:"owner,omitempty"`
-	Team        string   `yaml:"team,omitempty"`
+	Group       string   `yaml:"group,omitempty"`
 	Environment string   `yaml:"environment,omitempty"`
 	Tags        []string `yaml:"tags,omitempty"`
 }

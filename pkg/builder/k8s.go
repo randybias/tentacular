@@ -128,19 +128,14 @@ func sanitizeAnnotationValue(v string) string {
 // buildDeployAnnotations converts workflow metadata and cron triggers into a YAML
 // annotations block. Returns empty string if all fields are empty.
 // Values are sanitized to prevent YAML injection via newlines or special characters.
-// If triggers contains cron triggers, a tentacular.dev/cron-schedule annotation is
+// If triggers contains cron triggers, a tentacular.io/cron-schedule annotation is
 // added with comma-separated schedules (one per cron trigger).
 func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger) string {
 	var lines []string
 	if meta != nil {
-		if meta.Owner != "" {
-			if v := sanitizeAnnotationValue(meta.Owner); v != "" {
-				lines = append(lines, "    tentacular.dev/owner: "+v)
-			}
-		}
-		if meta.Team != "" {
-			if v := sanitizeAnnotationValue(meta.Team); v != "" {
-				lines = append(lines, "    tentacular.dev/team: "+v)
+		if meta.Group != "" {
+			if v := sanitizeAnnotationValue(meta.Group); v != "" {
+				lines = append(lines, "    tentacular.io/group: "+v)
 			}
 		}
 		if len(meta.Tags) > 0 {
@@ -151,12 +146,12 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 				}
 			}
 			if len(cleanTags) > 0 {
-				lines = append(lines, "    tentacular.dev/tags: "+strings.Join(cleanTags, ","))
+				lines = append(lines, "    tentacular.io/tags: "+strings.Join(cleanTags, ","))
 			}
 		}
 		if meta.Environment != "" {
 			if v := sanitizeAnnotationValue(meta.Environment); v != "" {
-				lines = append(lines, "    tentacular.dev/environment: "+v)
+				lines = append(lines, "    tentacular.io/environment: "+v)
 			}
 		}
 	}
@@ -170,7 +165,7 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 		}
 	}
 	if len(cronSchedules) > 0 {
-		lines = append(lines, fmt.Sprintf(`    tentacular.dev/cron-schedule: "%s"`, strings.Join(cronSchedules, ",")))
+		lines = append(lines, fmt.Sprintf(`    tentacular.io/cron-schedule: "%s"`, strings.Join(cronSchedules, ",")))
 	}
 	if len(lines) == 0 {
 		return ""
