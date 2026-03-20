@@ -21,14 +21,15 @@ func NewWhoamiCmd() *cobra.Command {
 
 // whoamiResult is the structured output for JSON mode.
 type whoamiResult struct {
-	Email       string `json:"email"`
-	Name        string `json:"name,omitempty"`
-	Subject     string `json:"subject"`
-	Issuer      string `json:"issuer,omitempty"`
-	Provider    string `json:"provider,omitempty"`
-	Environment string `json:"environment"`
-	ExpiresAt   string `json:"expires_at,omitempty"`
-	Expired     bool   `json:"expired"`
+	Groups      []string `json:"groups,omitempty"`
+	Email       string   `json:"email"`
+	Name        string   `json:"name,omitempty"`
+	Subject     string   `json:"subject"`
+	Issuer      string   `json:"issuer,omitempty"`
+	Provider    string   `json:"provider,omitempty"`
+	Environment string   `json:"environment"`
+	ExpiresAt   string   `json:"expires_at,omitempty"`
+	Expired     bool     `json:"expired"`
 }
 
 func runWhoami(cmd *cobra.Command, args []string) error {
@@ -107,6 +108,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 			Environment: envName,
 			Expired:     expired,
 			ExpiresAt:   expiresAt,
+			Groups:      claims.Groups,
 		}
 		return emitWhoamiJSON(cmd, result)
 	}
@@ -122,6 +124,16 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 	}
 	if provider != "" {
 		fmt.Fprintf(out, "Provider:    %s\n", provider)
+	}
+	if len(claims.Groups) > 0 {
+		fmt.Fprintf(out, "Groups:      ")
+		for i, g := range claims.Groups {
+			if i > 0 {
+				fmt.Fprintf(out, ", ")
+			}
+			fmt.Fprintf(out, "%s", g)
+		}
+		fmt.Fprintln(out)
 	}
 	fmt.Fprintf(out, "Environment: %s\n", envName)
 
