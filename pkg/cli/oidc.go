@@ -105,14 +105,15 @@ func RemoveOIDCToken(envName string) error {
 
 // JWTClaims holds the subset of JWT claims we care about.
 type JWTClaims struct {
-	Iss               string `json:"iss"`
-	Sub               string `json:"sub"`
-	Email             string `json:"email"`
-	Name              string `json:"name"`
-	PreferredUsername string `json:"preferred_username"`
-	IdentityProvider  string `json:"identity_provider"`
-	Exp               int64  `json:"exp"`
-	Iat               int64  `json:"iat"`
+	Groups            []string `json:"groups"`
+	Iss               string   `json:"iss"`
+	Sub               string   `json:"sub"`
+	Email             string   `json:"email"`
+	Name              string   `json:"name"`
+	PreferredUsername string   `json:"preferred_username"`
+	IdentityProvider  string   `json:"identity_provider"`
+	Exp               int64    `json:"exp"`
+	Iat               int64    `json:"iat"`
 }
 
 // DecodeJWTClaims decodes the payload of a JWT without signature verification.
