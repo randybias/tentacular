@@ -34,6 +34,8 @@ func NewDeployCmd() *cobra.Command {
 	cmd.Flags().Bool("skip-live-test", false, "Skip pre-deploy live test (alias for --force)")
 	cmd.Flags().Bool("verify", false, "Run workflow once after deploy to verify")
 	cmd.Flags().Bool("warn", false, "Audit mode: contract violations produce warnings instead of failures")
+	cmd.Flags().String("group", "", "Set group ownership for the workflow (e.g. platform-team)")
+	cmd.Flags().String("share", "", "Set permissions mode preset (e.g. group-edit, private, public-read)")
 	return cmd
 }
 
@@ -46,6 +48,8 @@ type InternalDeployOptions struct {
 	ImagePullPolicy string
 	Kubeconfig      string // explicit kubeconfig file path (bootstrap-only)
 	Context         string // kubeconfig context override (bootstrap-only)
+	Group           string // optional group ownership for authz annotation stamping
+	Share           string // optional mode preset (e.g. "group-edit", "private")
 }
 
 // DeployResult holds the result of a deployment.
@@ -75,6 +79,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	skipLiveTest, _ := cmd.Flags().GetBool("skip-live-test")
 	verify, _ := cmd.Flags().GetBool("verify")
+	group, _ := cmd.Flags().GetString("group")
+	share, _ := cmd.Flags().GetString("share")
 
 	// --skip-live-test is an alias for --force
 	if skipLiveTest {
@@ -204,6 +210,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		Image:        imageTag,
 		RuntimeClass: runtimeClass,
 		StatusOut:    w,
+		Group:        group,
+		Share:        share,
 	}
 
 	deployResult, err := deployWorkflow(absDir, deployOpts, mcpClient)
@@ -417,8 +425,11 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 	}
 
 	// Phase 3: Apply via MCP
-	applyResult, err := mcpClient.WfApply(context.Background(), opts.Namespace, wf.Name, mcpManifests)
+	applyResult, err := mcpClient.WfApplyWithAuthz(context.Background(), opts.Namespace, wf.Name, mcpManifests, opts.Group, opts.Share)
 	if err != nil {
+		if isAuthzError(err) {
+			return nil, fmt.Errorf("permission denied: %w\n  hint: use 'tntc permissions get %s %s' to view current ownership", err, opts.Namespace, wf.Name)
+		}
 		if hint := mcpErrorHint(err); hint != "" {
 			return nil, fmt.Errorf("applying via MCP: %w\n  hint: %s", err, hint)
 		}
