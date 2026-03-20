@@ -261,3 +261,8 @@ func mcpErrorHint(err error) string {
 	}
 	return ""
 }
+
+// isAuthzError returns true if err is a permission denial from the authz layer (HTTP 403).
+func isAuthzError(err error) bool {
+	return mcp.IsForbidden(err)
+}

@@ -57,6 +57,9 @@ func main() {
 	root.AddCommand(cli.NewLogoutCmd())
 	root.AddCommand(cli.NewWhoamiCmd())
 
+	// Permissions commands
+	root.AddCommand(cli.NewPermissionsCmd())
+
 	// Version
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
