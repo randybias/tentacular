@@ -105,14 +105,16 @@ func resolveMCPClient(cmd *cobra.Command) (*mcp.Client, error) {
 	// Try OIDC token first (from `tntc login`)
 	oidcToken, err := resolveOIDCToken(envName)
 	if err != nil {
-		// Non-fatal: fall through to static token
-		fmt.Fprintf(os.Stderr, "Warning: OIDC token error: %v\n", err)
+		// OIDC was configured but failed (expired, refresh error, etc.).
+		// Do NOT fall back to bearer token — that would silently escalate
+		// to superuser privileges. Return a hard error instead.
+		return nil, fmt.Errorf("OIDC token expired. Run `tntc login` to re-authenticate (detail: %w)", err)
 	}
 	if oidcToken != "" {
 		return mcp.NewClient(mcp.Config{Endpoint: endpoint, Token: oidcToken}), nil
 	}
 
-	// Fall back to static bearer token
+	// No OIDC configured — use static bearer token (admin/bootstrap mode)
 	token, err := resolveStaticToken(envName, cfg)
 	if err != nil {
 		return nil, err
@@ -234,12 +236,16 @@ func buildMCPClientForEnv(envName string) (*mcp.Client, error) {
 	}
 
 	// Try OIDC token first
-	oidcToken, _ := resolveOIDCToken(envName)
+	oidcToken, err := resolveOIDCToken(envName)
+	if err != nil {
+		// OIDC configured but failed — hard error, no silent escalation to bearer token.
+		return nil, fmt.Errorf("OIDC token expired. Run `tntc login` to re-authenticate (detail: %w)", err)
+	}
 	if oidcToken != "" {
 		return mcp.NewClient(mcp.Config{Endpoint: endpoint, Token: oidcToken}), nil
 	}
 
-	// Fall back to static token
+	// No OIDC configured — use static bearer token (admin/bootstrap mode)
 	token, err := resolveStaticToken(envName, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("resolving token for env %q: %w", envName, err)
