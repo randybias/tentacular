@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -192,5 +194,147 @@ func TestMCPErrorHint_Forbidden(t *testing.T) {
 	hint := mcpErrorHint(forbiddenErr)
 	if !strings.Contains(hint, "namespace") {
 		t.Errorf("expected hint to mention namespace for 403, got %q", hint)
+	}
+}
+
+// --- Issue #79: bearer-token fallback tests ---
+
+// writeTestOIDCToken writes an OIDCTokenStore to the expected path for an environment.
+func writeTestOIDCToken(t *testing.T, home, envName string, store *OIDCTokenStore) {
+	t.Helper()
+	dir := filepath.Join(home, ".tentacular", "tokens")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, envName+".json"), data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestResolveMCPClient_OIDCFailure_NoFallback verifies that when OIDC is configured
+// but expired (no refresh token), resolveMCPClient returns a hard error instead of
+// silently falling back to the static bearer token. This is the core fix for issue #79.
+func TestResolveMCPClient_OIDCFailure_NoFallback(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
+	t.Setenv("TNTC_MCP_TOKEN", "superuser-bearer-token")
+	t.Setenv("TENTACULAR_ENV", "")
+
+	origDir, _ := os.Getwd()
+	_ = os.Chdir(t.TempDir())
+	defer func() { _ = os.Chdir(origDir) }()
+
+	// Write an expired OIDC token with no refresh token.
+	writeTestOIDCToken(t, tmpHome, "default", &OIDCTokenStore{
+		AccessToken: "expired-token",
+		ExpiresAt:   time.Now().Add(-1 * time.Hour),
+	})
+
+	cmd := newTestCmd()
+	client, err := resolveMCPClient(cmd)
+	if err == nil {
+		t.Fatal("expected hard error when OIDC is configured but failed; got nil (silent fallback to bearer token)")
+	}
+	if client != nil {
+		t.Fatal("expected nil client on OIDC failure")
+	}
+	if !strings.Contains(err.Error(), "tntc login") {
+		t.Errorf("error should tell user to run 'tntc login', got: %v", err)
+	}
+}
+
+// TestResolveMCPClient_NoOIDC_BearerTokenWorks verifies that when no OIDC is
+// configured and a static bearer token is available, the client is created
+// successfully. This is the admin/bootstrap case.
+func TestResolveMCPClient_NoOIDC_BearerTokenWorks(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
+	t.Setenv("TNTC_MCP_TOKEN", "admin-bearer-token")
+	t.Setenv("TENTACULAR_ENV", "")
+
+	origDir, _ := os.Getwd()
+	_ = os.Chdir(t.TempDir())
+	defer func() { _ = os.Chdir(origDir) }()
+
+	// No OIDC token file — resolveOIDCToken returns ("", nil).
+	cmd := newTestCmd()
+	client, err := resolveMCPClient(cmd)
+	if err != nil {
+		t.Fatalf("expected no error for bearer-token-only mode, got: %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client in bearer-token-only mode")
+	}
+}
+
+// TestResolveMCPClient_OIDCValid verifies the happy path: OIDC token is valid,
+// client is created with the OIDC token (no fallback needed).
+func TestResolveMCPClient_OIDCValid(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
+	t.Setenv("TNTC_MCP_TOKEN", "")
+	t.Setenv("TENTACULAR_ENV", "")
+
+	origDir, _ := os.Getwd()
+	_ = os.Chdir(t.TempDir())
+	defer func() { _ = os.Chdir(origDir) }()
+
+	writeTestOIDCToken(t, tmpHome, "default", &OIDCTokenStore{
+		AccessToken: "good-oidc-token",
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	})
+
+	cmd := newTestCmd()
+	client, err := resolveMCPClient(cmd)
+	if err != nil {
+		t.Fatalf("expected no error with valid OIDC token, got: %v", err)
+	}
+	if client == nil {
+		t.Fatal("expected non-nil client with valid OIDC token")
+	}
+}
+
+// TestResolveOIDCToken_NoTokenFile verifies that when no OIDC token file exists,
+// resolveOIDCToken returns empty string and no error (allowing bearer fallback).
+func TestResolveOIDCToken_NoTokenFile(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	token, err := resolveOIDCToken("testenv")
+	if err != nil {
+		t.Fatalf("expected no error, got: %v", err)
+	}
+	if token != "" {
+		t.Fatalf("expected empty token, got: %q", token)
+	}
+}
+
+// TestResolveOIDCToken_ExpiredNoRefresh verifies that an expired OIDC token
+// with no refresh token returns an error (not empty string).
+func TestResolveOIDCToken_ExpiredNoRefresh(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	writeTestOIDCToken(t, tmpHome, "testenv", &OIDCTokenStore{
+		AccessToken: "expired-token",
+		ExpiresAt:   time.Now().Add(-1 * time.Hour),
+	})
+
+	token, err := resolveOIDCToken("testenv")
+	if err == nil {
+		t.Fatal("expected error for expired OIDC token with no refresh token")
+	}
+	if token != "" {
+		t.Fatalf("expected empty token on error, got: %q", token)
+	}
+	if !strings.Contains(err.Error(), "tntc login") {
+		t.Errorf("error should mention 'tntc login', got: %v", err)
 	}
 }
