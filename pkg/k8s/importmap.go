@@ -91,6 +91,10 @@ func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 					imports[baseSpec+"@"+dep.Version] = proxyURL + proxyPath
 				}
 				imports[baseSpec] = proxyURL + proxyPath
+				// Also emit a bare specifier key so that
+				// `import { Client } from "@db/postgres"` is intercepted
+				// by the import map (Deno's jsr: protocol bypasses import maps).
+				imports[dep.Host] = proxyURL + proxyPath
 			case "npm":
 				// Same dual-key strategy for npm: specifiers.
 				baseSpec := "npm:" + dep.Host

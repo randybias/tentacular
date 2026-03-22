@@ -340,7 +340,7 @@ func DeriveDenoFlags(c *Contract, proxyHost string) []string {
 		allowNetFlag,
 		"--allow-read=/app",
 		"--allow-write=/tmp",
-		"--allow-env=DENO_DIR,HOME,TELEMETRY_SINK",
+		"--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK",
 	}
 
 	// Deno 2 requires explicit --allow-import permission for any host from which

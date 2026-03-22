@@ -14,6 +14,9 @@ import (
 // When the workflow has jsr/npm dependencies, an egress rule to the in-cluster module
 // proxy (esm.sh in tentacular-support) is automatically added.
 func GenerateNetworkPolicy(wf *spec.Workflow, namespace, proxyNamespace string) *builder.Manifest {
+	if proxyNamespace == "" {
+		proxyNamespace = DefaultProxyNamespace
+	}
 	if wf.Contract == nil {
 		return nil
 	}
