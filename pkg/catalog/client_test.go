@@ -168,7 +168,7 @@ func TestFetchIndexWritesCache(t *testing.T) {
 	}
 
 	// Verify cache file was written
-	cachePath := filepath.Join(cacheDir, "catalog.yaml")
+	cachePath := filepath.Join(cacheDir, "scaffolds-index.yaml")
 	if _, err := os.Stat(cachePath); err != nil {
 		t.Errorf("expected cache file at %s: %v", cachePath, err)
 	}
@@ -182,7 +182,7 @@ func TestFetchIndexUsesCache(t *testing.T) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cachePath := filepath.Join(cacheDir, "catalog.yaml")
+	cachePath := filepath.Join(cacheDir, "scaffolds-index.yaml")
 	if err := os.WriteFile(cachePath, []byte(catalogYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestFetchIndexNoCacheBypassesCache(t *testing.T) {
 	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	cachePath := filepath.Join(cacheDir, "catalog.yaml")
+	cachePath := filepath.Join(cacheDir, "scaffolds-index.yaml")
 	if err := os.WriteFile(cachePath, []byte(`version: "old"`), 0o644); err != nil {
 		t.Fatal(err)
 	}

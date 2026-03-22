@@ -830,8 +830,10 @@ func TestDeploymentNoInitContainers(t *testing.T) {
 }
 
 func TestDeploymentImportMapMountPath(t *testing.T) {
-	// deno.json must be mounted at /app/deno.json so Deno's config discovery
-	// finds it when the entrypoint is /app/mod.ts and "tentacular" resolves to ./mod.ts.
+	// deno.json must be mounted at /app/engine/deno.json because Deno discovers
+	// config by walking up from the entrypoint (/app/engine/main.ts) and the engine
+	// image bakes a deno.json at that path. Mounting at /app/deno.json would be
+	// shadowed by the closer /app/engine/deno.json.
 	wf := &spec.Workflow{
 		Name:     "mount-path-test",
 		Version:  "1.0",
@@ -846,11 +848,8 @@ func TestDeploymentImportMapMountPath(t *testing.T) {
 	}
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 	dep := manifests[0].Content
-	if !strings.Contains(dep, "mountPath: /app/deno.json") {
-		t.Error("expected import map mounted at /app/deno.json")
-	}
-	if strings.Contains(dep, "/app/engine/deno.json") {
-		t.Error("unexpected mount at /app/engine/deno.json — entrypoint is now /app/mod.ts")
+	if !strings.Contains(dep, "mountPath: /app/engine/deno.json") {
+		t.Error("expected import map mounted at /app/engine/deno.json")
 	}
 }
 
