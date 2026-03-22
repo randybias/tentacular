@@ -217,8 +217,11 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	// Always mount the import map — the engine has jsr: deps (e.g. @nats-io/transport-deno)
 	// that must route through the in-cluster module proxy. Workflow namespaces cannot reach
 	// external registries directly.
+	// Mount at /app/engine/deno.json because Deno discovers config by walking up from the
+	// entrypoint (/app/engine/main.ts) and the engine image bakes a deno.json at that path.
+	// Mounting at /app/deno.json would be shadowed by the closer /app/engine/deno.json.
 	importMapVolumeMount := `            - name: import-map
-              mountPath: /app/deno.json
+              mountPath: /app/engine/deno.json
               subPath: deno.json
               readOnly: true
 `
