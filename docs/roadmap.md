@@ -72,8 +72,8 @@ Completed items, most recent first.
 
 | Item | Completed | Notes |
 |------|-----------|-------|
-| tntc init + catalog init | 2026-02 | Scaffold command and catalog-based template initialization |
-| Workflow catalog commands | 2026-02 | `tntc catalog list`, `tntc catalog init <template>` |
+| tntc init + scaffold init | 2026-02 | Scaffold command and scaffold-based quickstart initialization |
+| Workflow scaffold commands | 2026-02 | `tntc scaffold list`, `tntc scaffold init <scaffold>` |
 | Release pipeline | 2026-02 | GoReleaser, install.sh, stable.txt, version package |
 
 ### 2026-02 — Core Fixes and Features
@@ -95,4 +95,4 @@ Completed items, most recent first.
 | `--allow-read` path widened | 2026-02 | Includes `/var/run/secrets` for SA tokens and CA certs |
 | `--unstable-net` flag added | 2026-02 | Enables `Deno.createHttpClient()` for custom TLS |
 | Version label YAML quoting | 2026-02 | Prevents semver strings from being parsed as floats |
-| Example workflows migration | 2026-02 | Consolidated to `tentacular-catalog` repo |
+| Example workflows migration | 2026-02 | Consolidated to `tentacular-scaffolds` repo |

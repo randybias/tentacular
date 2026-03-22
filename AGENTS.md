@@ -9,7 +9,7 @@ Tentacular is a security-first, agent-centric, DAG-based workflow builder and ru
 | [tentacular](https://github.com/randybias/tentacular) | Go CLI (`tntc`) + Deno workflow engine (this repo) |
 | [tentacular-mcp](https://github.com/randybias/tentacular-mcp) | In-cluster MCP server (Go, Helm chart) |
 | [tentacular-skill](https://github.com/randybias/tentacular-skill) | Agent skill definition (Markdown) |
-| [tentacular-catalog](https://github.com/randybias/tentacular-catalog) | Workflow template catalog (TypeScript/Deno) |
+| [tentacular-scaffolds](https://github.com/randybias/tentacular-scaffolds) | Scaffold quickstart library (TypeScript/Deno) |
 
 ## System Architecture
 
@@ -25,7 +25,7 @@ Developer / AI Agent
     Kubernetes API
         |
     Workflow Pods             <-- Deno engine from this repo's engine/
-        (gVisor sandbox)         Templates from tentacular-catalog
+        (gVisor sandbox)         Scaffolds from tentacular-scaffolds
 ```
 
 The CLI has zero direct Kubernetes API access. All cluster operations route through the MCP server via authenticated HTTP.
@@ -38,7 +38,7 @@ Before making changes, read the **[Architecture docs](https://randybias.github.i
 
 - **Go CLI** (`cmd/tntc/`, `pkg/`) — lifecycle management, K8s operations via MCP
 - **Deno Engine** (`engine/`) — DAG compilation and execution
-- **Template Catalog** — workflow templates available via `tntc catalog list` from [tentacular-catalog](https://github.com/randybias/tentacular-catalog)
+- **Scaffold Library** — scaffold quickstarts available via `tntc scaffold list` from [tentacular-scaffolds](https://github.com/randybias/tentacular-scaffolds)
 - **Infrastructure** (`deploy/`) — gVisor setup scripts and K8s resources
 
 ## Key Commands
@@ -78,7 +78,7 @@ Changes in this repo often require updates in other repos:
 
 - **New MCP tool:** handler in `tentacular-mcp/pkg/tools/` -> client method in `pkg/mcp/tools.go` -> CLI command in `pkg/cli/` -> skill docs in `tentacular-skill/`
 - **Contract/spec changes:** parser in `pkg/spec/` -> engine types in `engine/types.ts` -> builder in `pkg/builder/` -> skill docs in `tentacular-skill/`
-- **New workflow template:** template in `tentacular-catalog/templates/`
+- **New scaffold quickstart:** quickstart in `tentacular-scaffolds/quickstarts/`
 - **Security model changes:** may touch `pkg/builder/`, `tentacular-mcp/pkg/k8s/`, and `tentacular-skill/`
 
 ## Commit Messages

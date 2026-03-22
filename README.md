@@ -17,7 +17,7 @@ Three components form the system: a Go CLI manages the full lifecycle, an in-clu
 | [tentacular](https://github.com/randybias/tentacular) | Go CLI (`tntc`) + Deno workflow engine |
 | [tentacular-mcp](https://github.com/randybias/tentacular-mcp) | In-cluster MCP server (Helm chart, 32 tools) |
 | [tentacular-skill](https://github.com/randybias/tentacular-skill) | Agent skill definition for AI assistants |
-| [tentacular-catalog](https://github.com/randybias/tentacular-catalog) | [Workflow template catalog](https://randybias.github.io/tentacular-catalog) |
+| [tentacular-scaffolds](https://github.com/randybias/tentacular-scaffolds) | [Scaffold quickstart library](https://randybias.github.io/tentacular-scaffolds) |
 | [tentacular-docs](https://github.com/randybias/tentacular-docs) | [Documentation site](https://randybias.github.io/tentacular-docs) |
 
 ## Documentation
@@ -153,24 +153,24 @@ export default async function run(ctx: Context, input: unknown): Promise<unknown
 
 See [Node Contract reference](https://randybias.github.io/tentacular-docs/reference/node-contract/) for the full Context API, auth patterns, and testing fixtures.
 
-## Template Catalog
+## Scaffold Library
 
-Production-ready workflow templates are available in the [tentacular-catalog](https://github.com/randybias/tentacular-catalog) ([browse online](https://randybias.github.io/tentacular-catalog)):
+Production-ready scaffold quickstarts are available in [tentacular-scaffolds](https://github.com/randybias/tentacular-scaffolds) ([browse online](https://randybias.github.io/tentacular-scaffolds)):
 
 ```bash
-# Browse available templates
-tntc catalog list
-tntc catalog search monitoring
-tntc catalog info hn-digest
+# Browse available scaffolds
+tntc scaffold list
+tntc scaffold search monitoring
+tntc scaffold info hn-digest
 
-# Scaffold from a template
-tntc catalog init hn-digest my-news-digest
+# Scaffold from a quickstart
+tntc scaffold init hn-digest my-news-digest
 cd my-news-digest
 tntc validate
 tntc dev
 ```
 
-| Template | Description | Complexity |
+| Scaffold | Description | Complexity |
 |----------|-------------|-----------|
 | `word-counter` | Simple word counting example | simple |
 | `hn-digest` | Fetch and filter top Hacker News stories | moderate |
@@ -179,7 +179,7 @@ tntc dev
 | `pr-review` | Automated PR review with parallel security scans | advanced |
 | `cluster-health-collector` | Collect K8s cluster health, store to Postgres | moderate |
 
-See `tntc catalog list` for the full catalog or [Catalog Usage guide](https://randybias.github.io/tentacular-docs/guides/catalog-usage/).
+See `tntc scaffold list` for the full library or [Catalog Usage guide](https://randybias.github.io/tentacular-docs/guides/catalog-usage/).
 
 ## Architecture
 
@@ -188,7 +188,7 @@ See `tntc catalog list` for the full catalog or [Catalog Usage guide](https://ra
 | `cmd/tntc/` | CLI entry point |
 | `pkg/` | Go packages: spec parser, builder, MCP client, CLI commands |
 | `engine/` | Deno TypeScript engine: compiler, executor, context, server, telemetry |
-| `pkg/catalog/` | Catalog client for fetching workflow templates |
+| `pkg/catalog/` | Catalog client for fetching scaffold quickstarts |
 | `deploy/` | Infrastructure scripts (gVisor installation, RuntimeClass) |
 
 ### Namespace Model

@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	DefaultBaseURL  = "https://raw.githubusercontent.com/randybias/tentacular-catalog/main"
+	DefaultBaseURL  = "https://raw.githubusercontent.com/randybias/tentacular-scaffolds/main"
 	DefaultCacheTTL = 1 * time.Hour
 )
 
@@ -60,7 +60,7 @@ func NewClient(cfg CatalogConfig) *Client {
 func (c *Client) FetchIndex(noCache bool) (*CatalogIndex, error) {
 	cachePath := ""
 	if c.CacheDir != "" {
-		cachePath = filepath.Join(c.CacheDir, "catalog.yaml")
+		cachePath = filepath.Join(c.CacheDir, "scaffolds-index.yaml")
 	}
 
 	// Try cache first
@@ -79,7 +79,7 @@ func (c *Client) FetchIndex(noCache bool) (*CatalogIndex, error) {
 	}
 
 	// Fetch from remote
-	url := c.BaseURL + "/catalog.yaml"
+	url := c.BaseURL + "/scaffolds-index.yaml"
 	data, err := c.httpGet(url)
 	if err != nil {
 		return nil, fmt.Errorf("fetching catalog index: %w", err)
