@@ -146,29 +146,42 @@ func copyScaffoldFiles(entry *scaffold.ScaffoldEntry, outDir string) error {
 }
 
 // copyScaffoldDir recursively copies src into dst, preserving directory structure.
+// Skips symlinks and never copies .secrets.yaml.
 func copyScaffoldDir(src, dst string) error {
 	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
+
+		// Skip symlinks — do not follow to prevent path traversal via symlinks.
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
 		}
+
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return relErr
+		}
+
+		// Hard-exclude .secrets.yaml; only .secrets.yaml.example is safe to copy.
+		if filepath.Base(rel) == ".secrets.yaml" {
+			return nil
+		}
+
 		target := filepath.Join(dst, rel)
 
 		if d.IsDir() {
-			return os.MkdirAll(target, 0o755) //nolint:gosec // non-sensitive scaffold directory
+			return os.MkdirAll(target, 0o700)
 		}
 
-		data, err := os.ReadFile(path) //nolint:gosec // reading scaffold source file
-		if err != nil {
-			return fmt.Errorf("reading %s: %w", path, err)
+		data, readErr := os.ReadFile(path) //nolint:gosec // reading scaffold source file
+		if readErr != nil {
+			return fmt.Errorf("reading %s: %w", path, readErr)
 		}
-		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil { //nolint:gosec // non-sensitive directory
-			return err
+		if mkErr := os.MkdirAll(filepath.Dir(target), 0o700); mkErr != nil {
+			return mkErr
 		}
-		return os.WriteFile(target, data, 0o644) //nolint:gosec // non-sensitive scaffold file
+		return os.WriteFile(target, data, 0o600) //nolint:gosec // scaffold file under validated dst
 	})
 }
 

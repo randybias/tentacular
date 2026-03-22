@@ -25,6 +25,9 @@ func newScaffoldInfoCmd() *cobra.Command {
 
 func runScaffoldInfo(cmd *cobra.Command, args []string) error {
 	name := args[0]
+	if err := scaffold.ValidateScaffoldName(name); err != nil {
+		return fmt.Errorf("invalid scaffold name: %w", err)
+	}
 	source, _ := cmd.Flags().GetString("source")
 
 	cfg := LoadConfig()

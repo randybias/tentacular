@@ -35,7 +35,7 @@ import (
 // HOME directory set up with private scaffolds.
 //
 // If schemaYAML is "", no params.schema.yaml is written.
-func scaffoldTestFixture(t *testing.T, scaffoldName string, schemaYAML string) (homeDir string, scaffoldDir string) {
+func scaffoldTestFixture(t *testing.T, scaffoldName, schemaYAML string) (homeDir, scaffoldDir string) {
 	t.Helper()
 	home := t.TempDir()
 	sDir := filepath.Join(home, ".tentacular", "scaffolds", scaffoldName)

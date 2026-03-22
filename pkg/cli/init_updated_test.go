@@ -133,7 +133,6 @@ func TestTntcInitNameValidation(t *testing.T) {
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
 
 	for _, tc := range cases {
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			cmd := NewInitCmd()
 			var runErr error

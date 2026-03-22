@@ -17,7 +17,7 @@ import (
 )
 
 // runInfoCmd runs tntc scaffold info <name> and returns stdout + error.
-func runInfoCmd(t *testing.T, home string, name string, flags map[string]string) (string, error) {
+func runInfoCmd(t *testing.T, home, name string, flags map[string]string) (string, error) {
 	t.Helper()
 	setTestHome(t, home)
 

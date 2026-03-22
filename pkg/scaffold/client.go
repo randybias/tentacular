@@ -97,8 +97,8 @@ func (c *Client) FetchIndex(noCache bool) (*ScaffoldIndex, error) {
 
 	// Write to cache
 	if cachePath != "" {
-		if err := os.MkdirAll(c.CacheDir, 0o755); err == nil { //nolint:gosec // 0o755 for user cache directory
-			_ = os.WriteFile(cachePath, data, 0o644) //nolint:gosec // 0o644 for user cache file
+		if err := os.MkdirAll(c.CacheDir, 0o700); err == nil {
+			_ = os.WriteFile(cachePath, data, 0o600) //nolint:gosec // cachePath is under validated CacheDir
 		}
 	}
 

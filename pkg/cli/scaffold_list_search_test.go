@@ -54,24 +54,25 @@ func makeIndexFileAtPath(t *testing.T, path string, scaffolds []scaffold.Scaffol
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	out := "version: \"1\"\ngenerated: \"2026-01-01\"\nscaffolds:\n"
+	var sb strings.Builder
+	sb.WriteString("version: \"1\"\ngenerated: \"2026-01-01\"\nscaffolds:\n")
 	for _, s := range scaffolds {
-		out += "  - name: " + s.Name + "\n" +
+		sb.WriteString("  - name: " + s.Name + "\n" +
 			"    displayName: " + s.DisplayName + "\n" +
 			"    description: " + s.Description + "\n" +
 			"    category: " + s.Category + "\n" +
 			"    author: " + s.Author + "\n" +
-			"    version: \"" + s.Version + "\"\n"
-		for i, tag := range s.Tags {
-			if i == 0 {
-				out += "    tags:\n"
-			}
-			out += "      - " + tag + "\n"
-		}
+			"    version: \"" + s.Version + "\"\n")
 		if len(s.Tags) == 0 {
-			out += "    tags: []\n"
+			sb.WriteString("    tags: []\n")
+		} else {
+			sb.WriteString("    tags:\n")
+			for _, tag := range s.Tags {
+				sb.WriteString("      - " + tag + "\n")
+			}
 		}
 	}
+	out := sb.String()
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -79,7 +80,7 @@ func makeIndexFileAtPath(t *testing.T, path string, scaffolds []scaffold.Scaffol
 
 // setupListTestEnv creates a home with a private scaffold and a cache index.
 // Returns: home dir, cache index path.
-func setupListTestEnv(t *testing.T) (homeDir string, indexPath string) {
+func setupListTestEnv(t *testing.T) (homeDir, indexPath string) {
 	t.Helper()
 	home := t.TempDir()
 
@@ -148,7 +149,7 @@ func runListCmd(t *testing.T, home string, flags map[string]string, boolFlags ma
 }
 
 // runSearchCmd runs tntc scaffold search and returns stdout + error.
-func runSearchCmd(t *testing.T, home string, query string) (string, error) {
+func runSearchCmd(t *testing.T, home, query string) (string, error) {
 	t.Helper()
 	setTestHome(t, home)
 
