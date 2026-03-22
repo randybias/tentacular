@@ -565,3 +565,51 @@ func TestSearchScaffoldsTagMatch(t *testing.T) {
 		t.Errorf("Name: got %q, want %q", results[0].Name, "uptime-tracker")
 	}
 }
+
+// TestEnsurePrivateScaffoldsDirPermissions verifies that EnsurePrivateScaffoldsDir
+// creates the directory with 0700 permissions so other users on shared systems
+// cannot read private scaffold content.
+func TestEnsurePrivateScaffoldsDirPermissions(t *testing.T) {
+	tmpHome := t.TempDir()
+
+	origHome := os.Getenv("HOME")
+	_ = os.Setenv("HOME", tmpHome)
+	defer func() { _ = os.Setenv("HOME", origHome) }()
+
+	dir, err := EnsurePrivateScaffoldsDir()
+	if err != nil {
+		t.Fatalf("EnsurePrivateScaffoldsDir: %v", err)
+	}
+
+	info, err := os.Stat(dir)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+
+	mode := info.Mode().Perm()
+	if mode != 0o700 {
+		t.Errorf("expected 0700 permissions on private scaffolds dir, got %04o", mode)
+	}
+}
+
+// TestEnsurePrivateScaffoldsDirIdempotent verifies that calling
+// EnsurePrivateScaffoldsDir twice does not fail and preserves the directory.
+func TestEnsurePrivateScaffoldsDirIdempotent(t *testing.T) {
+	tmpHome := t.TempDir()
+
+	origHome := os.Getenv("HOME")
+	_ = os.Setenv("HOME", tmpHome)
+	defer func() { _ = os.Setenv("HOME", origHome) }()
+
+	dir1, err := EnsurePrivateScaffoldsDir()
+	if err != nil {
+		t.Fatalf("first call: %v", err)
+	}
+	dir2, err := EnsurePrivateScaffoldsDir()
+	if err != nil {
+		t.Fatalf("second call: %v", err)
+	}
+	if dir1 != dir2 {
+		t.Errorf("path changed between calls: %q vs %q", dir1, dir2)
+	}
+}

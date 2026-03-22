@@ -14,6 +14,7 @@ func NewScaffoldCmd() *cobra.Command {
 	cmd.AddCommand(newScaffoldSearchCmd())
 	cmd.AddCommand(newScaffoldInfoCmd())
 	cmd.AddCommand(newScaffoldInitCmd())
+	cmd.AddCommand(newScaffoldExtractCmd())
 	cmd.AddCommand(newScaffoldSyncCmd())
 	cmd.AddCommand(newScaffoldParamsCmd())
 	return cmd

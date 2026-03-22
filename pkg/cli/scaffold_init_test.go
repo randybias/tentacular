@@ -27,6 +27,8 @@ import (
 	"testing"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/randybias/tentacular/pkg/scaffold"
 )
 
 // scaffoldTestFixture builds a minimal scaffold in a temp dir and returns the
@@ -400,5 +402,89 @@ func TestScaffoldInitWithoutParamsSchema(t *testing.T) {
 	// workflow.yaml should exist
 	if _, err := os.Stat(filepath.Join(outDir, "workflow.yaml")); err != nil {
 		t.Errorf("expected workflow.yaml: %v", err)
+	}
+}
+
+// TestScaffoldInitPrivatePublicPrecedence verifies that when the same scaffold
+// name exists in both private and public sources, the private one wins.
+func TestScaffoldInitPrivatePublicPrecedence(t *testing.T) {
+	// Create the private scaffold (has local files).
+	home, _ := scaffoldTestFixture(t, "shared-scaffold", "")
+	setTestHome(t, home)
+
+	// Also write a public index entry with the same name (no local Path).
+	cacheDir := filepath.Join(home, ".tentacular", "cache")
+	makeIndexFileAtPath(t, filepath.Join(cacheDir, "scaffolds-index.yaml"), []scaffold.ScaffoldEntry{
+		{
+			Name:        "shared-scaffold",
+			DisplayName: "Shared Scaffold (public)",
+			Description: "Public version of shared scaffold",
+			Category:    "testing",
+			Version:     "2.0", // different version to distinguish
+			Author:      "randybias",
+			Tags:        []string{},
+		},
+	})
+
+	outDir := filepath.Join(t.TempDir(), "my-tentacle")
+	_, err := makeScaffoldInitCmd("shared-scaffold", "my-tentacle",
+		map[string]string{"dir": outDir},
+		map[string]bool{"no-params": true},
+	)
+	if err != nil {
+		t.Fatalf("scaffold init precedence: %v", err)
+	}
+
+	// tentacle.yaml must record source=private (private won).
+	data, err := os.ReadFile(filepath.Join(outDir, "tentacle.yaml"))
+	if err != nil {
+		t.Fatalf("reading tentacle.yaml: %v", err)
+	}
+	if !strings.Contains(string(data), "private") {
+		t.Errorf("expected source=private in tentacle.yaml (private should take precedence), got:\n%s", string(data))
+	}
+	if strings.Contains(string(data), "2.0") {
+		t.Errorf("expected private scaffold version (1.0), not public (2.0), got:\n%s", string(data))
+	}
+}
+
+// TestScaffoldInitSourcePublic verifies that --source=public skips private
+// scaffolds and searches the public index. Since public scaffolds don't have
+// local files until after sync, it returns a descriptive "sync first" error.
+func TestScaffoldInitSourcePublic(t *testing.T) {
+	// Set up a private scaffold that should be ignored.
+	home, _ := scaffoldTestFixture(t, "uptime-tracker", "")
+	setTestHome(t, home)
+
+	// Also write a matching public index entry (no local path).
+	cacheDir := filepath.Join(home, ".tentacular", "cache")
+	makeIndexFileAtPath(t, filepath.Join(cacheDir, "scaffolds-index.yaml"), []scaffold.ScaffoldEntry{
+		{
+			Name:        "uptime-tracker",
+			DisplayName: "Uptime Tracker",
+			Description: "Probe HTTP endpoints",
+			Category:    "monitoring",
+			Version:     "1.0",
+			Author:      "randybias",
+			Tags:        []string{},
+		},
+	})
+
+	outDir := filepath.Join(t.TempDir(), "my-tentacle")
+	_, err := makeScaffoldInitCmd("uptime-tracker", "my-tentacle",
+		map[string]string{"dir": outDir, "source": "public"},
+		map[string]bool{"no-params": true},
+	)
+	// Public scaffold has no local Path (sync hasn't downloaded files).
+	// Expected: error mentioning "sync" (not "not found").
+	if err == nil {
+		t.Fatal("expected error for public scaffold without local files, got nil")
+	}
+	if !strings.Contains(err.Error(), "sync") {
+		t.Errorf("expected 'sync' in error message (public scaffold not yet downloaded), got: %v", err)
+	}
+	// Must NOT say "not found" -- scaffold was found in the index but needs sync.
+	if strings.Contains(err.Error(), "not found") {
+		t.Errorf("scaffold should be found in public index but need sync, got: %v", err)
 	}
 }

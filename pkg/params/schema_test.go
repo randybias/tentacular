@@ -392,6 +392,30 @@ func TestLoadParamsFileMissingError(t *testing.T) {
 	}
 }
 
+// TestCheckTypeUnknownTypeReturnsError verifies that an unrecognised type name
+// (e.g. "object") is rejected by checkType rather than silently passing.
+// This is a security/correctness regression: the previous switch had no
+// default case, so unknown types slipped through without error.
+func TestCheckTypeUnknownTypeReturnsError(t *testing.T) {
+	cases := []struct {
+		typeName string
+		val      any
+	}{
+		{"object", map[string]any{"foo": "bar"}},
+		{"dict", map[string]any{}},
+		{"array", []any{"x"}},
+		{"int", 42},
+		{"float", 3.14},
+		{"", "anything"},
+	}
+	for _, tc := range cases {
+		err := checkType("param", tc.typeName, tc.val)
+		if err == nil {
+			t.Errorf("checkType(%q, %v): expected error for unknown type, got nil", tc.typeName, tc.val)
+		}
+	}
+}
+
 // containsAny returns true if s contains any of the given substrings.
 func containsAny(s string, subs ...string) bool {
 	for _, sub := range subs {
