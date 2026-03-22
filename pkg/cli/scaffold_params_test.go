@@ -21,10 +21,10 @@ import (
 )
 
 // setupParamsTentacle creates a temp directory with workflow.yaml and
-// optionally params.schema.yaml, changes to it, and returns cleanup func.
-func setupParamsTentacle(t *testing.T, workflowYAML, schemaYAML string) (dir string) {
+// optionally params.schema.yaml, and changes into it for the duration of the test.
+func setupParamsTentacle(t *testing.T, workflowYAML, schemaYAML string) {
 	t.Helper()
-	dir = t.TempDir()
+	dir := t.TempDir()
 	if workflowYAML != "" {
 		if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"),
 			[]byte(workflowYAML), 0o644); err != nil {
@@ -45,7 +45,6 @@ func setupParamsTentacle(t *testing.T, workflowYAML, schemaYAML string) (dir str
 		t.Fatalf("chdir to temp dir: %v", err)
 	}
 	t.Cleanup(func() { _ = os.Chdir(origDir) })
-	return dir
 }
 
 const paramsTestWorkflowYAML = `name: my-tentacle

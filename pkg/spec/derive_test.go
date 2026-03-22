@@ -328,8 +328,8 @@ func TestDeriveDenoFlagsFixedHostScoped(t *testing.T) {
 	}
 
 	// Should include scoped --allow-env
-	if allowEnvFlag != "--allow-env=DENO_DIR,HOME,TELEMETRY_SINK" {
-		t.Errorf("expected --allow-env=DENO_DIR,HOME,TELEMETRY_SINK, got %s", allowEnvFlag)
+	if allowEnvFlag != "--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
+		t.Errorf("expected --allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK, got %s", allowEnvFlag)
 	}
 }
 
@@ -517,17 +517,17 @@ func TestDeriveDenoFlagsScopedAllowEnv(t *testing.T) {
 		t.Fatal("expected non-nil flags")
 	}
 
-	// Should include scoped --allow-env=DENO_DIR,HOME,TELEMETRY_SINK
+	// Should include scoped --allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK
 	foundAllowEnv := false
 	for _, flag := range flags {
-		if flag == "--allow-env=DENO_DIR,HOME,TELEMETRY_SINK" {
+		if flag == "--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
 			foundAllowEnv = true
 			break
 		}
 	}
 
 	if !foundAllowEnv {
-		t.Errorf("expected --allow-env=DENO_DIR,HOME,TELEMETRY_SINK in derived flags, got %v", flags)
+		t.Errorf("expected --allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK in derived flags, got %v", flags)
 	}
 }
 

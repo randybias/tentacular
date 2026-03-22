@@ -25,7 +25,7 @@ func TestScaffoldNameValidationTraversal(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("../../etc/evil", "my-tentacle",
+	err := makeScaffoldInitCmd("../../etc/evil", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -44,7 +44,7 @@ func TestScaffoldNameValidationUppercase(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("UPPERCASE-Name", "my-tentacle",
+	err := makeScaffoldInitCmd("UPPERCASE-Name", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -61,7 +61,7 @@ func TestScaffoldNameValidationTooLong(t *testing.T) {
 
 	longName := strings.Repeat("a", 65) // 65 chars
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd(longName, "my-tentacle",
+	err := makeScaffoldInitCmd(longName, "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -80,7 +80,7 @@ func TestScaffoldNameValidationSpaces(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("my scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("my scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -97,7 +97,7 @@ func TestScaffoldNameValidationValidKebab(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("valid-kebab-name", "my-tentacle",
+	err := makeScaffoldInitCmd("valid-kebab-name", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -151,7 +151,7 @@ func TestDiscoverySkipsSymlinkedScaffoldDirs(t *testing.T) {
 
 	// Run init -- should find real-scaffold, not evil-symlink.
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("real-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("real-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -161,7 +161,7 @@ func TestDiscoverySkipsSymlinkedScaffoldDirs(t *testing.T) {
 
 	// Verify evil-scaffold is not reachable via init.
 	outDir2 := filepath.Join(t.TempDir(), "evil-tentacle")
-	_, err2 := makeScaffoldInitCmd("evil-scaffold", "evil-tentacle",
+	err2 := makeScaffoldInitCmd("evil-scaffold", "evil-tentacle",
 		map[string]string{"dir": outDir2},
 		map[string]bool{"no-params": true},
 	)
@@ -198,7 +198,7 @@ func TestCopyScaffoldDirSkipsSymlinks(t *testing.T) {
 	}
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("link-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("link-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -233,7 +233,7 @@ func TestCopyScaffoldDirExcludesSecretsYAML(t *testing.T) {
 	// .secrets.yaml.example should already exist from scaffoldTestFixture.
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("secret-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("secret-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -273,7 +273,7 @@ func TestPrivateScaffoldsDirPermissions(t *testing.T) {
 	// EnsurePrivateScaffoldsDir is the explicit creation path; test it via the
 	// CLI "scaffold init" command flow which should call it.
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, _ = makeScaffoldInitCmd("nonexistent", "my-tentacle",
+	_ = makeScaffoldInitCmd("nonexistent", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)

@@ -123,11 +123,11 @@ func setTestHome(t *testing.T, home string) {
 
 // makeCmdWithArgs returns a scaffold init command pre-configured with the
 // given arguments and flags. Use cmd.SetOut to capture output.
-func makeScaffoldInitCmd(scaffoldName, tentacleName string, flags map[string]string, boolFlags map[string]bool) (*bytes.Buffer, error) {
+func makeScaffoldInitCmd(scaffoldName, tentacleName string, flags map[string]string, boolFlags map[string]bool) error {
 	cmd := newScaffoldInitCmd()
 	for k, v := range flags {
 		if err := cmd.Flags().Set(k, v); err != nil {
-			return nil, err
+			return err
 		}
 	}
 	for k, v := range boolFlags {
@@ -139,8 +139,7 @@ func makeScaffoldInitCmd(scaffoldName, tentacleName string, flags map[string]str
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	args := []string{scaffoldName, tentacleName}
-	err := cmd.RunE(cmd, args)
-	return &out, err
+	return cmd.RunE(cmd, args)
 }
 
 // TestScaffoldInitNoParams verifies that --no-params copies all scaffold
@@ -150,7 +149,7 @@ func TestScaffoldInitNoParams(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -159,23 +158,23 @@ func TestScaffoldInitNoParams(t *testing.T) {
 	}
 
 	// workflow.yaml must exist
-	if _, err := os.Stat(filepath.Join(outDir, "workflow.yaml")); err != nil {
-		t.Errorf("expected workflow.yaml in output dir: %v", err)
+	if _, statErr := os.Stat(filepath.Join(outDir, "workflow.yaml")); statErr != nil {
+		t.Errorf("expected workflow.yaml in output dir: %v", statErr)
 	}
 	// tentacle.yaml must exist with provenance
 	tentacleData, err := os.ReadFile(filepath.Join(outDir, "tentacle.yaml"))
 	if err != nil {
 		t.Fatalf("expected tentacle.yaml: %v", err)
 	}
-	var tentacle map[string]interface{}
-	if err := yaml.Unmarshal(tentacleData, &tentacle); err != nil {
-		t.Fatalf("parsing tentacle.yaml: %v", err)
+	var tentacle map[string]any
+	if unmarshalErr := yaml.Unmarshal(tentacleData, &tentacle); unmarshalErr != nil {
+		t.Fatalf("parsing tentacle.yaml: %v", unmarshalErr)
 	}
 	scaffoldSection, ok := tentacle["scaffold"]
 	if !ok {
 		t.Error("tentacle.yaml missing 'scaffold' section")
 	}
-	scaffoldMap, _ := scaffoldSection.(map[string]interface{})
+	scaffoldMap, _ := scaffoldSection.(map[string]any)
 	if scaffoldMap["name"] != "test-scaffold" {
 		t.Errorf("scaffold.name: got %v, want %q", scaffoldMap["name"], "test-scaffold")
 	}
@@ -205,7 +204,7 @@ func TestScaffoldInitWithParamsFile(t *testing.T) {
 	}
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir, "params-file": paramsFile},
 		nil,
 	)
@@ -242,7 +241,7 @@ func TestScaffoldInitInvalidParamsMissingRequired(t *testing.T) {
 	}
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir, "params-file": paramsFile},
 		nil,
 	)
@@ -269,7 +268,7 @@ func TestScaffoldInitTypeMismatch(t *testing.T) {
 	}
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir, "params-file": paramsFile},
 		nil,
 	)
@@ -285,7 +284,7 @@ func TestScaffoldInitDefaultMode(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		nil,
 	)
@@ -309,7 +308,7 @@ func TestScaffoldInitNotFound(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("nonexistent-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("nonexistent-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		nil,
 	)
@@ -325,7 +324,7 @@ func TestScaffoldInitDirOverride(t *testing.T) {
 	setTestHome(t, home)
 
 	customDir := filepath.Join(t.TempDir(), "custom", "path")
-	_, err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
 		map[string]string{"dir": customDir},
 		map[string]bool{"no-params": true},
 	)
@@ -349,7 +348,7 @@ func TestScaffoldInitNameConflict(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("test-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		nil,
 	)
@@ -368,7 +367,7 @@ func TestScaffoldInitPrivateScaffold(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("our-monitor", "my-tentacle",
+	err := makeScaffoldInitCmd("our-monitor", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -392,7 +391,7 @@ func TestScaffoldInitWithoutParamsSchema(t *testing.T) {
 	setTestHome(t, home)
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("simple-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("simple-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		nil,
 	)
@@ -427,7 +426,7 @@ func TestScaffoldInitPrivatePublicPrecedence(t *testing.T) {
 	})
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("shared-scaffold", "my-tentacle",
+	err := makeScaffoldInitCmd("shared-scaffold", "my-tentacle",
 		map[string]string{"dir": outDir},
 		map[string]bool{"no-params": true},
 	)
@@ -471,7 +470,7 @@ func TestScaffoldInitSourcePublic(t *testing.T) {
 	})
 
 	outDir := filepath.Join(t.TempDir(), "my-tentacle")
-	_, err := makeScaffoldInitCmd("uptime-tracker", "my-tentacle",
+	err := makeScaffoldInitCmd("uptime-tracker", "my-tentacle",
 		map[string]string{"dir": outDir, "source": "public"},
 		map[string]bool{"no-params": true},
 	)

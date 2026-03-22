@@ -392,21 +392,21 @@ func TestLoadParamsFileMissingError(t *testing.T) {
 	}
 }
 
-// TestCheckTypeUnknownTypeReturnsError verifies that an unrecognised type name
+// TestCheckTypeUnknownTypeReturnsError verifies that an unrecognized type name
 // (e.g. "object") is rejected by checkType rather than silently passing.
 // This is a security/correctness regression: the previous switch had no
 // default case, so unknown types slipped through without error.
 func TestCheckTypeUnknownTypeReturnsError(t *testing.T) {
 	cases := []struct {
-		typeName string
 		val      any
+		typeName string
 	}{
-		{"object", map[string]any{"foo": "bar"}},
-		{"dict", map[string]any{}},
-		{"array", []any{"x"}},
-		{"int", 42},
-		{"float", 3.14},
-		{"", "anything"},
+		{val: map[string]any{"foo": "bar"}, typeName: "object"},
+		{val: map[string]any{}, typeName: "dict"},
+		{val: []any{"x"}, typeName: "array"},
+		{val: 42, typeName: "int"},
+		{val: 3.14, typeName: "float"},
+		{val: "anything", typeName: ""},
 	}
 	for _, tc := range cases {
 		err := checkType("param", tc.typeName, tc.val)

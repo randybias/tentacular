@@ -23,7 +23,7 @@ import (
 // TestCatalogListDeprecatedDelegates verifies that catalog list runs without
 // error and shows scaffold results (deprecation wrapper works).
 func TestCatalogListDeprecatedDelegates(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	setTestHome(t, home)
 
 	cmd := newCatalogListCmd()
@@ -43,7 +43,7 @@ func TestCatalogListDeprecatedDelegates(t *testing.T) {
 // TestCatalogSearchDeprecatedDelegates verifies that catalog search runs
 // and returns scaffold search results.
 func TestCatalogSearchDeprecatedDelegates(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	setTestHome(t, home)
 
 	cmd := newCatalogSearchCmd()
@@ -63,7 +63,7 @@ func TestCatalogSearchDeprecatedDelegates(t *testing.T) {
 // scaffold info and shows scaffold metadata. Uses a public scaffold (from cache
 // index) since catalog info defaults to --source=public.
 func TestCatalogInfoDeprecatedDelegates(t *testing.T) {
-	home, _ := setupListTestEnv(t) // has public cache index with uptime-tracker
+	home := setupListTestEnv(t) // has public cache index with uptime-tracker
 	setTestHome(t, home)
 
 	// uptime-tracker is in the public index but has no local Path, so

@@ -17,16 +17,11 @@ import (
 )
 
 // runInfoCmd runs tntc scaffold info <name> and returns stdout + error.
-func runInfoCmd(t *testing.T, home, name string, flags map[string]string) (string, error) {
+func runInfoCmd(t *testing.T, home, name string) (string, error) {
 	t.Helper()
 	setTestHome(t, home)
 
 	cmd := newScaffoldInfoCmd()
-	for k, v := range flags {
-		if err := cmd.Flags().Set(k, v); err != nil {
-			t.Fatalf("setting flag %s: %v", k, err)
-		}
-	}
 	var runErr error
 	out := captureStdout(t, func() {
 		runErr = cmd.RunE(cmd, []string{name})
@@ -71,7 +66,7 @@ func setupInfoTestEnv(t *testing.T, includeSchema bool) string {
 // shows metadata with "private" in the source label.
 func TestScaffoldInfoPrivateScaffold(t *testing.T) {
 	home := setupInfoTestEnv(t, false)
-	out, err := runInfoCmd(t, home, "our-monitor", nil)
+	out, err := runInfoCmd(t, home, "our-monitor")
 	if err != nil {
 		t.Fatalf("scaffold info: %v", err)
 	}
@@ -87,7 +82,7 @@ func TestScaffoldInfoPrivateScaffold(t *testing.T) {
 // params.schema.yaml shows a parameter summary.
 func TestScaffoldInfoWithParams(t *testing.T) {
 	home := setupInfoTestEnv(t, true) // includes schema
-	out, err := runInfoCmd(t, home, "our-monitor", nil)
+	out, err := runInfoCmd(t, home, "our-monitor")
 	if err != nil {
 		t.Fatalf("scaffold info: %v", err)
 	}
@@ -104,7 +99,7 @@ func TestScaffoldInfoWithParams(t *testing.T) {
 // params.schema.yaml does not show a parameters section.
 func TestScaffoldInfoWithoutParams(t *testing.T) {
 	home := setupInfoTestEnv(t, false) // no schema
-	out, err := runInfoCmd(t, home, "our-monitor", nil)
+	out, err := runInfoCmd(t, home, "our-monitor")
 	if err != nil {
 		t.Fatalf("scaffold info: %v", err)
 	}
@@ -118,7 +113,7 @@ func TestScaffoldInfoWithoutParams(t *testing.T) {
 // returns an error.
 func TestScaffoldInfoNotFound(t *testing.T) {
 	home := setupInfoTestEnv(t, false)
-	_, err := runInfoCmd(t, home, "nonexistent-scaffold", nil)
+	_, err := runInfoCmd(t, home, "nonexistent-scaffold")
 	if err == nil {
 		t.Fatal("expected error for nonexistent scaffold, got nil")
 	}
@@ -128,7 +123,7 @@ func TestScaffoldInfoNotFound(t *testing.T) {
 // the scaffold metadata fields (name, description, category, version).
 func TestScaffoldInfoShowsMetadata(t *testing.T) {
 	home := setupInfoTestEnv(t, false)
-	out, err := runInfoCmd(t, home, "our-monitor", nil)
+	out, err := runInfoCmd(t, home, "our-monitor")
 	if err != nil {
 		t.Fatalf("scaffold info: %v", err)
 	}

@@ -79,8 +79,8 @@ func makeIndexFileAtPath(t *testing.T, path string, scaffolds []scaffold.Scaffol
 }
 
 // setupListTestEnv creates a home with a private scaffold and a cache index.
-// Returns: home dir, cache index path.
-func setupListTestEnv(t *testing.T) (homeDir, indexPath string) {
+// Returns: home dir.
+func setupListTestEnv(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 
@@ -121,7 +121,7 @@ func setupListTestEnv(t *testing.T) (homeDir, indexPath string) {
 		},
 	})
 
-	return home, idx
+	return home
 }
 
 // runListCmd runs tntc scaffold list and returns stdout + error.
@@ -164,7 +164,7 @@ func runSearchCmd(t *testing.T, home, query string) (string, error) {
 // TestScaffoldListAll verifies that listing without filters shows both private
 // and public scaffolds with private appearing first.
 func TestScaffoldListAll(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runListCmd(t, home, map[string]string{"source": "all"}, nil)
 	if err != nil {
 		t.Fatalf("scaffold list: %v", err)
@@ -186,7 +186,7 @@ func TestScaffoldListAll(t *testing.T) {
 // TestScaffoldListPrivateOnly verifies that --source=private shows only
 // private scaffolds.
 func TestScaffoldListPrivateOnly(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runListCmd(t, home, map[string]string{"source": "private"}, nil)
 	if err != nil {
 		t.Fatalf("scaffold list --source=private: %v", err)
@@ -202,7 +202,7 @@ func TestScaffoldListPrivateOnly(t *testing.T) {
 // TestScaffoldListPublicOnly verifies that --source=public shows only
 // public scaffolds.
 func TestScaffoldListPublicOnly(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runListCmd(t, home, map[string]string{"source": "public"}, nil)
 	if err != nil {
 		t.Fatalf("scaffold list --source=public: %v", err)
@@ -218,7 +218,7 @@ func TestScaffoldListPublicOnly(t *testing.T) {
 // TestScaffoldListCategoryFilter verifies that --category filters to only
 // matching scaffolds.
 func TestScaffoldListCategoryFilter(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runListCmd(t, home, map[string]string{"source": "public", "category": "security"}, nil)
 	if err != nil {
 		t.Fatalf("scaffold list --category: %v", err)
@@ -234,7 +234,7 @@ func TestScaffoldListCategoryFilter(t *testing.T) {
 // TestScaffoldListTagFilter verifies that --tag filters to scaffolds with
 // the matching tag.
 func TestScaffoldListTagFilter(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runListCmd(t, home, map[string]string{"source": "public", "tag": "postgres-state"}, nil)
 	if err != nil {
 		t.Fatalf("scaffold list --tag: %v", err)
@@ -249,12 +249,12 @@ func TestScaffoldListTagFilter(t *testing.T) {
 
 // TestScaffoldListJSONOutput verifies that --json produces valid JSON array.
 func TestScaffoldListJSONOutput(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runListCmd(t, home, map[string]string{"source": "public"}, map[string]bool{"json": true})
 	if err != nil {
 		t.Fatalf("scaffold list --json: %v", err)
 	}
-	var result []map[string]interface{}
+	var result []map[string]any
 	if err := json.Unmarshal([]byte(strings.TrimSpace(out)), &result); err != nil {
 		t.Fatalf("expected valid JSON array, got: %v\nOutput:\n%s", err, out)
 	}
@@ -277,7 +277,7 @@ func TestScaffoldListEmptyPrivateNoError(t *testing.T) {
 
 // TestScaffoldSearchMatching verifies that a matching query returns results.
 func TestScaffoldSearchMatching(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runSearchCmd(t, home, "uptime")
 	if err != nil {
 		t.Fatalf("scaffold search: %v", err)
@@ -290,7 +290,7 @@ func TestScaffoldSearchMatching(t *testing.T) {
 // TestScaffoldSearchNoMatch verifies that a query with no matches returns
 // success (not an error), with empty or "no results" output.
 func TestScaffoldSearchNoMatch(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runSearchCmd(t, home, "xyznonexistent")
 	if err != nil {
 		t.Fatalf("expected no error for no-match search, got: %v\nOutput:\n%s", err, out)
@@ -300,7 +300,7 @@ func TestScaffoldSearchNoMatch(t *testing.T) {
 // TestScaffoldSearchPartialMatch verifies that a partial query matches
 // scaffolds with "monitor" in name, description, or tags.
 func TestScaffoldSearchPartialMatch(t *testing.T) {
-	home, _ := setupListTestEnv(t)
+	home := setupListTestEnv(t)
 	out, err := runSearchCmd(t, home, "monitor")
 	if err != nil {
 		t.Fatalf("scaffold search monitor: %v", err)
