@@ -96,6 +96,8 @@ func checkType(name, typeName string, val any) error {
 		if _, ok := val.(map[string]any); !ok {
 			return fmt.Errorf("parameter '%s': expected map, got %T", name, val)
 		}
+	default:
+		return fmt.Errorf("parameter '%s': unknown type '%s'", name, typeName)
 	}
 	return nil
 }

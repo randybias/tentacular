@@ -21,7 +21,7 @@ type Segment struct {
 //	segment  = key filter?
 //	key      = [a-zA-Z_][a-zA-Z0-9_-]*
 //	filter   = "[" key "=" value "]"
-//	value    = [^\]]+
+//	value    = [a-zA-Z0-9_-]{1,256}
 //
 // Examples:
 //
@@ -106,12 +106,15 @@ func parseSegment(s string) (Segment, error) {
 	if err := validateKey(filterField); err != nil {
 		return Segment{}, fmt.Errorf("segment '%s': filter field: %w", s, err)
 	}
-	if filterValue == "" {
-		return Segment{}, fmt.Errorf("segment '%s': filter value must not be empty", s)
+	if err := validateFilterValue(filterValue); err != nil {
+		return Segment{}, fmt.Errorf("segment '%s': filter value: %w", s, err)
 	}
 
 	return Segment{Key: key, FilterField: filterField, FilterValue: filterValue}, nil
 }
+
+// maxFilterValueLen is the maximum allowed length for a filter value.
+const maxFilterValueLen = 256
 
 func validateKey(key string) error {
 	if key == "" {
@@ -126,6 +129,29 @@ func validateKey(key string) error {
 		case i > 0 && ch == '-':
 		default:
 			return fmt.Errorf("key '%s': invalid character '%c' at position %d", key, ch, i)
+		}
+	}
+	return nil
+}
+
+// validateFilterValue enforces security constraints on filter values.
+// Values must match [a-zA-Z0-9_-]+ and be at most maxFilterValueLen chars.
+func validateFilterValue(value string) error {
+	if value == "" {
+		return errors.New("filter value must not be empty")
+	}
+	if len(value) > maxFilterValueLen {
+		return fmt.Errorf("filter value exceeds maximum length of %d characters", maxFilterValueLen)
+	}
+	for i, ch := range value {
+		switch {
+		case ch >= 'a' && ch <= 'z':
+		case ch >= 'A' && ch <= 'Z':
+		case ch >= '0' && ch <= '9':
+		case ch == '_':
+		case ch == '-':
+		default:
+			return fmt.Errorf("filter value contains invalid character '%c' at position %d (only [a-zA-Z0-9_-] allowed)", ch, i)
 		}
 	}
 	return nil

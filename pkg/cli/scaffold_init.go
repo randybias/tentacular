@@ -33,6 +33,9 @@ func runScaffoldInit(cmd *cobra.Command, args []string) error {
 	scaffoldName := args[0]
 	tentacleName := args[1]
 
+	if err := scaffold.ValidateScaffoldName(scaffoldName); err != nil {
+		return fmt.Errorf("invalid scaffold name: %w", err)
+	}
 	if !kebabCaseRe.MatchString(tentacleName) {
 		return fmt.Errorf("tentacle name must be kebab-case (e.g., my-tentacle), got: %s", tentacleName)
 	}

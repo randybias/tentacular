@@ -1,9 +1,11 @@
 package scaffold
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"gopkg.in/yaml.v3"
@@ -14,7 +16,36 @@ const (
 	DefaultBaseURL = "https://raw.githubusercontent.com/randybias/tentacular-scaffolds/main"
 	// DefaultCacheTTL is the string form used for default config (parsed by client).
 	DefaultCacheTTL = "1h"
+
+	// maxScaffoldNameLen is the maximum allowed length for a scaffold name.
+	maxScaffoldNameLen = 64
 )
+
+// scaffoldNameRe matches valid scaffold names: lowercase alphanumeric with hyphens,
+// must start and end with alphanumeric, at least 2 characters.
+var scaffoldNameRe = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*[a-z0-9]$`)
+
+// ValidateScaffoldName enforces security constraints on scaffold names.
+// Names must match ^[a-z0-9][a-z0-9-]*[a-z0-9]$ and be at most 64 characters.
+// Path separators and traversal sequences are explicitly rejected.
+func ValidateScaffoldName(name string) error {
+	if name == "" {
+		return errors.New("scaffold name must not be empty")
+	}
+	if strings.ContainsAny(name, `/\`) {
+		return errors.New("scaffold name must not contain path separators")
+	}
+	if strings.Contains(name, "..") {
+		return errors.New("scaffold name must not contain '..'")
+	}
+	if len(name) > maxScaffoldNameLen {
+		return fmt.Errorf("scaffold name exceeds maximum length of %d characters", maxScaffoldNameLen)
+	}
+	if !scaffoldNameRe.MatchString(name) {
+		return fmt.Errorf("scaffold name '%s' is invalid: must match ^[a-z0-9][a-z0-9-]*[a-z0-9]$ (lowercase, hyphens allowed, must start and end with alphanumeric)", name)
+	}
+	return nil
+}
 
 // PrivateScaffoldsDir returns the path to the user's private scaffolds directory.
 func PrivateScaffoldsDir() (string, error) {
@@ -23,6 +54,20 @@ func PrivateScaffoldsDir() (string, error) {
 		return "", err
 	}
 	return filepath.Join(home, ".tentacular", "scaffolds"), nil
+}
+
+// EnsurePrivateScaffoldsDir creates ~/.tentacular/scaffolds/ with 0700 permissions
+// if it does not already exist. Using 0700 ensures other users on shared systems
+// cannot read private scaffold content.
+func EnsurePrivateScaffoldsDir() (string, error) {
+	dir, err := PrivateScaffoldsDir()
+	if err != nil {
+		return "", err
+	}
+	if mkErr := os.MkdirAll(dir, 0o700); mkErr != nil {
+		return "", fmt.Errorf("creating private scaffolds directory: %w", mkErr)
+	}
+	return dir, nil
 }
 
 // QuickstartsDir returns the path to the cached public quickstarts directory.
@@ -61,6 +106,11 @@ func ReadPrivateScaffolds() ([]ScaffoldEntry, error) {
 
 	var scaffolds []ScaffoldEntry
 	for _, e := range entries {
+		// Skip non-directories and symlinks — do not follow symlinks to prevent
+		// a local attacker from pointing a symlink at an arbitrary file path.
+		if e.Type()&os.ModeSymlink != 0 {
+			continue
+		}
 		if !e.IsDir() {
 			continue
 		}
