@@ -49,7 +49,10 @@ func main() {
 	root.AddCommand(cli.NewVisualizeCmd())
 	root.AddCommand(cli.NewAuditCommand())
 
-	// Catalog commands
+	// Scaffold commands
+	root.AddCommand(cli.NewScaffoldCmd())
+
+	// Catalog commands (deprecated, kept for backwards compatibility)
 	root.AddCommand(cli.NewCatalogCmd())
 
 	// Auth commands

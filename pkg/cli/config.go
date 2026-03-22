@@ -7,6 +7,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/randybias/tentacular/pkg/catalog"
+	"github.com/randybias/tentacular/pkg/scaffold"
 )
 
 // ModuleProxyConfig configures the in-cluster esm.sh module proxy for jsr/npm deps.
@@ -29,6 +30,7 @@ type TentacularConfig struct {
 	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
 	MCP          MCPConfig                    `yaml:"mcp,omitempty"`
 	Catalog      catalog.CatalogConfig        `yaml:"catalog,omitempty"`
+	Scaffold     scaffold.ClientConfig        `yaml:"scaffold,omitempty"`
 	Workspace    string                       `yaml:"workspace,omitempty"`
 	Registry     string                       `yaml:"registry,omitempty"`
 	Namespace    string                       `yaml:"namespace,omitempty"`
@@ -118,6 +120,12 @@ func mergeConfig(base, override *TentacularConfig) {
 	}
 	if override.Catalog.CacheTTL != "" {
 		base.Catalog.CacheTTL = override.Catalog.CacheTTL
+	}
+	if override.Scaffold.URL != "" {
+		base.Scaffold.URL = override.Scaffold.URL
+	}
+	if override.Scaffold.CacheTTL != "" {
+		base.Scaffold.CacheTTL = override.Scaffold.CacheTTL
 	}
 }
 

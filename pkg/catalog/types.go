@@ -8,6 +8,7 @@ type CatalogIndex struct {
 }
 
 // TemplateEntry is one template in the catalog index.
+// Deprecated: use pkg/scaffold.ScaffoldEntry instead.
 type TemplateEntry struct {
 	Name                 string   `yaml:"name"`
 	DisplayName          string   `yaml:"displayName"`
@@ -20,3 +21,7 @@ type TemplateEntry struct {
 	Path                 string   `yaml:"path"`
 	Files                []string `yaml:"files"`
 }
+
+// ScaffoldEntry is an alias for TemplateEntry for transition compatibility.
+// Deprecated: use pkg/scaffold.ScaffoldEntry directly.
+type ScaffoldEntry = TemplateEntry

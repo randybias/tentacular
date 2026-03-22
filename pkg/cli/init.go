@@ -5,8 +5,12 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"time"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
+
+	"github.com/randybias/tentacular/pkg/scaffold"
 )
 
 var kebabCaseRe = regexp.MustCompile(`^[a-z][a-z0-9]*(-[a-z0-9]+)*$`)
@@ -106,12 +110,26 @@ scratch/
 		return fmt.Errorf("writing test fixture: %w", err)
 	}
 
-	fmt.Printf("Created workflow '%s' in ./%s/\n", name, dir)
-	fmt.Printf("  workflow.yaml          — workflow definition (with contract + deployment)\n")
-	fmt.Printf("  nodes/hello.ts         — example node\n")
-	fmt.Printf("  tests/fixtures/        — test fixtures\n")
-	fmt.Printf("  .secrets.yaml.example  — secrets template\n")
-	fmt.Printf("  .gitignore             — default ignores\n")
+	// Write tentacle.yaml (from-scratch tentacle has no scaffold provenance)
+	tentacleYAML := scaffold.TentacleYAML{
+		Name:    name,
+		Created: time.Now().UTC().Format(time.RFC3339),
+	}
+	tentacleData, err := yaml.Marshal(&tentacleYAML)
+	if err != nil {
+		return fmt.Errorf("marshaling tentacle.yaml: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "tentacle.yaml"), tentacleData, 0o644); err != nil { //nolint:gosec // non-sensitive file
+		return fmt.Errorf("writing tentacle.yaml: %w", err)
+	}
+
+	fmt.Printf("Created tentacle '%s' in ./%s/\n", name, dir)
+	fmt.Printf("  workflow.yaml          - workflow definition (with contract + deployment)\n")
+	fmt.Printf("  tentacle.yaml          - tentacle identity and provenance\n")
+	fmt.Printf("  nodes/hello.ts         - example node\n")
+	fmt.Printf("  tests/fixtures/        - test fixtures\n")
+	fmt.Printf("  .secrets.yaml.example  - secrets template\n")
+	fmt.Printf("  .gitignore             - default ignores\n")
 	fmt.Printf("\nNext steps:\n")
 	fmt.Printf("  cd %s\n", dir)
 	fmt.Printf("  tntc validate\n")
