@@ -180,6 +180,7 @@ type WfListParams struct {
 // WfListItem represents a single workflow in the list response.
 type WfListItem struct {
 	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
 	Namespace   string `json:"namespace"`
 	Version     string `json:"version,omitempty"`
 	Owner       string `json:"owner,omitempty"`
