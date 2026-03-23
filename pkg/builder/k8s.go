@@ -125,13 +125,16 @@ func sanitizeAnnotationValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// buildDeployAnnotations converts workflow metadata and cron triggers into a YAML
-// annotations block. Returns empty string if all fields are empty.
+// buildDeployAnnotations converts workflow metadata, description, and cron triggers
+// into a YAML annotations block. Returns empty string if all fields are empty.
 // Values are sanitized to prevent YAML injection via newlines or special characters.
 // If triggers contains cron triggers, a tentacular.io/cron-schedule annotation is
 // added with comma-separated schedules (one per cron trigger).
-func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger) string {
+func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger, description string) string {
 	var lines []string
+	if v := sanitizeAnnotationValue(description); v != "" {
+		lines = append(lines, "    tentacular.io/description: "+v)
+	}
 	if meta != nil {
 		if meta.Group != "" {
 			if v := sanitizeAnnotationValue(meta.Group); v != "" {
@@ -342,7 +345,7 @@ metadata:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
-%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, wf.Triggers), wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
+%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, wf.Triggers, wf.Description), wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, importMapVolumeMount, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, importMapVolume)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
@@ -364,7 +367,7 @@ metadata:
     - port: 8080
       targetPort: 8080
       protocol: TCP
-`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, nil), wf.Name)
+`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, nil, wf.Description), wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Service", Name: wf.Name, Content: service,

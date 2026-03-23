@@ -48,7 +48,7 @@ func runList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	fmt.Printf("%-24s %-8s %-16s %-10s %-10s %s\n", "NAME", "VERSION", "NAMESPACE", "STATUS", "REPLICAS", "AGE")
+	fmt.Printf("%-24s %-8s %-16s %-10s %-10s %-6s %s\n", "NAME", "VERSION", "NAMESPACE", "STATUS", "REPLICAS", "AGE", "DESCRIPTION")
 	for _, w := range workflows {
 		status := "not ready"
 		if w.Ready {
@@ -60,10 +60,21 @@ func runList(cmd *cobra.Command, args []string) error {
 				age = formatAge(time.Since(t))
 			}
 		}
-		fmt.Printf("%-24s %-8s %-16s %-10s %d/%d        %s\n", w.Name, w.Version, w.Namespace, status, w.Available, w.Replicas, age)
+		desc := truncateString(w.Description, 40)
+		fmt.Printf("%-24s %-8s %-16s %-10s %d/%-9d %-6s %s\n", w.Name, w.Version, w.Namespace, status, w.Available, w.Replicas, age, desc)
 	}
 
 	return nil
+}
+
+func truncateString(s string, max int) string {
+	if len(s) <= max {
+		return s
+	}
+	if max <= 3 {
+		return s[:max]
+	}
+	return s[:max-3] + "..."
 }
 
 func formatAge(d time.Duration) string {
