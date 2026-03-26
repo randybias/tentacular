@@ -2,6 +2,21 @@
   <img src="assets/banner.png" alt="Tentacular — Security-First Workflow Engine for Kubernetes" width="100%">
 </p>
 
+<h3 align="center" weight='300' >Visit <a href="https:/mirantis.com" target="_blank">Tentacular docs</a> for the full documentation,
+examples and guides.</h3>
+<div align="center">
+
+[![slack](https://img.shields.io/badge/slack-tentacular-green.svg?logo=slack)](https://cloud-native.slack.com/) [![License](https://img.shields.io/badge/License-Apache_2.0-red.svg)](https://github.com//randybias/tentacular/blob/main/LICENSE) [![X/Twitter][x-badge]][x-link] 
+<a href="https://github.co/randybias/tentacular">
+      <img src="https://img.shields.io/github/stars/randybias/tentacular?style=flat&logo=github&label=Stars" alt="Stars">
+    </a>
+
+
+</div>
+
+[x-badge]:https://img.shields.io/twitter/follow/tentacular?logo=x&style=flat
+[x-link]:https://x.com/
+
 # Tentacular
 
 Tentacular is a secure workflow build and execution system for AI agents. Instead of long-lived monolithic automation stacks or generic node catalogs, you build purpose-fit TypeScript DAG workflows for each job, then iterate or replace them quickly.
@@ -227,6 +242,10 @@ Five layers of defense-in-depth, from innermost to outermost:
 **Execution Model:** All nodes in a workflow execute within a single Deno process and share memory. Stages run sequentially while nodes within each stage run concurrently via async/await. Isolation is provided at the pod level through gVisor's syscall interception, Deno's permission controls, and Kubernetes SecurityContext hardening. This single-process design prioritizes simplicity and performance while maintaining strong container-level security boundaries.
 
 See [Architecture](https://randybias.github.io/tentacular-docs/concepts/architecture/) for the full architecture reference including data flow, execution model, and extension points.
+
+## Community
+
+Join the Tentacular community on the CNCF Slack: http://slack.cncf.io
 
 ## License
 
