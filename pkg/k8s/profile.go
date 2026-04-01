@@ -17,29 +17,29 @@ type ClusterProfile struct {
 	GeneratedAt    time.Time          `json:"generatedAt"          yaml:"generatedAt"`
 	LimitRange     *LimitRangeSummary `json:"limitRange,omitempty" yaml:"limitRange,omitempty"`
 	Quota          *QuotaSummary      `json:"quota,omitempty"      yaml:"quota,omitempty"`
+	Environment    string             `json:"environment"          yaml:"environment"`
+	K8sVersion     string             `json:"k8sVersion"           yaml:"k8sVersion"`
 	PodSecurity    string             `json:"podSecurity"          yaml:"podSecurity"`
 	RWXNote        string             `json:"rwxNote"              yaml:"rwxNote"`
 	Namespace      string             `json:"namespace"            yaml:"namespace"`
 	Distribution   string             `json:"distribution"         yaml:"distribution"`
-	Environment    string             `json:"environment"          yaml:"environment"`
-	K8sVersion     string             `json:"k8sVersion"           yaml:"k8sVersion"`
 	CNI            CNIInfo            `json:"cni"                  yaml:"cni"`
+	StorageClasses []StorageClassInfo `json:"storageClasses"       yaml:"storageClasses"`
 	Guidance       []string           `json:"guidance"             yaml:"guidance"`
 	CSIDrivers     []string           `json:"csiDrivers"           yaml:"csiDrivers"`
 	Ingress        []string           `json:"ingress"              yaml:"ingress"`
-	StorageClasses []StorageClassInfo `json:"storageClasses"       yaml:"storageClasses"`
 	RuntimeClasses []RuntimeClassInfo `json:"runtimeClasses"       yaml:"runtimeClasses"`
 	Nodes          []NodeInfo         `json:"nodes"                yaml:"nodes"`
+	Exoskeleton    ExoskeletonInfo    `json:"exoskeleton"          yaml:"exoskeleton"`
 	Extensions     ExtensionSet       `json:"extensions"           yaml:"extensions"`
 	NetworkPolicy  NetPolInfo         `json:"networkPolicy"        yaml:"networkPolicy"`
-	Exoskeleton    ExoskeletonInfo    `json:"exoskeleton"          yaml:"exoskeleton"`
 	GVisor         bool               `json:"gvisor"               yaml:"gvisor"`
 }
 
 // ExoskeletonInfo describes exoskeleton service availability in the cluster.
 type ExoskeletonInfo struct {
-	Enabled           bool     `json:"enabled"                     yaml:"enabled"`
 	Services          []string `json:"services,omitempty"          yaml:"services,omitempty"`
+	Enabled           bool     `json:"enabled"                     yaml:"enabled"`
 	CleanupOnUndeploy bool     `json:"cleanupOnUndeploy,omitempty" yaml:"cleanupOnUndeploy,omitempty"`
 }
 
@@ -266,9 +266,10 @@ func deriveGuidance(p *ClusterProfile) []string {
 			p.Namespace, p.Quota.CPULimit, p.Quota.MemoryLimit))
 	}
 
-	if p.PodSecurity == "restricted" {
+	switch p.PodSecurity {
+	case "restricted":
 		g = append(g, "Namespace enforces restricted PodSecurity — containers must run as non-root with no privilege escalation")
-	} else if p.PodSecurity == "unknown" {
+	case "unknown":
 		g = append(g, "WARNING: Pod Security Admission not configured — recommend enabling 'restricted' profile for production namespaces")
 	}
 
