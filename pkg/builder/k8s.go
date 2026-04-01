@@ -195,15 +195,15 @@ func buildSidecarContainers(sidecars []spec.SidecarSpec) string {
 		if len(sc.Command) > 0 {
 			sb.WriteString("          command:\n")
 			for _, c := range sc.Command {
-				fmt.Fprintf(&sb, "            - %s\n", c)
+				fmt.Fprintf(&sb, "            - %q\n", c)
 			}
 		}
 
-		// Args (optional)
+		// Args (optional — always quote to prevent YAML type coercion)
 		if len(sc.Args) > 0 {
 			sb.WriteString("          args:\n")
 			for _, a := range sc.Args {
-				fmt.Fprintf(&sb, "            - %s\n", a)
+				fmt.Fprintf(&sb, "            - %q\n", a)
 			}
 		}
 
