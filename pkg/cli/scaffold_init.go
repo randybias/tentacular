@@ -68,7 +68,7 @@ func runScaffoldInit(cmd *cobra.Command, args []string) error {
 	}
 
 	// Copy scaffold files
-	if copyErr := copyScaffoldFiles(entry, outDir); copyErr != nil {
+	if copyErr := copyScaffoldFiles(entry, outDir, client); copyErr != nil {
 		return copyErr
 	}
 
@@ -137,12 +137,53 @@ func resolveOutDir(dirOverride, tentacleName string) (string, error) {
 }
 
 // copyScaffoldFiles copies all files from entry's source directory to outDir.
-// For public scaffolds (no local Path), it returns an error directing users to sync.
-func copyScaffoldFiles(entry *scaffold.ScaffoldEntry, outDir string) error {
+// For public scaffolds whose Path is a remote-relative path (not a local directory),
+// files are fetched on-demand from the scaffold client.
+func copyScaffoldFiles(entry *scaffold.ScaffoldEntry, outDir string, client *scaffold.Client) error {
 	if entry.Path == "" {
-		return fmt.Errorf("scaffold '%s' has no local path; run 'tntc scaffold sync' first", entry.Name)
+		return fmt.Errorf("scaffold '%s' has no local path and no remote path; run 'tntc scaffold sync' first", entry.Name)
 	}
-	return copyScaffoldDir(entry.Path, outDir)
+
+	// If the path exists locally (private scaffold or previously synced), copy from disk.
+	if info, err := os.Stat(entry.Path); err == nil && info.IsDir() {
+		return copyScaffoldDir(entry.Path, outDir)
+	}
+
+	// Public scaffold: fetch files on-demand from the remote repo.
+	if len(entry.Files) == 0 {
+		return fmt.Errorf("scaffold '%s' has no files listed in the index", entry.Name)
+	}
+	return fetchScaffoldFiles(entry, outDir, client)
+}
+
+// fetchScaffoldFiles downloads each file listed in entry.Files from the
+// remote scaffolds repo and writes them to outDir preserving directory structure.
+func fetchScaffoldFiles(entry *scaffold.ScaffoldEntry, outDir string, client *scaffold.Client) error {
+	if err := os.MkdirAll(outDir, 0o700); err != nil {
+		return fmt.Errorf("creating output directory: %w", err)
+	}
+
+	for _, relPath := range entry.Files {
+		// Hard-exclude .secrets.yaml; only .secrets.yaml.example is safe to copy.
+		if filepath.Base(relPath) == ".secrets.yaml" {
+			continue
+		}
+
+		remotePath := entry.Path + "/" + relPath
+		data, err := client.FetchFile(remotePath)
+		if err != nil {
+			return fmt.Errorf("fetching %s: %w", relPath, err)
+		}
+
+		target := filepath.Join(outDir, relPath)
+		if mkErr := os.MkdirAll(filepath.Dir(target), 0o700); mkErr != nil {
+			return fmt.Errorf("creating directory for %s: %w", relPath, mkErr)
+		}
+		if writeErr := os.WriteFile(target, data, 0o600); writeErr != nil { //nolint:gosec // scaffold file under validated outDir
+			return fmt.Errorf("writing %s: %w", relPath, writeErr)
+		}
+	}
+	return nil
 }
 
 // copyScaffoldDir recursively copies src into dst, preserving directory structure.
