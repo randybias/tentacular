@@ -21,6 +21,8 @@ package cli
 
 import (
 	"bytes"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -447,15 +449,14 @@ func TestScaffoldInitPrivatePublicPrecedence(t *testing.T) {
 	}
 }
 
-// TestScaffoldInitSourcePublic verifies that --source=public skips private
-// scaffolds and searches the public index. Since public scaffolds don't have
-// local files until after sync, it returns a descriptive "sync first" error.
-func TestScaffoldInitSourcePublic(t *testing.T) {
+// TestScaffoldInitSourcePublicNoPath verifies that a public scaffold with
+// neither a local path nor a remote path returns a descriptive error.
+func TestScaffoldInitSourcePublicNoPath(t *testing.T) {
 	// Set up a private scaffold that should be ignored.
 	home, _ := scaffoldTestFixture(t, "uptime-tracker", "")
 	setTestHome(t, home)
 
-	// Also write a matching public index entry (no local path).
+	// Public index entry with no path and no files.
 	cacheDir := filepath.Join(home, ".tentacular", "cache")
 	makeIndexFileAtPath(t, filepath.Join(cacheDir, "scaffolds-index.yaml"), []scaffold.ScaffoldEntry{
 		{
@@ -474,16 +475,110 @@ func TestScaffoldInitSourcePublic(t *testing.T) {
 		map[string]string{"dir": outDir, "source": "public"},
 		map[string]bool{"no-params": true},
 	)
-	// Public scaffold has no local Path (sync hasn't downloaded files).
-	// Expected: error mentioning "sync" (not "not found").
 	if err == nil {
-		t.Fatal("expected error for public scaffold without local files, got nil")
+		t.Fatal("expected error for public scaffold without path or files, got nil")
 	}
-	if !strings.Contains(err.Error(), "sync") {
-		t.Errorf("expected 'sync' in error message (public scaffold not yet downloaded), got: %v", err)
+	if !strings.Contains(err.Error(), "no local path") {
+		t.Errorf("expected 'no local path' in error message, got: %v", err)
 	}
-	// Must NOT say "not found" -- scaffold was found in the index but needs sync.
-	if strings.Contains(err.Error(), "not found") {
-		t.Errorf("scaffold should be found in public index but need sync, got: %v", err)
+}
+
+// TestScaffoldInitPublicFetch verifies that a public scaffold with a remote
+// path and file list fetches files on-demand from the remote URL.
+func TestScaffoldInitPublicFetch(t *testing.T) {
+	// Start a test HTTP server serving scaffold files.
+	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		files := map[string]string{
+			"/quickstarts/web-monitor/workflow.yaml":  "name: web-monitor\nversion: \"1.0\"\ntriggers:\n  - type: manual\nnodes:\n  probe:\n    path: ./nodes/probe.ts\n",
+			"/quickstarts/web-monitor/scaffold.yaml":  "name: web-monitor\nversion: \"1.0\"\nauthor: test\ncategory: monitoring\n",
+			"/quickstarts/web-monitor/nodes/probe.ts": "export default async function run(ctx, input) { return {}; }\n",
+			"/scaffolds-index.yaml":                   "", // not needed for this test
+		}
+		content, ok := files[r.URL.Path]
+		if !ok {
+			http.NotFound(w, r)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(content))
+	}))
+	defer ts.Close()
+
+	home := t.TempDir()
+	setTestHome(t, home)
+
+	// Write config pointing scaffold URL to test server.
+	configDir := filepath.Join(home, ".tentacular")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	configContent := "scaffold:\n  url: " + ts.URL + "\n"
+	if err := os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(configContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create private scaffolds dir (empty) so ReadPrivateScaffolds doesn't fail.
+	if err := os.MkdirAll(filepath.Join(home, ".tentacular", "scaffolds"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a public index entry with path and files.
+	cacheDir := filepath.Join(home, ".tentacular", "cache")
+	if err := os.MkdirAll(cacheDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	indexContent := `version: "1"
+generated: "2026-01-01"
+scaffolds:
+  - name: web-monitor
+    displayName: Web Monitor
+    description: Probe HTTP endpoints
+    category: monitoring
+    author: test
+    version: "1.0"
+    path: "quickstarts/web-monitor"
+    tags: []
+    files:
+      - "workflow.yaml"
+      - "scaffold.yaml"
+      - "nodes/probe.ts"
+`
+	if err := os.WriteFile(filepath.Join(cacheDir, "scaffolds-index.yaml"), []byte(indexContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	outDir := filepath.Join(t.TempDir(), "my-tentacle")
+	err := makeScaffoldInitCmd("web-monitor", "my-tentacle",
+		map[string]string{"dir": outDir, "source": "public"},
+		map[string]bool{"no-params": true},
+	)
+	if err != nil {
+		t.Fatalf("scaffold init from public: %v", err)
+	}
+
+	// Verify files were fetched and written.
+	if _, statErr := os.Stat(filepath.Join(outDir, "workflow.yaml")); statErr != nil {
+		t.Errorf("expected workflow.yaml: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(outDir, "nodes", "probe.ts")); statErr != nil {
+		t.Errorf("expected nodes/probe.ts: %v", statErr)
+	}
+
+	// Verify workflow name was renamed to tentacle name.
+	data, readErr := os.ReadFile(filepath.Join(outDir, "workflow.yaml"))
+	if readErr != nil {
+		t.Fatalf("reading workflow.yaml: %v", readErr)
+	}
+	if !strings.Contains(string(data), "name: my-tentacle") {
+		t.Errorf("expected workflow name to be 'my-tentacle', got:\n%s", string(data))
+	}
+
+	// Verify tentacle.yaml records source=public.
+	tentData, tentErr := os.ReadFile(filepath.Join(outDir, "tentacle.yaml"))
+	if tentErr != nil {
+		t.Fatalf("reading tentacle.yaml: %v", tentErr)
+	}
+	if !strings.Contains(string(tentData), "public") {
+		t.Errorf("expected source=public in tentacle.yaml, got:\n%s", string(tentData))
 	}
 }
