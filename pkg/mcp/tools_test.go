@@ -41,7 +41,7 @@ func makeInvalidTextServer(t *testing.T) (*testServerHandle, *Client) {
 	tools := map[string]func(map[string]any) (string, bool){}
 	for _, name := range []string{
 		"wf_apply", "wf_remove", "wf_status", "wf_list", "wf_logs",
-		"wf_run", "cluster_preflight", "ns_create", "audit_resources",
+		"wf_run", "cluster_preflight", "audit_resources",
 		"exo_status", "exo_registration",
 	} {
 		tools[name] = func(args map[string]any) (string, bool) {
@@ -197,32 +197,6 @@ func TestClusterPreflight(t *testing.T) {
 	}
 	if len(result.Results) != 2 {
 		t.Errorf("expected 2 results, got %d", len(result.Results))
-	}
-}
-
-func TestNsCreate(t *testing.T) {
-	h := makeToolServer(t, "ns_create", NsCreateResult{Name: "my-ns", Created: true}, false)
-	defer h.Close()
-
-	result, err := h.client.NsCreate(context.Background(), "my-ns", "")
-	if err != nil {
-		t.Fatalf("NsCreate: %v", err)
-	}
-	if !result.Created {
-		t.Error("expected created=true")
-	}
-}
-
-func TestNsCreate_AlreadyExists(t *testing.T) {
-	h := makeToolServer(t, "ns_create", NsCreateResult{Name: "existing-ns", Created: false}, false)
-	defer h.Close()
-
-	result, err := h.client.NsCreate(context.Background(), "existing-ns", "small")
-	if err != nil {
-		t.Fatalf("NsCreate: %v", err)
-	}
-	if result.Created {
-		t.Error("expected created=false for existing namespace")
 	}
 }
 
@@ -404,15 +378,6 @@ func TestClusterPreflight_UnmarshalError(t *testing.T) {
 	_, err := client.ClusterPreflight(context.Background(), "ns")
 	if err == nil {
 		t.Error("expected unmarshal error from ClusterPreflight")
-	}
-}
-
-func TestNsCreate_UnmarshalError(t *testing.T) {
-	h, client := makeInvalidTextServer(t)
-	defer h.Close()
-	_, err := client.NsCreate(context.Background(), "ns", "")
-	if err == nil {
-		t.Error("expected unmarshal error from NsCreate")
 	}
 }
 
