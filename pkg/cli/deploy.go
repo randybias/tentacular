@@ -36,6 +36,7 @@ func NewDeployCmd() *cobra.Command {
 	cmd.Flags().Bool("warn", false, "Audit mode: contract violations produce warnings instead of failures")
 	cmd.Flags().String("group", "", "Set group ownership for the workflow (e.g. platform-team)")
 	cmd.Flags().String("share", "", "Set permissions mode preset (e.g. group-edit, private, public-read)")
+	cmd.Flags().String("enclave", "", "Target enclave name (resolves to enclave namespace; overrides --namespace)")
 	return cmd
 }
 
@@ -80,6 +81,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	verify, _ := cmd.Flags().GetBool("verify")
 	group, _ := cmd.Flags().GetString("group")
 	share, _ := cmd.Flags().GetString("share")
+	enclaveName, _ := cmd.Flags().GetString("enclave")
 
 	// --skip-live-test is an alias for --force
 	if skipLiveTest {
@@ -141,7 +143,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Namespace cascade: workflow.yaml > env config > global config > "default"
+	// Namespace cascade (pre-MCP): workflow.yaml > env config > global config > "default"
+	// --enclave override is applied after MCP client is available.
 	namespace := resolveNamespace(cmd, absDir)
 	if !cmd.Flags().Changed("runtime-class") && envName == "" && cfg.RuntimeClass != "" {
 		runtimeClass = cfg.RuntimeClass
@@ -166,6 +169,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
 		return emitDeployResult(cmd, "fail", err.Error(), nil, startedAt)
+	}
+
+	// --enclave override: resolves to the enclave's namespace via MCP.
+	// Overrides the namespace resolved above (takes highest priority after --namespace).
+	if enclaveName != "" && !cmd.Flags().Changed("namespace") {
+		enclaveNS, nsErr := resolveEnclaveNamespace(cmd, mcpClient, enclaveName)
+		if nsErr != nil {
+			return emitDeployResult(cmd, "fail", nsErr.Error(), nil, startedAt)
+		}
+		namespace = enclaveNS
 	}
 
 	// Pre-deploy live test gate: if dev environment is configured and --force is not set,

@@ -64,6 +64,9 @@ func main() {
 	// Permissions commands
 	root.AddCommand(cli.NewPermissionsCmd())
 
+	// Enclave commands
+	root.AddCommand(cli.NewEnclaveCmd())
+
 	// Version
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
