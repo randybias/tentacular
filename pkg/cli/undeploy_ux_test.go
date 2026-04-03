@@ -102,25 +102,20 @@ func newUndeployTestCmd() *cobra.Command {
 // --- checkExoskeletonCleanup tests ---
 
 func TestCheckExoskeletonCleanup_FullWarning(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]any{
-		"enabled":             true,
-		"cleanup_on_undeploy": true,
-		"postgres_available":  true,
-		"nats_available":      true,
-		"rustfs_available":    true,
-	})
-	exoRegJSON, _ := json.Marshal(map[string]any{
-		"found":     true,
+	enclaveInfoJSON, _ := json.Marshal(map[string]any{
+		"name":      "test-ns",
 		"namespace": "test-ns",
-		"name":      "my-wf",
+		"owner":     "alice@example.com",
+		"exo_services": []map[string]any{
+			{"name": "postgres", "available": true},
+			{"name": "nats", "available": true},
+			{"name": "rustfs", "available": true},
+		},
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			return string(exoStatusJSON), false
-		},
-		"exo_registration": func(_ map[string]any) (string, bool) {
-			return string(exoRegJSON), false
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveInfoJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -133,7 +128,7 @@ func TestCheckExoskeletonCleanup_FullWarning(t *testing.T) {
 	if warning == "" {
 		t.Fatal("expected non-empty warning")
 	}
-	if !strings.Contains(warning, "WARNING: Exoskeleton cleanup is enabled") {
+	if !strings.Contains(warning, "WARNING: Exoskeleton services are provisioned") {
 		t.Error("expected warning header")
 	}
 	if !strings.Contains(warning, "Postgres schema") {
@@ -147,16 +142,17 @@ func TestCheckExoskeletonCleanup_FullWarning(t *testing.T) {
 	}
 }
 
-func TestCheckExoskeletonCleanup_CleanupDisabled(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]any{
-		"enabled":             true,
-		"cleanup_on_undeploy": false,
-		"postgres_available":  true,
+func TestCheckExoskeletonCleanup_NoExoServices(t *testing.T) {
+	enclaveInfoJSON, _ := json.Marshal(map[string]any{
+		"name":         "ns",
+		"namespace":    "ns",
+		"owner":        "alice@example.com",
+		"exo_services": []map[string]any{},
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			return string(exoStatusJSON), false
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveInfoJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -167,13 +163,13 @@ func TestCheckExoskeletonCleanup_CleanupDisabled(t *testing.T) {
 
 	warning := checkExoskeletonCleanup(cmd, client, "ns", "wf")
 	if warning != "" {
-		t.Errorf("expected no warning when cleanup_on_undeploy=false, got %q", warning)
+		t.Errorf("expected no warning when no exo services, got %q", warning)
 	}
 }
 
-func TestCheckExoskeletonCleanup_StatusError(t *testing.T) {
+func TestCheckExoskeletonCleanup_InfoError(t *testing.T) {
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
+		"enclave_info": func(_ map[string]any) (string, bool) {
 			return "internal server error", true
 		},
 	})
@@ -185,28 +181,24 @@ func TestCheckExoskeletonCleanup_StatusError(t *testing.T) {
 
 	warning := checkExoskeletonCleanup(cmd, client, "ns", "wf")
 	if warning != "" {
-		t.Errorf("expected no warning on exo_status error (graceful degradation), got %q", warning)
+		t.Errorf("expected no warning on enclave_info error (graceful degradation), got %q", warning)
 	}
 }
 
-func TestCheckExoskeletonCleanup_NotRegistered(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]any{
-		"enabled":             true,
-		"cleanup_on_undeploy": true,
-		"postgres_available":  true,
-	})
-	exoRegJSON, _ := json.Marshal(map[string]any{
-		"found":     false,
+func TestCheckExoskeletonCleanup_NoneAvailable(t *testing.T) {
+	enclaveInfoJSON, _ := json.Marshal(map[string]any{
+		"name":      "ns",
 		"namespace": "ns",
-		"name":      "wf",
+		"owner":     "alice@example.com",
+		"exo_services": []map[string]any{
+			{"name": "postgres", "available": false},
+			{"name": "rustfs", "available": false},
+		},
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			return string(exoStatusJSON), false
-		},
-		"exo_registration": func(_ map[string]any) (string, bool) {
-			return string(exoRegJSON), false
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveInfoJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -217,57 +209,25 @@ func TestCheckExoskeletonCleanup_NotRegistered(t *testing.T) {
 
 	warning := checkExoskeletonCleanup(cmd, client, "ns", "wf")
 	if warning != "" {
-		t.Errorf("expected no warning for unregistered workflow, got %q", warning)
-	}
-}
-
-func TestCheckExoskeletonCleanup_RegistrationError(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]any{
-		"enabled":             true,
-		"cleanup_on_undeploy": true,
-		"postgres_available":  true,
-	})
-
-	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			return string(exoStatusJSON), false
-		},
-		"exo_registration": func(_ map[string]any) (string, bool) {
-			return "not found", true
-		},
-	})
-	defer closeMCPTestServer(srv)
-	defer func() { _ = client.Close() }()
-
-	cmd := newUndeployTestCmd()
-	cmd.SetContext(context.Background())
-
-	warning := checkExoskeletonCleanup(cmd, client, "ns", "wf")
-	if warning != "" {
-		t.Errorf("expected no warning on registration error (graceful degradation), got %q", warning)
+		t.Errorf("expected no warning when no exo services available, got %q", warning)
 	}
 }
 
 func TestCheckExoskeletonCleanup_OnlyPostgres(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]any{
-		"enabled":             true,
-		"cleanup_on_undeploy": true,
-		"postgres_available":  true,
-		"nats_available":      false,
-		"rustfs_available":    false,
-	})
-	exoRegJSON, _ := json.Marshal(map[string]any{
-		"found":     true,
+	enclaveInfoJSON, _ := json.Marshal(map[string]any{
+		"name":      "ns",
 		"namespace": "ns",
-		"name":      "wf",
+		"owner":     "alice@example.com",
+		"exo_services": []map[string]any{
+			{"name": "postgres", "available": true},
+			{"name": "nats", "available": false},
+			{"name": "rustfs", "available": false},
+		},
 	})
 
 	srv, client := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			return string(exoStatusJSON), false
-		},
-		"exo_registration": func(_ map[string]any) (string, bool) {
-			return string(exoRegJSON), false
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveInfoJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -331,8 +291,8 @@ func TestRunUndeployWith_UserConfirmsY(t *testing.T) {
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]any{"enabled": false})
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"name": "default", "exo_services": []any{}})
 			return string(j), false
 		},
 		"wf_remove": func(_ map[string]any) (string, bool) {
@@ -375,8 +335,8 @@ func TestRunUndeployWith_UserConfirmsY(t *testing.T) {
 func TestRunUndeployWith_UserDeclinesN(t *testing.T) {
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]any{"enabled": false})
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"name": "default", "exo_services": []any{}})
 			return string(j), false
 		},
 		"wf_remove": func(_ map[string]any) (string, bool) {
@@ -419,8 +379,8 @@ func TestRunUndeployWith_YesFlag(t *testing.T) {
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]any{"enabled": false})
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"name": "default", "exo_services": []any{}})
 			return string(j), false
 		},
 		"wf_remove": func(_ map[string]any) (string, bool) {
@@ -458,18 +418,16 @@ func TestRunUndeployWith_YesFlag(t *testing.T) {
 }
 
 func TestRunUndeployWith_ForceFlag(t *testing.T) {
-	// Set up a server that reports exo cleanup is active
-	exoStatusJSON, _ := json.Marshal(map[string]any{
-		"enabled":             true,
-		"cleanup_on_undeploy": true,
-		"postgres_available":  true,
-		"nats_available":      true,
-		"rustfs_available":    true,
-	})
-	exoRegJSON, _ := json.Marshal(map[string]any{
-		"found":     true,
+	// Set up a server that reports exo services are provisioned
+	enclaveInfoJSON, _ := json.Marshal(map[string]any{
+		"name":      "default",
 		"namespace": "default",
-		"name":      "my-wf",
+		"owner":     "alice@example.com",
+		"exo_services": []map[string]any{
+			{"name": "postgres", "available": true},
+			{"name": "nats", "available": true},
+			{"name": "rustfs", "available": true},
+		},
 	})
 	wfRemoveJSON, _ := json.Marshal(map[string]any{
 		"deleted": []string{"Deployment/my-wf"},
@@ -477,11 +435,8 @@ func TestRunUndeployWith_ForceFlag(t *testing.T) {
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			return string(exoStatusJSON), false
-		},
-		"exo_registration": func(_ map[string]any) (string, bool) {
-			return string(exoRegJSON), false
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveInfoJSON), false
 		},
 		"wf_remove": func(_ map[string]any) (string, bool) {
 			removeCalled = true
@@ -519,24 +474,19 @@ func TestRunUndeployWith_ForceFlag(t *testing.T) {
 }
 
 func TestRunUndeployWith_ExoWarningUserDeclines(t *testing.T) {
-	exoStatusJSON, _ := json.Marshal(map[string]any{
-		"enabled":             true,
-		"cleanup_on_undeploy": true,
-		"postgres_available":  true,
-	})
-	exoRegJSON, _ := json.Marshal(map[string]any{
-		"found":     true,
+	enclaveInfoJSON, _ := json.Marshal(map[string]any{
+		"name":      "default",
 		"namespace": "default",
-		"name":      "my-wf",
+		"owner":     "alice@example.com",
+		"exo_services": []map[string]any{
+			{"name": "postgres", "available": true},
+		},
 	})
 
 	var removeCalled bool
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			return string(exoStatusJSON), false
-		},
-		"exo_registration": func(_ map[string]any) (string, bool) {
-			return string(exoRegJSON), false
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveInfoJSON), false
 		},
 		"wf_remove": func(_ map[string]any) (string, bool) {
 			removeCalled = true
@@ -581,8 +531,8 @@ func TestRunUndeployWith_ExoCleanupResult(t *testing.T) {
 	})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]any{"enabled": false})
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"name": "default", "exo_services": []any{}})
 			return string(j), false
 		},
 		"wf_remove": func(_ map[string]any) (string, bool) {
@@ -623,8 +573,8 @@ func TestRunUndeployWith_ExoCleanupResult(t *testing.T) {
 
 func TestRunUndeployWith_NoResources(t *testing.T) {
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
-		"exo_status": func(_ map[string]any) (string, bool) {
-			j, _ := json.Marshal(map[string]any{"enabled": false})
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			j, _ := json.Marshal(map[string]any{"name": "default", "exo_services": []any{}})
 			return string(j), false
 		},
 		"wf_remove": func(_ map[string]any) (string, bool) {

@@ -11,11 +11,12 @@ import (
 // EnclaveProvisionParams are the arguments for the enclave_provision MCP tool.
 type EnclaveProvisionParams struct {
 	Name        string   `json:"name"`
-	Owner       string   `json:"owner,omitempty"`
+	Owner       string   `json:"owner_email,omitempty"`
+	OwnerSub    string   `json:"owner_sub,omitempty"`
 	Platform    string   `json:"platform,omitempty"`
 	ChannelID   string   `json:"channel_id,omitempty"`
 	ChannelName string   `json:"channel_name,omitempty"`
-	Quota       string   `json:"quota,omitempty"`
+	Quota       string   `json:"quota_preset,omitempty"`
 	Members     []string `json:"members,omitempty"`
 }
 
@@ -50,17 +51,24 @@ type EnclaveInfoParams struct {
 	Name string `json:"name"`
 }
 
+// EnclaveExoService describes the availability of a single exoskeleton service for an enclave.
+type EnclaveExoService struct {
+	Name      string `json:"name"`
+	Available bool   `json:"available"`
+}
+
 // EnclaveInfoResult is the response from enclave_info.
 type EnclaveInfoResult struct {
-	Name        string   `json:"name"`
-	Namespace   string   `json:"namespace"`
-	Owner       string   `json:"owner"`
-	Platform    string   `json:"platform,omitempty"`
-	ChannelID   string   `json:"channel_id,omitempty"`
-	ChannelName string   `json:"channel_name,omitempty"`
-	Quota       string   `json:"quota,omitempty"`
-	Status      string   `json:"status,omitempty"`
-	Members     []string `json:"members,omitempty"`
+	Name        string              `json:"name"`
+	Namespace   string              `json:"namespace"`
+	Owner       string              `json:"owner"`
+	Platform    string              `json:"platform,omitempty"`
+	ChannelID   string              `json:"channel_id,omitempty"`
+	ChannelName string              `json:"channel_name,omitempty"`
+	Quota       string              `json:"quota,omitempty"`
+	Status      string              `json:"status,omitempty"`
+	Members     []string            `json:"members,omitempty"`
+	ExoServices []EnclaveExoService `json:"exo_services,omitempty"`
 }
 
 // EnclaveInfo calls the enclave_info MCP tool to retrieve enclave details.
@@ -124,8 +132,8 @@ func (c *Client) EnclaveList(ctx context.Context, callerEmail string) ([]Enclave
 type EnclaveSyncParams struct {
 	Name          string   `json:"name"`
 	NewOwner      string   `json:"new_owner,omitempty"`
-	ChannelName   string   `json:"channel_name,omitempty"`
-	Status        string   `json:"status,omitempty"`
+	ChannelName   string   `json:"new_channel_name,omitempty"`
+	Status        string   `json:"new_status,omitempty"`
 	AddMembers    []string `json:"add_members,omitempty"`
 	RemoveMembers []string `json:"remove_members,omitempty"`
 }

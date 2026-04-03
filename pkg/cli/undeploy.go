@@ -93,33 +93,44 @@ func runUndeployWith(cmd *cobra.Command, args []string, stdin io.Reader) error {
 	return nil
 }
 
-// checkExoskeletonCleanup queries the MCP server for exoskeleton status and
-// registration. If cleanup_on_undeploy is enabled and the workflow has an
-// exoskeleton registration, it returns a warning string to display. Otherwise
-// it returns empty string. Errors are silently ignored (best-effort check).
-func checkExoskeletonCleanup(cmd *cobra.Command, mcpClient *mcp.Client, namespace, name string) string {
+// checkExoskeletonCleanup queries the MCP server for enclave info to determine
+// if exoskeleton services are provisioned for the namespace. If any exo services
+// are available, it returns a warning string to display. Otherwise it returns
+// empty string. Errors are silently ignored (best-effort check).
+func checkExoskeletonCleanup(cmd *cobra.Command, mcpClient *mcp.Client, namespace, _ string) string {
 	ctx := cmd.Context()
 
-	exoStatus, err := mcpClient.ExoStatus(ctx)
-	if err != nil || !exoStatus.Enabled || !exoStatus.CleanupOnUndeploy {
+	info, err := mcpClient.EnclaveInfo(ctx, namespace)
+	if err != nil || len(info.ExoServices) == 0 {
 		return ""
 	}
 
-	exoReg, err := mcpClient.ExoRegistration(ctx, namespace, name)
-	if err != nil || !exoReg.Found {
-		return ""
-	}
-
+	// Build the warning based on available exo services.
 	var sb strings.Builder
-	sb.WriteString("\nWARNING: Exoskeleton cleanup is enabled. Undeploying will permanently delete:\n")
-	if exoStatus.PostgresAvailable {
-		sb.WriteString("  - Postgres schema and role for this workflow\n")
+	hasAvailable := false
+	for _, svc := range info.ExoServices {
+		if svc.Available {
+			hasAvailable = true
+			break
+		}
 	}
-	if exoStatus.RustFSAvailable {
-		sb.WriteString("  - RustFS objects, IAM user, and access policy\n")
+	if !hasAvailable {
+		return ""
 	}
-	if exoStatus.NATSAvailable {
-		sb.WriteString("  - NATS authorization entries and credentials\n")
+
+	sb.WriteString("\nWARNING: Exoskeleton services are provisioned for this enclave. Undeploying will permanently delete:\n")
+	for _, svc := range info.ExoServices {
+		if !svc.Available {
+			continue
+		}
+		switch svc.Name {
+		case "postgres":
+			sb.WriteString("  - Postgres schema and role for this workflow\n")
+		case "rustfs":
+			sb.WriteString("  - RustFS objects, IAM user, and access policy\n")
+		case "nats":
+			sb.WriteString("  - NATS authorization entries and credentials\n")
+		}
 	}
 	sb.WriteString("\n")
 	return sb.String()
