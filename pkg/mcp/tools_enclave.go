@@ -17,18 +17,18 @@ type EnclaveProvisionParams struct {
 	ChannelID   string   `json:"channel_id,omitempty"`
 	ChannelName string   `json:"channel_name,omitempty"`
 	Quota       string   `json:"quota_preset,omitempty"`
+	DefaultMode string   `json:"default_mode,omitempty"`
 	Members     []string `json:"members,omitempty"`
 }
 
 // EnclaveProvisionResult is the response from enclave_provision.
 type EnclaveProvisionResult struct {
-	Name      string   `json:"name"`
-	Namespace string   `json:"namespace"`
-	Owner     string   `json:"owner"`
-	Platform  string   `json:"platform,omitempty"`
-	Quota     string   `json:"quota,omitempty"`
-	Members   []string `json:"members,omitempty"`
-	Created   bool     `json:"created"`
+	Name             string   `json:"name"`
+	Status           string   `json:"status"`
+	QuotaPreset      string   `json:"quota_preset,omitempty"`
+	Owner            string   `json:"owner"`
+	Members          []string `json:"members,omitempty"`
+	ResourcesCreated []string `json:"resources_created,omitempty"`
 }
 
 // EnclaveProvision calls the enclave_provision MCP tool to provision a new enclave.
@@ -59,16 +59,19 @@ type EnclaveExoService struct {
 
 // EnclaveInfoResult is the response from enclave_info.
 type EnclaveInfoResult struct {
-	Name        string              `json:"name"`
-	Namespace   string              `json:"namespace"`
-	Owner       string              `json:"owner"`
-	Platform    string              `json:"platform,omitempty"`
-	ChannelID   string              `json:"channel_id,omitempty"`
-	ChannelName string              `json:"channel_name,omitempty"`
-	Quota       string              `json:"quota,omitempty"`
-	Status      string              `json:"status,omitempty"`
-	Members     []string            `json:"members,omitempty"`
-	ExoServices []EnclaveExoService `json:"exo_services,omitempty"`
+	Name          string              `json:"name"`
+	Owner         string              `json:"owner"`
+	OwnerSub      string              `json:"owner_sub,omitempty"`
+	Platform      string              `json:"platform,omitempty"`
+	ChannelID     string              `json:"channel_id,omitempty"`
+	ChannelName   string              `json:"channel_name,omitempty"`
+	QuotaPreset   string              `json:"quota_preset,omitempty"`
+	Status        string              `json:"status,omitempty"`
+	CreatedAt     string              `json:"created_at,omitempty"`
+	UpdatedAt     string              `json:"updated_at,omitempty"`
+	Members       []string            `json:"members,omitempty"`
+	ExoServices   []EnclaveExoService `json:"exo_services,omitempty"`
+	TentacleCount int                 `json:"tentacle_count"`
 }
 
 // EnclaveInfo calls the enclave_info MCP tool to retrieve enclave details.
@@ -93,12 +96,13 @@ type EnclaveListParams struct {
 
 // EnclaveListItem represents a single enclave in the list response.
 type EnclaveListItem struct {
-	Name        string `json:"name"`
-	Namespace   string `json:"namespace"`
-	Owner       string `json:"owner"`
-	Status      string `json:"status,omitempty"`
-	Platform    string `json:"platform,omitempty"`
-	MemberCount int    `json:"member_count,omitempty"`
+	Name        string   `json:"name"`
+	Owner       string   `json:"owner"`
+	Status      string   `json:"status,omitempty"`
+	Platform    string   `json:"platform,omitempty"`
+	ChannelName string   `json:"channel_name,omitempty"`
+	CreatedAt   string   `json:"created_at,omitempty"`
+	Members     []string `json:"members,omitempty"`
 }
 
 // enclaveListResult is the envelope returned by the MCP server for enclave_list.
@@ -140,9 +144,9 @@ type EnclaveSyncParams struct {
 
 // EnclaveSyncResult is the response from enclave_sync.
 type EnclaveSyncResult struct {
-	Name    string   `json:"name"`
-	Changes []string `json:"changes,omitempty"`
-	Updated bool     `json:"updated"`
+	Name    string            `json:"name"`
+	Updated []string          `json:"updated,omitempty"`
+	Enclave EnclaveInfoResult `json:"enclave"`
 }
 
 // EnclaveSync calls the enclave_sync MCP tool to update enclave membership or metadata.
@@ -167,8 +171,9 @@ type EnclaveDeprovisionParams struct {
 
 // EnclaveDeprovisionResult is the response from enclave_deprovision.
 type EnclaveDeprovisionResult struct {
-	Name    string `json:"name"`
-	Deleted bool   `json:"deleted"`
+	Name             string `json:"name"`
+	Deleted          bool   `json:"deleted"`
+	TentaclesRemoved int    `json:"tentacles_removed"`
 }
 
 // EnclaveDeprovision calls the enclave_deprovision MCP tool to destroy an enclave.

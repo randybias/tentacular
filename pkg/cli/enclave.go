@@ -139,7 +139,6 @@ func runEnclaveInfo(cmd *cobra.Command, args []string) error {
 
 	out := cmd.OutOrStdout()
 	fmt.Fprintf(out, "Enclave:     %s\n", result.Name)
-	fmt.Fprintf(out, "Namespace:   %s\n", result.Namespace)
 	fmt.Fprintf(out, "Owner:       %s\n", result.Owner)
 	if len(result.Members) > 0 {
 		fmt.Fprintf(out, "Members:     %s\n", strings.Join(result.Members, ", "))
@@ -153,11 +152,14 @@ func runEnclaveInfo(cmd *cobra.Command, args []string) error {
 	if result.ChannelName != "" {
 		fmt.Fprintf(out, "Channel:     %s\n", result.ChannelName)
 	}
-	if result.Quota != "" {
-		fmt.Fprintf(out, "Quota:       %s\n", result.Quota)
+	if result.QuotaPreset != "" {
+		fmt.Fprintf(out, "Quota:       %s\n", result.QuotaPreset)
 	}
 	if result.Status != "" {
 		fmt.Fprintf(out, "Status:      %s\n", result.Status)
+	}
+	if result.TentacleCount > 0 {
+		fmt.Fprintf(out, "Tentacles:   %d\n", result.TentacleCount)
 	}
 	return nil
 }
@@ -177,6 +179,7 @@ func newEnclaveProvisionCmd() *cobra.Command {
 	cmd.Flags().String("channel-id", "", "Platform channel ID")
 	cmd.Flags().String("channel-name", "", "Platform channel name")
 	cmd.Flags().String("quota", "", "Resource quota preset (small|medium|large)")
+	cmd.Flags().String("default-mode", "", "Default permission mode for new tentacles (e.g. rwxrwx---)")
 	return cmd
 }
 
@@ -190,6 +193,7 @@ func runEnclaveProvision(cmd *cobra.Command, args []string) error {
 	channelID, _ := cmd.Flags().GetString("channel-id")
 	channelName, _ := cmd.Flags().GetString("channel-name")
 	quota, _ := cmd.Flags().GetString("quota")
+	defaultMode, _ := cmd.Flags().GetString("default-mode")
 
 	var members []string
 	if membersRaw != "" {
@@ -213,6 +217,7 @@ func runEnclaveProvision(cmd *cobra.Command, args []string) error {
 		ChannelID:   channelID,
 		ChannelName: channelName,
 		Quota:       quota,
+		DefaultMode: defaultMode,
 	}
 
 	result, err := mcpClient.EnclaveProvision(cmd.Context(), params)
@@ -236,18 +241,13 @@ func runEnclaveProvision(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	action := "already existed"
-	if result.Created {
-		action = "created"
-	}
-	fmt.Fprintf(out, "Enclave %s (%s)\n", result.Name, action)
-	fmt.Fprintf(out, "  Namespace:  %s\n", result.Namespace)
+	fmt.Fprintf(out, "Enclave %s (status: %s)\n", result.Name, result.Status)
 	fmt.Fprintf(out, "  Owner:      %s\n", result.Owner)
 	if len(result.Members) > 0 {
 		fmt.Fprintf(out, "  Members:    %s\n", strings.Join(result.Members, ", "))
 	}
-	if result.Quota != "" {
-		fmt.Fprintf(out, "  Quota:      %s\n", result.Quota)
+	if result.QuotaPreset != "" {
+		fmt.Fprintf(out, "  Quota:      %s\n", result.QuotaPreset)
 	}
 	return nil
 }
@@ -321,10 +321,10 @@ func runEnclaveSync(cmd *cobra.Command, args []string) error {
 	}
 
 	out := cmd.OutOrStdout()
-	if result.Updated {
+	if len(result.Updated) > 0 {
 		fmt.Fprintf(out, "Updated enclave %s\n", result.Name)
-		for _, change := range result.Changes {
-			fmt.Fprintf(out, "  %s\n", change)
+		for _, field := range result.Updated {
+			fmt.Fprintf(out, "  %s\n", field)
 		}
 	} else {
 		fmt.Fprintf(out, "No changes for enclave %s\n", result.Name)
@@ -404,11 +404,8 @@ func resolveEnclaveNamespace(cmd *cobra.Command, mcpClient *mcp.Client, enclaveN
 		}
 		return "", fmt.Errorf("resolving enclave %q: %w", enclaveName, err)
 	}
-	if info.Namespace == "" {
-		// Fall back: use the enclave name as the namespace if server didn't return one.
-		return enclaveName, nil
-	}
-	return info.Namespace, nil
+	// The namespace name is always the enclave name.
+	return info.Name, nil
 }
 
 // resolveAutoEnclave lists the caller's enclaves and returns the namespace if exactly one.
@@ -428,11 +425,8 @@ func resolveAutoEnclave(cmd *cobra.Command, mcpClient *mcp.Client) (string, erro
 		return "", fmt.Errorf("--enclave auto: you belong to multiple enclaves (%s); specify one with --enclave <name>",
 			strings.Join(names, ", "))
 	}
-	ns := items[0].Namespace
-	if ns == "" {
-		ns = items[0].Name
-	}
-	return ns, nil
+	// The namespace name is always the enclave name.
+	return items[0].Name, nil
 }
 
 // splitEmails splits a comma-separated email string into a slice, trimming whitespace.
