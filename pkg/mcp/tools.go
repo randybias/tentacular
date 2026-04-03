@@ -13,8 +13,6 @@ import (
 type WfApplyParams struct {
 	Namespace string           `json:"namespace"`
 	Name      string           `json:"name"`
-	Group     string           `json:"group,omitempty"`
-	Share     string           `json:"share,omitempty"`
 	Manifests []map[string]any `json:"manifests"`
 }
 
@@ -31,25 +29,6 @@ func (c *Client) WfApply(ctx context.Context, namespace, name string, manifests 
 		Namespace: namespace,
 		Name:      name,
 		Manifests: manifests,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var result WfApplyResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("parsing wf_apply result: %w", err)
-	}
-	return &result, nil
-}
-
-// WfApplyWithAuthz calls wf_apply with optional group and share (mode preset) parameters.
-func (c *Client) WfApplyWithAuthz(ctx context.Context, namespace, name string, manifests []map[string]any, group, share string) (*WfApplyResult, error) {
-	raw, err := c.CallTool(ctx, "wf_apply", WfApplyParams{
-		Namespace: namespace,
-		Name:      name,
-		Manifests: manifests,
-		Group:     group,
-		Share:     share,
 	})
 	if err != nil {
 		return nil, err
@@ -394,36 +373,6 @@ func (c *Client) ClusterPreflight(ctx context.Context, namespace string) (*Clust
 	return &result, nil
 }
 
-// --- ns_create ---
-
-// NsCreateParams are the arguments for the ns_create MCP tool.
-type NsCreateParams struct {
-	Name        string `json:"name"`
-	QuotaPreset string `json:"quota_preset,omitempty"`
-}
-
-// NsCreateResult is the response from ns_create.
-type NsCreateResult struct {
-	Name    string `json:"name"`
-	Created bool   `json:"created"` // false means already existed
-}
-
-// NsCreate calls the ns_create MCP tool to ensure a namespace exists.
-func (c *Client) NsCreate(ctx context.Context, name, quotaPreset string) (*NsCreateResult, error) {
-	raw, err := c.CallTool(ctx, "ns_create", NsCreateParams{
-		Name:        name,
-		QuotaPreset: quotaPreset,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var result NsCreateResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("parsing ns_create result: %w", err)
-	}
-	return &result, nil
-}
-
 // --- audit_resources ---
 
 // AuditResourcesParams are the arguments for the audit_resources MCP tool.
@@ -527,184 +476,6 @@ func (c *Client) WfDescribe(ctx context.Context, namespace, name string) (*WfDes
 	var result WfDescribeResult
 	if err := json.Unmarshal(raw, &result); err != nil {
 		return nil, fmt.Errorf("parsing wf_describe result: %w", err)
-	}
-	return &result, nil
-}
-
-// --- exo_status ---
-
-// ExoStatusParams are the arguments for the exo_status MCP tool.
-type ExoStatusParams struct{}
-
-// ExoStatusResult is the response from exo_status.
-type ExoStatusResult struct {
-	AuthIssuer        string `json:"auth_issuer,omitempty"`
-	Enabled           bool   `json:"enabled"`
-	CleanupOnUndeploy bool   `json:"cleanup_on_undeploy"`
-	PostgresAvailable bool   `json:"postgres_available"`
-	NATSAvailable     bool   `json:"nats_available"`
-	RustFSAvailable   bool   `json:"rustfs_available"`
-	SPIREAvailable    bool   `json:"spire_available"`
-	NATSSpiffeEnabled bool   `json:"nats_spiffe_enabled"`
-	AuthEnabled       bool   `json:"auth_enabled"`
-}
-
-// ExoStatus calls the exo_status MCP tool to check exoskeleton feature status.
-func (c *Client) ExoStatus(ctx context.Context) (*ExoStatusResult, error) {
-	raw, err := c.CallTool(ctx, "exo_status", ExoStatusParams{})
-	if err != nil {
-		return nil, err
-	}
-	var result ExoStatusResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("parsing exo_status result: %w", err)
-	}
-	return &result, nil
-}
-
-// --- exo_registration ---
-
-// ExoRegistrationParams are the arguments for the exo_registration MCP tool.
-type ExoRegistrationParams struct {
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-}
-
-// ExoRegistrationResult is the response from exo_registration.
-type ExoRegistrationResult struct {
-	Data      map[string]string `json:"data,omitempty"`
-	Namespace string            `json:"namespace"`
-	Name      string            `json:"name"`
-	Found     bool              `json:"found"`
-}
-
-// ExoRegistration calls the exo_registration MCP tool to check if a workflow
-// has an exoskeleton Secret registered.
-func (c *Client) ExoRegistration(ctx context.Context, namespace, name string) (*ExoRegistrationResult, error) {
-	raw, err := c.CallTool(ctx, "exo_registration", ExoRegistrationParams{
-		Namespace: namespace,
-		Name:      name,
-	})
-	if err != nil {
-		return nil, err
-	}
-	var result ExoRegistrationResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("parsing exo_registration result: %w", err)
-	}
-	return &result, nil
-}
-
-// --- permissions_get ---
-
-// PermissionsGetParams are the arguments for the permissions_get MCP tool.
-type PermissionsGetParams struct {
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-}
-
-// PermissionsGetResult is the response from permissions_get.
-type PermissionsGetResult struct {
-	OwnerSub     string `json:"owner_sub"`
-	OwnerEmail   string `json:"owner_email"`
-	OwnerName    string `json:"owner_name"`
-	Group        string `json:"group"`
-	Mode         string `json:"mode"`
-	AuthProvider string `json:"auth_provider,omitempty"`
-}
-
-// PermissionsGet calls the permissions_get or ns_permissions_get MCP tool.
-// If name is empty, it queries namespace-level permissions.
-func (c *Client) PermissionsGet(ctx context.Context, namespace, name string) (*PermissionsGetResult, error) {
-	toolName := "permissions_get"
-	var params any = PermissionsGetParams{Namespace: namespace, Name: name}
-	if name == "" {
-		toolName = "ns_permissions_get"
-		params = NsPermissionsGetParams{Namespace: namespace}
-	}
-	raw, err := c.CallTool(ctx, toolName, params)
-	if err != nil {
-		return nil, err
-	}
-	var result PermissionsGetResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("parsing permissions_get result: %w", err)
-	}
-	return &result, nil
-}
-
-// --- permissions_set ---
-
-// PermissionsSetParams are the arguments for the permissions_set MCP tool.
-type PermissionsSetParams struct {
-	Namespace string `json:"namespace"`
-	Name      string `json:"name"`
-	Group     string `json:"group,omitempty"`
-	Mode      string `json:"mode,omitempty"`  // raw mode string (e.g. "rwxr-x---")
-	Share     string `json:"share,omitempty"` // preset name (e.g. "group-read")
-}
-
-// PermissionsSetResult is the response from permissions_set.
-type PermissionsSetResult struct {
-	Mode    string `json:"mode,omitempty"`
-	Group   string `json:"group,omitempty"`
-	Updated bool   `json:"updated"`
-}
-
-// isRawModeString returns true if the value looks like a rwx permission string.
-func isRawModeString(s string) bool {
-	return len(s) == 9 && (s[0] == 'r' || s[0] == '-')
-}
-
-// NsPermissionsGetParams are the arguments for the ns_permissions_get MCP tool.
-type NsPermissionsGetParams struct {
-	Namespace string `json:"namespace"`
-}
-
-// NsPermissionsSetParams are the arguments for the ns_permissions_set MCP tool.
-type NsPermissionsSetParams struct {
-	Namespace string `json:"namespace"`
-	Group     string `json:"group,omitempty"`
-	Mode      string `json:"mode,omitempty"`
-	Share     string `json:"share,omitempty"`
-}
-
-// PermissionsSet calls the permissions_set or ns_permissions_set MCP tool.
-// If name is empty, it updates namespace-level permissions.
-// The mode parameter is auto-routed: raw mode strings (e.g. "rwxr-x---") go to the Mode field,
-// preset names (e.g. "group-read", "private") go to the Share field.
-func (c *Client) PermissionsSet(ctx context.Context, namespace, name, group, mode string) (*PermissionsSetResult, error) {
-	var modeField, shareField string
-	if isRawModeString(mode) {
-		modeField = mode
-	} else if mode != "" {
-		shareField = mode
-	}
-
-	toolName := "permissions_set"
-	var params any = PermissionsSetParams{
-		Namespace: namespace,
-		Name:      name,
-		Group:     group,
-		Mode:      modeField,
-		Share:     shareField,
-	}
-	if name == "" {
-		toolName = "ns_permissions_set"
-		params = NsPermissionsSetParams{
-			Namespace: namespace,
-			Group:     group,
-			Mode:      modeField,
-			Share:     shareField,
-		}
-	}
-	raw, err := c.CallTool(ctx, toolName, params)
-	if err != nil {
-		return nil, err
-	}
-	var result PermissionsSetResult
-	if err := json.Unmarshal(raw, &result); err != nil {
-		return nil, fmt.Errorf("parsing permissions_set result: %w", err)
 	}
 	return &result, nil
 }

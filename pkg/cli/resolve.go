@@ -23,17 +23,11 @@ func flagString(cmd *cobra.Command, name string) string {
 }
 
 // resolveNamespace determines the target namespace using the cascade:
-// 1. --namespace/-n flag (explicit override)
-// 2. deployment.namespace from workflow.yaml (when workflowDir is provided)
-// 3. env config namespace (from --env or default environment)
-// 4. global config namespace
-// 5. "default"
+// 1. deployment.namespace from workflow.yaml (when workflowDir is provided)
+// 2. env config namespace (from --env or default environment)
+// 3. global config namespace
+// 4. "default"
 func resolveNamespace(cmd *cobra.Command, workflowDir string) string {
-	// Explicit --namespace flag takes highest priority
-	if ns := flagString(cmd, "namespace"); ns != "" {
-		return ns
-	}
-
 	envName := flagString(cmd, "env")
 
 	// Try workflow.yaml deployment.namespace first

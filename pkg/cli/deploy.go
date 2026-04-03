@@ -34,8 +34,7 @@ func NewDeployCmd() *cobra.Command {
 	cmd.Flags().Bool("skip-live-test", false, "Skip pre-deploy live test (alias for --force)")
 	cmd.Flags().Bool("verify", false, "Run workflow once after deploy to verify")
 	cmd.Flags().Bool("warn", false, "Audit mode: contract violations produce warnings instead of failures")
-	cmd.Flags().String("group", "", "Set group ownership for the workflow (e.g. platform-team)")
-	cmd.Flags().String("share", "", "Set permissions mode preset (e.g. group-edit, private, public-read)")
+	cmd.Flags().String("enclave", "", "Target enclave name (resolves to enclave namespace)")
 	return cmd
 }
 
@@ -47,8 +46,6 @@ type InternalDeployOptions struct {
 	RuntimeClass    string
 	ImagePullPolicy string
 	Context         string // kubeconfig context override (bootstrap-only)
-	Group           string // optional group ownership for authz annotation stamping
-	Share           string // optional mode preset (e.g. "group-edit", "private")
 }
 
 // DeployResult holds the result of a deployment.
@@ -78,8 +75,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	force, _ := cmd.Flags().GetBool("force")
 	skipLiveTest, _ := cmd.Flags().GetBool("skip-live-test")
 	verify, _ := cmd.Flags().GetBool("verify")
-	group, _ := cmd.Flags().GetString("group")
-	share, _ := cmd.Flags().GetString("share")
+	enclaveName, _ := cmd.Flags().GetString("enclave")
 
 	// --skip-live-test is an alias for --force
 	if skipLiveTest {
@@ -141,7 +137,8 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	// Namespace cascade: workflow.yaml > env config > global config > "default"
+	// Namespace cascade (pre-MCP): workflow.yaml > env config > global config > "default"
+	// --enclave override is applied after MCP client is available.
 	namespace := resolveNamespace(cmd, absDir)
 	if !cmd.Flags().Changed("runtime-class") && envName == "" && cfg.RuntimeClass != "" {
 		runtimeClass = cfg.RuntimeClass
@@ -166,6 +163,16 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
 		return emitDeployResult(cmd, "fail", err.Error(), nil, startedAt)
+	}
+
+	// --enclave override: resolves to the enclave's namespace via MCP.
+	// Takes highest priority for namespace resolution.
+	if enclaveName != "" {
+		enclaveNS, nsErr := resolveEnclaveNamespace(cmd, mcpClient, enclaveName)
+		if nsErr != nil {
+			return emitDeployResult(cmd, "fail", nsErr.Error(), nil, startedAt)
+		}
+		namespace = enclaveNS
 	}
 
 	// Pre-deploy live test gate: if dev environment is configured and --force is not set,
@@ -209,8 +216,6 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		Image:        imageTag,
 		RuntimeClass: runtimeClass,
 		StatusOut:    w,
-		Group:        group,
-		Share:        share,
 	}
 
 	deployResult, err := deployWorkflow(absDir, deployOpts, mcpClient)
@@ -414,10 +419,10 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 	}
 
 	// Phase 3: Apply via MCP
-	applyResult, err := mcpClient.WfApplyWithAuthz(context.Background(), opts.Namespace, wf.Name, mcpManifests, opts.Group, opts.Share)
+	applyResult, err := mcpClient.WfApply(context.Background(), opts.Namespace, wf.Name, mcpManifests)
 	if err != nil {
 		if isAuthzError(err) {
-			return nil, fmt.Errorf("permission denied: %w\n  hint: use 'tntc permissions get %s %s' to view current ownership", err, opts.Namespace, wf.Name)
+			return nil, fmt.Errorf("permission denied: %w\n  hint: check your enclave membership with 'tntc enclave info <name>'", err)
 		}
 		if hint := mcpErrorHint(err); hint != "" {
 			return nil, fmt.Errorf("applying via MCP: %w\n  hint: %s", err, hint)
