@@ -18,6 +18,7 @@ import (
 	"github.com/randybias/tentacular/pkg/k8s"
 	"github.com/randybias/tentacular/pkg/mcp"
 	"github.com/randybias/tentacular/pkg/spec"
+	"github.com/randybias/tentacular/pkg/version"
 )
 
 func NewDeployCmd() *cobra.Command {
@@ -152,7 +153,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		runtimeClass = cfg.RuntimeClass
 	}
 
-	// Image resolution cascade: --image flag > env.Image > <workflow>/.tentacular/base-image.txt > tentacular-engine:latest
+	// Image resolution cascade: --image flag > env.Image > <workflow>/.tentacular/base-image.txt > registry/tentacular-engine:version
 	imageTag := imageFlagValue
 	if imageTag == "" {
 		tagFilePath := filepath.Join(absDir, ".tentacular", "base-image.txt")
@@ -161,7 +162,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 	if imageTag == "" {
-		imageTag = "tentacular-engine:latest"
+		imageTag = resolveDefaultEngineImage(cfg)
 	}
 
 	// Determine status output writer (stderr when -o json)
@@ -295,7 +296,7 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 	imagePullPolicy := opts.ImagePullPolicy
 
 	if imageTag == "" {
-		imageTag = "tentacular-engine:latest"
+		imageTag = resolveDefaultEngineImage(LoadConfig())
 	}
 
 	// Scan TypeScript node files for jsr:/npm: imports and auto-wire the module proxy.
@@ -542,4 +543,21 @@ func countModuleProxyDeps(wf *spec.Workflow) int {
 		}
 	}
 	return n
+}
+
+// resolveDefaultEngineImage builds the default engine image reference from
+// the configured registry and the current tntc version. Falls back to
+// "tentacular-engine:latest" only when no registry is configured AND the
+// version is "dev" (local development).
+func resolveDefaultEngineImage(cfg TentacularConfig) string {
+	tag := version.Version
+	if tag == "" || tag == "dev" {
+		tag = "latest"
+	}
+
+	registry := cfg.Registry
+	if registry != "" {
+		return registry + "/tentacular-engine:" + tag
+	}
+	return "tentacular-engine:" + tag
 }
