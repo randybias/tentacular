@@ -25,12 +25,19 @@ type MCPConfig struct {
 	TokenPath string `yaml:"token_path,omitempty"` // path to bearer token file
 }
 
+// GitStateConfig configures the git-backed state repository for tentacle source and secrets.
+type GitStateConfig struct {
+	RepoPath string `yaml:"repo_path,omitempty"` // path to the git-state repo root
+	Enabled  bool   `yaml:"enabled,omitempty"`   // when true, enclave is required for scaffold init and deploy gates are enforced
+}
+
 // TentacularConfig holds default configuration values.
 type TentacularConfig struct {
 	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
 	MCP          MCPConfig                    `yaml:"mcp,omitempty"`
 	Catalog      catalog.CatalogConfig        `yaml:"catalog,omitempty"`
 	Scaffold     scaffold.ClientConfig        `yaml:"scaffold,omitempty"`
+	GitState     GitStateConfig               `yaml:"git_state,omitempty"`
 	Workspace    string                       `yaml:"workspace,omitempty"`
 	Registry     string                       `yaml:"registry,omitempty"`
 	Namespace    string                       `yaml:"namespace,omitempty"`
@@ -108,6 +115,12 @@ func mergeConfig(base, override *TentacularConfig) {
 	}
 	if override.ModuleProxy.PVCSize != "" {
 		base.ModuleProxy.PVCSize = override.ModuleProxy.PVCSize
+	}
+	if override.GitState.Enabled {
+		base.GitState.Enabled = true
+	}
+	if override.GitState.RepoPath != "" {
+		base.GitState.RepoPath = override.GitState.RepoPath
 	}
 	if override.MCP.Endpoint != "" {
 		base.MCP.Endpoint = override.MCP.Endpoint

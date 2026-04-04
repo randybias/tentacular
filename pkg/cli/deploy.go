@@ -137,6 +137,14 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	// Git-state deploy gate: if git-state is enabled, verify the repo is clean
+	// for this enclave/tentacle before proceeding.
+	if cfg.GitState.Enabled && cfg.GitState.RepoPath != "" {
+		if gitErr := checkGitStateClean(cfg.GitState.RepoPath, enclaveName, wf.Name); gitErr != nil {
+			return emitDeployResult(cmd, "fail", gitErr.Error(), nil, startedAt)
+		}
+	}
+
 	// Namespace cascade (pre-MCP): workflow.yaml > env config > global config > "default"
 	// --enclave override is applied after MCP client is available.
 	namespace := resolveNamespace(cmd, absDir)
