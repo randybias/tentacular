@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -140,7 +141,36 @@ func resolveEndpoint(envName string, cfg TentacularConfig) string {
 
 // resolveOIDCToken checks for a valid OIDC token, refreshing if needed.
 // Returns "" if no OIDC token is available (not an error -- falls back to static).
+//
+// Resolution order:
+//  1. TNTC_ACCESS_TOKEN env var (transitive trust: orchestrators inject the user's token)
+//  2. Cached token on disk (~/.tentacular/tokens/<env>.json)
+//  3. Refresh expired cached token using refresh_token
 func resolveOIDCToken(envName string) (string, error) {
+	// 1. Environment variable override (transitive trust for multi-tenant orchestrators).
+	// When The Kraken or another orchestrator acts on behalf of a user, it injects
+	// the user's OIDC access token here. This skips device flow entirely.
+	if injected := os.Getenv("TNTC_ACCESS_TOKEN"); injected != "" {
+		// Validate the token isn't expired before using it.
+		claims, err := DecodeJWTClaims(injected)
+		if err != nil {
+			return "", fmt.Errorf("TNTC_ACCESS_TOKEN is not a valid JWT: %w", err)
+		}
+		if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
+			// Token expired -- try refresh via env var if available.
+			if refreshToken := os.Getenv("TNTC_REFRESH_TOKEN"); refreshToken != "" {
+				refreshed, refreshErr := refreshWithToken(envName, injected, refreshToken)
+				if refreshErr != nil {
+					return "", fmt.Errorf("TNTC_ACCESS_TOKEN expired and refresh failed: %w", refreshErr)
+				}
+				return refreshed, nil
+			}
+			return "", errors.New("TNTC_ACCESS_TOKEN expired and no TNTC_REFRESH_TOKEN provided")
+		}
+		return injected, nil
+	}
+
+	// 2. Cached token on disk.
 	tokenEnv := envName
 	if tokenEnv == "" {
 		tokenEnv = "default"
@@ -158,7 +188,7 @@ func resolveOIDCToken(envName string) (string, error) {
 		return store.AccessToken, nil
 	}
 
-	// Token expired -- try refresh
+	// 3. Token expired -- try refresh.
 	if store.RefreshToken == "" {
 		return "", errors.New("OIDC token expired and no refresh token available; run 'tntc login'")
 	}
@@ -166,6 +196,27 @@ func resolveOIDCToken(envName string) (string, error) {
 	refreshed, err := RefreshOIDCToken(tokenEnv, store)
 	if err != nil {
 		return "", fmt.Errorf("OIDC token refresh failed: %w; run 'tntc login' to re-authenticate", err)
+	}
+	return refreshed.AccessToken, nil
+}
+
+// refreshWithToken attempts to refresh an expired access token using the provided refresh token.
+// Used when tokens are injected via environment variables (transitive trust).
+func refreshWithToken(envName, accessToken, refreshToken string) (string, error) {
+	tokenEnv := envName
+	if tokenEnv == "" {
+		tokenEnv = "default"
+	}
+
+	// Build a synthetic token store for the refresh flow.
+	store := &OIDCTokenStore{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+	}
+
+	refreshed, err := RefreshOIDCToken(tokenEnv, store)
+	if err != nil {
+		return "", err
 	}
 	return refreshed.AccessToken, nil
 }
