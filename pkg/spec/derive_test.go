@@ -834,6 +834,136 @@ func TestDeriveDenoFlagsSidecarsNoContract(t *testing.T) {
 	}
 }
 
+func TestDeriveDenoFlagsZeroDepWithProxyHost(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{},
+	}
+
+	proxyHost := "esm-sh.tentacular-support.svc.cluster.local:8080"
+	flags := DeriveDenoFlags(contract, nil, proxyHost)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for zero-dep contract with proxy host")
+	}
+
+	allowImportFlag := ""
+	allowReadFlag := ""
+	allowWriteFlag := ""
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if strings.HasPrefix(flag, "--allow-import=") {
+			allowImportFlag = flag
+		}
+		if strings.HasPrefix(flag, "--allow-read=") {
+			allowReadFlag = flag
+		}
+		if strings.HasPrefix(flag, "--allow-write=") {
+			allowWriteFlag = flag
+		}
+		if strings.HasPrefix(flag, "--allow-net=") {
+			allowNetFlag = flag
+		}
+	}
+
+	expectedImport := "--allow-import=deno.land:443,esm-sh.tentacular-support.svc.cluster.local:8080"
+	if allowImportFlag != expectedImport {
+		t.Errorf("expected %s, got %s", expectedImport, allowImportFlag)
+	}
+
+	// No sidecars: read should be /app only, write should be /tmp only
+	if allowReadFlag != "--allow-read=/app" {
+		t.Errorf("expected --allow-read=/app, got %s", allowReadFlag)
+	}
+	if allowWriteFlag != "--allow-write=/tmp" {
+		t.Errorf("expected --allow-write=/tmp, got %s", allowWriteFlag)
+	}
+
+	// allow-net should include the proxy host and 0.0.0.0:8080
+	if !strings.Contains(allowNetFlag, proxyHost) {
+		t.Errorf("expected proxy host in --allow-net, got %s", allowNetFlag)
+	}
+}
+
+func TestDeriveDenoFlagsZeroDepWithSidecarsAndProxy(t *testing.T) {
+	contract := &Contract{
+		Dependencies: map[string]Dependency{},
+	}
+	sidecars := []SidecarSpec{
+		{Name: "postgres", Image: "postgres:16", Port: 5432},
+	}
+
+	proxyHost := "esm-sh.tentacular-support.svc.cluster.local:8080"
+	flags := DeriveDenoFlags(contract, sidecars, proxyHost)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for zero-dep contract with sidecars and proxy")
+	}
+
+	allowReadFlag := ""
+	allowWriteFlag := ""
+	allowNetFlag := ""
+	for _, flag := range flags {
+		if strings.HasPrefix(flag, "--allow-read=") {
+			allowReadFlag = flag
+		}
+		if strings.HasPrefix(flag, "--allow-write=") {
+			allowWriteFlag = flag
+		}
+		if strings.HasPrefix(flag, "--allow-net=") {
+			allowNetFlag = flag
+		}
+	}
+
+	// Sidecars present: /shared should be included
+	if allowReadFlag != "--allow-read=/app,/shared" {
+		t.Errorf("expected --allow-read=/app,/shared, got %s", allowReadFlag)
+	}
+	if allowWriteFlag != "--allow-write=/tmp,/shared" {
+		t.Errorf("expected --allow-write=/tmp,/shared, got %s", allowWriteFlag)
+	}
+
+	// allow-net should include both localhost:5432 and the proxy host
+	if !strings.Contains(allowNetFlag, "localhost:5432") {
+		t.Errorf("expected localhost:5432 in --allow-net, got %s", allowNetFlag)
+	}
+	if !strings.Contains(allowNetFlag, proxyHost) {
+		t.Errorf("expected proxy host in --allow-net, got %s", allowNetFlag)
+	}
+}
+
+func TestDeriveDenoFlagsNilContractWithProxy(t *testing.T) {
+	proxyHost := "esm-sh.tentacular-support.svc.cluster.local:8080"
+	flags := DeriveDenoFlags(nil, nil, proxyHost)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for nil contract with proxy host")
+	}
+
+	allowImportFlag := ""
+	allowReadFlag := ""
+	allowWriteFlag := ""
+	for _, flag := range flags {
+		if strings.HasPrefix(flag, "--allow-import=") {
+			allowImportFlag = flag
+		}
+		if strings.HasPrefix(flag, "--allow-read=") {
+			allowReadFlag = flag
+		}
+		if strings.HasPrefix(flag, "--allow-write=") {
+			allowWriteFlag = flag
+		}
+	}
+
+	// Should behave same as empty deps case
+	expectedImport := "--allow-import=deno.land:443,esm-sh.tentacular-support.svc.cluster.local:8080"
+	if allowImportFlag != expectedImport {
+		t.Errorf("expected %s, got %s", expectedImport, allowImportFlag)
+	}
+	if allowReadFlag != "--allow-read=/app" {
+		t.Errorf("expected --allow-read=/app, got %s", allowReadFlag)
+	}
+	if allowWriteFlag != "--allow-write=/tmp" {
+		t.Errorf("expected --allow-write=/tmp, got %s", allowWriteFlag)
+	}
+}
+
 func TestDeriveDenoFlagsDynamicTargetWithSidecars(t *testing.T) {
 	contract := &Contract{
 		Dependencies: map[string]Dependency{

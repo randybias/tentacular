@@ -123,10 +123,10 @@ function createDependencyAccessor(
       container: dep.container,
     };
 
-    // Add convenience fetch method for HTTPS dependencies
-    if (dep.protocol === "https") {
+    // Add convenience fetch method for HTTP/HTTPS dependencies
+    if (dep.protocol === "https" || dep.protocol === "http") {
       conn.fetch = (path: string, init?: RequestInit): Promise<Response> => {
-        const url = `https://${dep.host}:${port}${path}`;
+        const url = `${dep.protocol}://${dep.host}:${port}${path}`;
         return globalThis.fetch(url, init);
       };
     }
