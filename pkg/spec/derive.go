@@ -257,7 +257,9 @@ func HasModuleProxyDeps(wf *Workflow) bool {
 }
 
 // DeriveDenoFlags returns the complete Deno command with permission flags based on contract dependencies.
-// Returns nil if contract is nil or has no dependencies and no sidecars.
+// Returns nil only when there are no dependencies, no sidecars, AND no module proxy host.
+// When proxyHost is set, always generates flags with --allow-import so the engine can
+// import its own std library modules from the in-cluster module proxy (Deno 2 requirement).
 // When any dependency has type "dynamic-target", returns broad --allow-net.
 // When all dependencies are fixed-host, returns scoped --allow-net=host1:port,host2:port,...
 // Always includes 0.0.0.0:8080 in scoped mode for internal health endpoints.
@@ -265,34 +267,50 @@ func HasModuleProxyDeps(wf *Workflow) bool {
 // When sidecars are present, adds localhost:PORT for each sidecar and /shared to read/write paths.
 // Scopes --allow-env to DENO_DIR,HOME,TELEMETRY_SINK.
 func DeriveDenoFlags(c *Contract, sidecars []SidecarSpec, proxyHost string) []string {
-	if (c == nil || len(c.Dependencies) == 0) && len(sidecars) == 0 {
+	if (c == nil || len(c.Dependencies) == 0) && len(sidecars) == 0 && proxyHost == "" {
 		return nil
 	}
 
-	// Sidecars present but no contract — generate minimal flags with sidecar localhost entries
+	// No contract dependencies — generate minimal flags (sidecars and/or proxy only)
 	if c == nil || len(c.Dependencies) == 0 {
 		var allowedHosts []string
 		for _, sc := range sidecars {
 			allowedHosts = append(allowedHosts, "localhost:"+strconv.Itoa(sc.Port))
 		}
+		if proxyHost != "" {
+			allowedHosts = append(allowedHosts, proxyHost)
+		}
 		allowedHosts = append(allowedHosts, "0.0.0.0:8080")
 		sort.Strings(allowedHosts)
 
-		return []string{
+		allowReadFlag := "--allow-read=/app"
+		allowWriteFlag := "--allow-write=/tmp"
+		if len(sidecars) > 0 {
+			allowReadFlag = "--allow-read=/app,/shared"
+			allowWriteFlag = "--allow-write=/tmp,/shared"
+		}
+
+		flags := []string{
 			"deno",
 			"run",
 			"--no-lock",
 			"--unstable-net",
 			"--allow-net=" + strings.Join(allowedHosts, ","),
-			"--allow-read=/app,/shared",
-			"--allow-write=/tmp,/shared",
+			allowReadFlag,
+			allowWriteFlag,
 			"--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK",
+		}
+		if proxyHost != "" {
+			flags = append(flags, "--allow-import=deno.land:443,"+proxyHost)
+		}
+		flags = append(flags,
 			"engine/main.ts",
 			"--workflow",
 			"/app/workflow/workflow.yaml",
 			"--port",
 			"8080",
-		}
+		)
+		return flags
 	}
 
 	// Check if any dependency is dynamic-target
