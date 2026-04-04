@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -139,7 +140,7 @@ func resolveOutDir(dirOverride, enclaveName, tentacleName string, gitState GitSt
 		return filepath.Join(enclaveDir, tentacleName), nil
 	}
 	if gitState.Enabled {
-		return "", fmt.Errorf("git-state is enabled -- --enclave is required")
+		return "", errors.New("git-state is enabled -- --enclave is required")
 	}
 	tentaclesDir, err := scaffold.TentaclesDir()
 	if err != nil {

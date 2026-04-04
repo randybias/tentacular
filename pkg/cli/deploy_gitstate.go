@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -12,7 +14,7 @@ import (
 // for the given enclave/tentacle path.
 func checkGitStateClean(repoPath, enclaveName, tentacleName string) error {
 	if enclaveName == "" {
-		return fmt.Errorf("git-state is enabled but no enclave specified; use --enclave")
+		return errors.New("git-state is enabled but no enclave specified; use --enclave")
 	}
 	if strings.ContainsAny(enclaveName, `/\`) || strings.Contains(enclaveName, "..") {
 		return fmt.Errorf("invalid enclave name %q: must not contain path separators or '..'", enclaveName)
@@ -24,7 +26,7 @@ func checkGitStateClean(repoPath, enclaveName, tentacleName string) error {
 		return fmt.Errorf("invalid tentacle name %q: must not contain path separators or '..'", tentacleName)
 	}
 	subPath := fmt.Sprintf("enclaves/%s/%s/", enclaveName, tentacleName)
-	cmd := exec.Command("git", "-C", repoPath, "status", "--porcelain", "--", subPath) //nolint:gosec // repoPath and subPath are config-controlled
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "--porcelain", "--", subPath) //nolint:gosec // repoPath and subPath are config-controlled
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("checking git-state repo: %w", err)

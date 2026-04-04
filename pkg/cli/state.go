@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -51,7 +53,7 @@ func runStateInit(cmd *cobra.Command, _ []string) error {
 	// Initialize git repo if not already one
 	gitDir := filepath.Join(absPath, ".git")
 	if _, err := os.Stat(gitDir); os.IsNotExist(err) {
-		initCmd := exec.Command("git", "init", absPath) //nolint:gosec // absPath is caller-controlled
+		initCmd := exec.CommandContext(context.Background(), "git", "init", absPath) //nolint:gosec // absPath is caller-controlled
 		initCmd.Stdout = os.Stdout
 		initCmd.Stderr = os.Stderr
 		if err := initCmd.Run(); err != nil {
@@ -149,13 +151,13 @@ func runStateStatus(cmd *cobra.Command, _ []string) error {
 
 	cfg := LoadConfig()
 	if !cfg.GitState.Enabled || cfg.GitState.RepoPath == "" {
-		return fmt.Errorf("git-state is not configured; run 'tntc state init --repo-path <path>' first")
+		return errors.New("git-state is not configured; run 'tntc state init --repo-path <path>' first")
 	}
 
 	repoPath := cfg.GitState.RepoPath
 
 	// Show branch and remote tracking status
-	branchCmd := exec.Command("git", "-C", repoPath, "status", "-sb") //nolint:gosec // repoPath from config
+	branchCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "-sb") //nolint:gosec // repoPath from config
 	branchOut, err := branchCmd.Output()
 	if err != nil {
 		return fmt.Errorf("reading git-state repo status: %w", err)
@@ -190,8 +192,8 @@ func runStateStatus(cmd *cobra.Command, _ []string) error {
 		fmt.Printf("Enclaves (%d):\n", len(enclaves))
 		for _, enclave := range enclaves {
 			enclavePath := filepath.Join(enclavesDir, enclave)
-			tentacles, err := os.ReadDir(enclavePath)
-			if err != nil {
+			tentacles, readErr := os.ReadDir(enclavePath)
+			if readErr != nil {
 				fmt.Printf("  %s (error reading)\n", enclave)
 				continue
 			}
@@ -206,7 +208,7 @@ func runStateStatus(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Show dirty files if any
-	porcelainCmd := exec.Command("git", "-C", repoPath, "status", "--porcelain") //nolint:gosec // repoPath from config
+	porcelainCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "--porcelain") //nolint:gosec // repoPath from config
 	porcelainOut, err := porcelainCmd.Output()
 	if err != nil {
 		return fmt.Errorf("checking dirty files: %w", err)
@@ -246,14 +248,14 @@ func runStateCommit(cmd *cobra.Command, _ []string) error {
 
 	cfg := LoadConfig()
 	if !cfg.GitState.Enabled || cfg.GitState.RepoPath == "" {
-		return fmt.Errorf("git-state is not configured; run 'tntc state init --repo-path <path>' first")
+		return errors.New("git-state is not configured; run 'tntc state init --repo-path <path>' first")
 	}
 
 	repoPath := cfg.GitState.RepoPath
 	enclavesPath := filepath.Join(repoPath, "enclaves")
 
 	// Stage all changes under enclaves/
-	addCmd := exec.Command("git", "-C", repoPath, "add", enclavesPath) //nolint:gosec // repoPath from config
+	addCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "add", enclavesPath) //nolint:gosec // repoPath from config
 	addCmd.Stdout = os.Stdout
 	addCmd.Stderr = os.Stderr
 	if err := addCmd.Run(); err != nil {
@@ -261,14 +263,14 @@ func runStateCommit(cmd *cobra.Command, _ []string) error {
 	}
 
 	// Check if there is anything staged
-	diffCmd := exec.Command("git", "-C", repoPath, "diff", "--cached", "--quiet") //nolint:gosec // repoPath from config
+	diffCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "diff", "--cached", "--quiet") //nolint:gosec // repoPath from config
 	if err := diffCmd.Run(); err == nil {
 		fmt.Println("Nothing to commit — working tree clean under enclaves/")
 		return nil
 	}
 
 	// Commit
-	commitCmd := exec.Command("git", "-C", repoPath, "commit", "-m", message) //nolint:gosec // repoPath from config, message from user flag
+	commitCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "commit", "-m", message) //nolint:gosec // repoPath from config, message from user flag
 	commitCmd.Stdout = os.Stdout
 	commitCmd.Stderr = os.Stderr
 	if err := commitCmd.Run(); err != nil {
