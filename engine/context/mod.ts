@@ -89,8 +89,10 @@ function createDependencyAccessor(
     // Apply default ports
     const defaultPorts: Record<string, number> = {
       https: 443,
+      http: 80,
       postgresql: 5432,
       nats: 4222,
+      blob: 443,
     };
     const port = dep.port ?? defaultPorts[dep.protocol] ?? 443;
 
