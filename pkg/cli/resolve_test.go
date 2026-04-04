@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -336,5 +338,115 @@ func TestResolveOIDCToken_ExpiredNoRefresh(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "tntc login") {
 		t.Errorf("error should mention 'tntc login', got: %v", err)
+	}
+}
+
+// --- TNTC_ACCESS_TOKEN env var tests (transitive trust) ---
+
+// makeTestJWT builds a minimal JWT with the given claims for testing.
+// The signature is invalid but DecodeJWTClaims doesn't verify signatures.
+func makeTestJWT(t *testing.T, claims map[string]any) string {
+	t.Helper()
+	header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"RS256","typ":"JWT"}`))
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
+	return fmt.Sprintf("%s.%s.fake-signature", header, payloadB64)
+}
+
+// TestResolveOIDCToken_EnvVarOverride verifies that TNTC_ACCESS_TOKEN takes
+// precedence over cached token files.
+func TestResolveOIDCToken_EnvVarOverride(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	// Write a cached token that would normally be returned.
+	writeTestOIDCToken(t, tmpHome, "default", &OIDCTokenStore{
+		AccessToken: "cached-token",
+		ExpiresAt:   time.Now().Add(1 * time.Hour),
+	})
+
+	// Set env var with a valid JWT that expires in the future.
+	envJWT := makeTestJWT(t, map[string]any{
+		"sub":   "user-123",
+		"email": "rbias@mirantis.com",
+		"exp":   time.Now().Add(1 * time.Hour).Unix(),
+	})
+	t.Setenv("TNTC_ACCESS_TOKEN", envJWT)
+
+	token, err := resolveOIDCToken("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if token != envJWT {
+		t.Errorf("expected env var token to take precedence, got cached token instead")
+	}
+}
+
+// TestResolveOIDCToken_EnvVarExpired verifies that an expired TNTC_ACCESS_TOKEN
+// returns an error when no refresh token is available.
+func TestResolveOIDCToken_EnvVarExpired(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	expiredJWT := makeTestJWT(t, map[string]any{
+		"sub": "user-123",
+		"exp": time.Now().Add(-1 * time.Hour).Unix(),
+	})
+	t.Setenv("TNTC_ACCESS_TOKEN", expiredJWT)
+	_ = os.Unsetenv("TNTC_REFRESH_TOKEN")
+
+	token, err := resolveOIDCToken("")
+	if err == nil {
+		t.Fatal("expected error for expired TNTC_ACCESS_TOKEN with no refresh token")
+	}
+	if token != "" {
+		t.Fatalf("expected empty token on error, got: %q", token)
+	}
+	if !strings.Contains(err.Error(), "TNTC_ACCESS_TOKEN expired") {
+		t.Errorf("expected error about expired env var token, got: %v", err)
+	}
+}
+
+// TestResolveOIDCToken_EnvVarInvalidJWT verifies that a non-JWT TNTC_ACCESS_TOKEN
+// returns a clear error.
+func TestResolveOIDCToken_EnvVarInvalidJWT(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	t.Setenv("TNTC_ACCESS_TOKEN", "not-a-jwt")
+
+	token, err := resolveOIDCToken("")
+	if err == nil {
+		t.Fatal("expected error for invalid JWT in TNTC_ACCESS_TOKEN")
+	}
+	if token != "" {
+		t.Fatalf("expected empty token on error, got: %q", token)
+	}
+	if !strings.Contains(err.Error(), "not a valid JWT") {
+		t.Errorf("expected error about invalid JWT, got: %v", err)
+	}
+}
+
+// TestResolveOIDCToken_EnvVarNoExpClaim verifies that a JWT without an exp claim
+// is accepted (some tokens may not have exp).
+func TestResolveOIDCToken_EnvVarNoExpClaim(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+
+	noExpJWT := makeTestJWT(t, map[string]any{
+		"sub":   "user-123",
+		"email": "rbias@mirantis.com",
+	})
+	t.Setenv("TNTC_ACCESS_TOKEN", noExpJWT)
+
+	token, err := resolveOIDCToken("")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if token != noExpJWT {
+		t.Error("expected token to be returned when no exp claim present")
 	}
 }
