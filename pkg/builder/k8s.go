@@ -22,6 +22,7 @@ type DeployOptions struct {
 	RuntimeClassName string // If empty, omit runtimeClassName from pod spec
 	ImagePullPolicy  string // If empty, defaults to "Always"
 	ModuleProxyURL   string // If set, used to scope Deno net flags for jsr/npm proxy host
+	WorkflowDir      string // If set, scan nodes/ for extra .ts files not declared as DAG nodes (shared modules)
 }
 
 // GenerateCodeConfigMap produces a ConfigMap containing workflow code (workflow.yaml + nodes/*.ts).
@@ -334,6 +335,8 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	}
 	sort.Strings(nodeNames)
 
+	// Track which files are already mounted (by filename)
+	mountedFiles := make(map[string]bool)
 	for _, nodeName := range nodeNames {
 		nodeSpec := wf.Nodes[nodeName]
 		// Extract filename from path (e.g., "./nodes/foo.ts" -> "foo.ts")
@@ -341,6 +344,31 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 		flatKey := "nodes__" + filename
 		targetPath := "nodes/" + filename
 		configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
+		mountedFiles[filename] = true
+	}
+
+	// Mount any extra .ts files in nodes/ that aren't DAG nodes (shared modules).
+	// These are already in the ConfigMap (GenerateCodeConfigMap reads all nodes/*.ts)
+	// but won't be projected into the pod filesystem without explicit items entries.
+	if opts.WorkflowDir != "" {
+		nodesDir := filepath.Join(opts.WorkflowDir, "nodes")
+		if entries, dirErr := os.ReadDir(nodesDir); dirErr == nil {
+			extraFiles := make([]string, 0)
+			for _, entry := range entries {
+				if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".ts") {
+					continue
+				}
+				if !mountedFiles[entry.Name()] {
+					extraFiles = append(extraFiles, entry.Name())
+				}
+			}
+			sort.Strings(extraFiles)
+			for _, filename := range extraFiles {
+				flatKey := "nodes__" + filename
+				targetPath := "nodes/" + filename
+				configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
+			}
+		}
 	}
 
 	// Always mount the import map — the engine has jsr: deps (e.g. @nats-io/transport-deno)

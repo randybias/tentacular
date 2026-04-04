@@ -347,6 +347,7 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 		RuntimeClassName: runtimeClass,
 		ImagePullPolicy:  imagePullPolicy,
 		ModuleProxyURL:   proxyURL,
+		WorkflowDir:      workflowDir,
 	}
 	manifests := builder.GenerateK8sManifests(wf, imageTag, namespace, buildOpts)
 	manifests = append([]builder.Manifest{configMap}, manifests...)
