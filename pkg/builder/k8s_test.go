@@ -644,6 +644,39 @@ func TestDeploymentHasCodeVolumeMount(t *testing.T) {
 	}
 }
 
+func TestDeploymentMountsSharedModules(t *testing.T) {
+	// Create a temp workflow dir with a shared module (s3.ts) that isn't a DAG node
+	tmpDir := t.TempDir()
+	nodesDir := filepath.Join(tmpDir, "nodes")
+	if err := os.MkdirAll(nodesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Write a node file and a shared module
+	if err := os.WriteFile(filepath.Join(nodesDir, "fetch.ts"), []byte("// node"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(nodesDir, "s3.ts"), []byte("// shared module"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wf := makeTestWorkflow("shared-mod-test")
+	opts := DeployOptions{WorkflowDir: tmpDir}
+	manifests := GenerateK8sManifests(wf, "test:latest", "default", opts)
+	dep := manifests[0].Content
+
+	// The DAG node file should be mounted
+	if !strings.Contains(dep, "key: nodes__fetch.ts") {
+		t.Error("expected DAG node nodes__fetch.ts in items")
+	}
+	// The shared module should also be mounted
+	if !strings.Contains(dep, "key: nodes__s3.ts") {
+		t.Error("expected shared module nodes__s3.ts in items")
+	}
+	if !strings.Contains(dep, "path: nodes/s3.ts") {
+		t.Error("expected path nodes/s3.ts in items")
+	}
+}
+
 func TestDeploymentNoContainerArgs(t *testing.T) {
 	wf := makeTestWorkflow("args-test")
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
