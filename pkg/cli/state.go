@@ -170,17 +170,17 @@ func runStateStatus(cmd *cobra.Command, _ []string) error {
 
 	// List enclaves
 	enclavesDir := filepath.Join(repoPath, "enclaves")
-	entries, err := os.ReadDir(enclavesDir)
-	if err != nil {
-		if os.IsNotExist(err) {
+	dirEntries, dirErr := os.ReadDir(enclavesDir)
+	if dirErr != nil {
+		if os.IsNotExist(dirErr) {
 			fmt.Println("No enclaves found.")
 			return nil
 		}
-		return fmt.Errorf("reading enclaves directory: %w", err)
+		return fmt.Errorf("reading enclaves directory: %w", dirErr)
 	}
 
-	enclaves := make([]string, 0, len(entries))
-	for _, e := range entries {
+	enclaves := make([]string, 0, len(dirEntries))
+	for _, e := range dirEntries {
 		if e.IsDir() {
 			enclaves = append(enclaves, e.Name())
 		}
@@ -222,7 +222,7 @@ func runStateStatus(cmd *cobra.Command, _ []string) error {
 			fmt.Printf("  %s\n", line)
 		}
 		if assertClean {
-			return fmt.Errorf("git-state repo has uncommitted changes")
+			return errors.New("git-state repo has uncommitted changes")
 		}
 	}
 

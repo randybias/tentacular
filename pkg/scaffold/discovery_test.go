@@ -652,12 +652,12 @@ func TestTentacleDirForEnclaveBackslashReturnsError(t *testing.T) {
 // pass separator/traversal checks but fail DNS-1123 slug validation are rejected.
 func TestTentacleDirForEnclaveInvalidSlugReturnsError(t *testing.T) {
 	cases := []string{
-		"my enclave",        // space
-		"competitor.pricing", // dot
-		"MyEnclave",         // uppercase
-		"-starts-with-dash", // leading dash
-		"ends-with-dash-",   // trailing dash
-		"a",                 // too short (min 2 chars)
+		"my enclave",         // space not allowed
+		"competitor.pricing", // dot not allowed
+		"MyEnclave",          // uppercase not allowed
+		"-starts-with-dash",  // leading dash not allowed
+		"ends-with-dash-",    // trailing dash not allowed
+		"a",                  // too short (min 2 chars)
 	}
 	for _, name := range cases {
 		_, err := TentacleDirForEnclave(name)
