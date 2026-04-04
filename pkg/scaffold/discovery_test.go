@@ -648,6 +648,25 @@ func TestTentacleDirForEnclaveBackslashReturnsError(t *testing.T) {
 	}
 }
 
+// TestTentacleDirForEnclaveInvalidSlugReturnsError verifies that names that
+// pass separator/traversal checks but fail DNS-1123 slug validation are rejected.
+func TestTentacleDirForEnclaveInvalidSlugReturnsError(t *testing.T) {
+	cases := []string{
+		"my enclave",        // space
+		"competitor.pricing", // dot
+		"MyEnclave",         // uppercase
+		"-starts-with-dash", // leading dash
+		"ends-with-dash-",   // trailing dash
+		"a",                 // too short (min 2 chars)
+	}
+	for _, name := range cases {
+		_, err := TentacleDirForEnclave(name)
+		if err == nil {
+			t.Errorf("expected error for invalid enclave name %q, got nil", name)
+		}
+	}
+}
+
 // TestEnsurePrivateScaffoldsDirIdempotent verifies that calling
 // EnsurePrivateScaffoldsDir twice does not fail and preserves the directory.
 func TestEnsurePrivateScaffoldsDirIdempotent(t *testing.T) {

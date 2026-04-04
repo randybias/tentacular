@@ -97,6 +97,9 @@ func TentacleDirForEnclave(enclaveName string) (string, error) {
 	if strings.ContainsAny(enclaveName, `/\`) || strings.Contains(enclaveName, "..") {
 		return "", errors.New("enclave name must not contain path separators or '..'")
 	}
+	if err := ValidateScaffoldName(enclaveName); err != nil {
+		return "", fmt.Errorf("invalid enclave name: %w", err)
+	}
 	base, err := TentaclesDir()
 	if err != nil {
 		return "", err

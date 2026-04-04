@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+
+	"github.com/randybias/tentacular/pkg/scaffold"
 )
 
 // checkGitStateClean verifies the git-state repo has no uncommitted changes
@@ -14,6 +16,9 @@ func checkGitStateClean(repoPath, enclaveName, tentacleName string) error {
 	}
 	if strings.ContainsAny(enclaveName, `/\`) || strings.Contains(enclaveName, "..") {
 		return fmt.Errorf("invalid enclave name %q: must not contain path separators or '..'", enclaveName)
+	}
+	if err := scaffold.ValidateScaffoldName(enclaveName); err != nil {
+		return fmt.Errorf("invalid enclave name: %w", err)
 	}
 	if strings.ContainsAny(tentacleName, `/\`) || strings.Contains(tentacleName, "..") {
 		return fmt.Errorf("invalid tentacle name %q: must not contain path separators or '..'", tentacleName)

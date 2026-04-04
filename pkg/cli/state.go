@@ -18,6 +18,7 @@ func NewStateCmd() *cobra.Command {
 	}
 	cmd.AddCommand(newStateInitCmd())
 	cmd.AddCommand(newStateStatusCmd())
+	cmd.AddCommand(newStateCommitCmd())
 	return cmd
 }
 
@@ -133,15 +134,19 @@ func runStateInit(cmd *cobra.Command, _ []string) error {
 // --- state status ---
 
 func newStateStatusCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Show git-state repo status across enclaves",
 		Args:  cobra.NoArgs,
 		RunE:  runStateStatus,
 	}
+	cmd.Flags().Bool("assert-clean", false, "Exit non-zero if there are uncommitted changes in the git-state repo")
+	return cmd
 }
 
-func runStateStatus(_ *cobra.Command, _ []string) error {
+func runStateStatus(cmd *cobra.Command, _ []string) error {
+	assertClean, _ := cmd.Flags().GetBool("assert-clean")
+
 	cfg := LoadConfig()
 	if !cfg.GitState.Enabled || cfg.GitState.RepoPath == "" {
 		return fmt.Errorf("git-state is not configured; run 'tntc state init --repo-path <path>' first")
@@ -181,24 +186,23 @@ func runStateStatus(_ *cobra.Command, _ []string) error {
 
 	if len(enclaves) == 0 {
 		fmt.Println("No enclaves found.")
-		return nil
-	}
-
-	fmt.Printf("Enclaves (%d):\n", len(enclaves))
-	for _, enclave := range enclaves {
-		enclavePath := filepath.Join(enclavesDir, enclave)
-		tentacles, err := os.ReadDir(enclavePath)
-		if err != nil {
-			fmt.Printf("  %s (error reading)\n", enclave)
-			continue
-		}
-		tentacleCount := 0
-		for _, t := range tentacles {
-			if t.IsDir() {
-				tentacleCount++
+	} else {
+		fmt.Printf("Enclaves (%d):\n", len(enclaves))
+		for _, enclave := range enclaves {
+			enclavePath := filepath.Join(enclavesDir, enclave)
+			tentacles, err := os.ReadDir(enclavePath)
+			if err != nil {
+				fmt.Printf("  %s (error reading)\n", enclave)
+				continue
 			}
+			tentacleCount := 0
+			for _, t := range tentacles {
+				if t.IsDir() {
+					tentacleCount++
+				}
+			}
+			fmt.Printf("  %s (%d tentacle(s))\n", enclave, tentacleCount)
 		}
-		fmt.Printf("  %s (%d tentacle(s))\n", enclave, tentacleCount)
 	}
 
 	// Show dirty files if any
@@ -215,6 +219,60 @@ func runStateStatus(_ *cobra.Command, _ []string) error {
 		for _, line := range strings.Split(dirty, "\n") {
 			fmt.Printf("  %s\n", line)
 		}
+		if assertClean {
+			return fmt.Errorf("git-state repo has uncommitted changes")
+		}
+	}
+
+	return nil
+}
+
+// --- state commit ---
+
+func newStateCommitCmd() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "commit",
+		Short: "Stage and commit changes under enclaves/ in the git-state repo",
+		Args:  cobra.NoArgs,
+		RunE:  runStateCommit,
+	}
+	cmd.Flags().StringP("message", "m", "", "Commit message (required)")
+	_ = cmd.MarkFlagRequired("message")
+	return cmd
+}
+
+func runStateCommit(cmd *cobra.Command, _ []string) error {
+	message, _ := cmd.Flags().GetString("message")
+
+	cfg := LoadConfig()
+	if !cfg.GitState.Enabled || cfg.GitState.RepoPath == "" {
+		return fmt.Errorf("git-state is not configured; run 'tntc state init --repo-path <path>' first")
+	}
+
+	repoPath := cfg.GitState.RepoPath
+	enclavesPath := filepath.Join(repoPath, "enclaves")
+
+	// Stage all changes under enclaves/
+	addCmd := exec.Command("git", "-C", repoPath, "add", enclavesPath) //nolint:gosec // repoPath from config
+	addCmd.Stdout = os.Stdout
+	addCmd.Stderr = os.Stderr
+	if err := addCmd.Run(); err != nil {
+		return fmt.Errorf("staging enclaves/: %w", err)
+	}
+
+	// Check if there is anything staged
+	diffCmd := exec.Command("git", "-C", repoPath, "diff", "--cached", "--quiet") //nolint:gosec // repoPath from config
+	if err := diffCmd.Run(); err == nil {
+		fmt.Println("Nothing to commit — working tree clean under enclaves/")
+		return nil
+	}
+
+	// Commit
+	commitCmd := exec.Command("git", "-C", repoPath, "commit", "-m", message) //nolint:gosec // repoPath from config, message from user flag
+	commitCmd.Stdout = os.Stdout
+	commitCmd.Stderr = os.Stderr
+	if err := commitCmd.Run(); err != nil {
+		return fmt.Errorf("committing: %w", err)
 	}
 
 	return nil
