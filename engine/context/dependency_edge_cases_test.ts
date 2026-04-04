@@ -328,6 +328,58 @@ Deno.test("dependency() returns all protocol-specific fields", () => {
   assertEquals(dep.port, 5432);
 });
 
+Deno.test("dependency() applies default port 80 for HTTP protocol", () => {
+  const contract: ContractSpec = {
+    dependencies: {
+      "internal-api": {
+        protocol: "http",
+        host: "api.internal.svc",
+        // Port omitted — should default to 80
+      },
+    },
+  };
+
+  const ctx = createContext({ contract });
+  const dep = ctx.dependency("internal-api");
+
+  assertEquals(dep.port, 80);
+});
+
+Deno.test("dependency() applies default port 443 for blob protocol", () => {
+  const contract: ContractSpec = {
+    dependencies: {
+      storage: {
+        protocol: "blob",
+        host: "storage.blob.core.windows.net",
+        container: "reports",
+        // Port omitted — should default to 443
+      },
+    },
+  };
+
+  const ctx = createContext({ contract });
+  const dep = ctx.dependency("storage");
+
+  assertEquals(dep.port, 443);
+});
+
+Deno.test("dependency() falls back to port 443 for unknown protocol", () => {
+  const contract: ContractSpec = {
+    dependencies: {
+      custom: {
+        protocol: "custom-proto",
+        host: "custom.svc",
+        // Port omitted, unknown protocol — should fall back to 443
+      },
+    },
+  };
+
+  const ctx = createContext({ contract });
+  const dep = ctx.dependency("custom");
+
+  assertEquals(dep.port, 443);
+});
+
 Deno.test("dependency() with empty contract dependencies", () => {
   const contract: ContractSpec = {
     dependencies: {},

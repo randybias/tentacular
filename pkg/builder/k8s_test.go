@@ -1238,3 +1238,54 @@ func TestK8sManifestMultipleSidecars(t *testing.T) {
 		t.Error("expected tmp-chrome volume for chrome sidecar")
 	}
 }
+
+func TestIsValidConfigMapKey(t *testing.T) {
+	tests := []struct {
+		key  string
+		want bool
+	}{
+		{"workflow.yaml", true},
+		{"nodes__fetch.ts", true},
+		{"my-key_v2.json", true},
+		{"UPPER_CASE", true},
+		{"", false},
+		{"has space", false},
+		{"has/slash", false},
+		{"has:colon", false},
+		{"has\nnewline", false},
+		{"injection:\n  evil: true", false},
+		{strings.Repeat("a", 253), true},
+		{strings.Repeat("a", 254), false},
+	}
+	for _, tt := range tests {
+		got := isValidConfigMapKey(tt.key)
+		if got != tt.want {
+			t.Errorf("isValidConfigMapKey(%q) = %v, want %v", tt.key, got, tt.want)
+		}
+	}
+}
+
+func TestGenerateCodeConfigMapRejectsUnsafeFilename(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "nodes"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// Create workflow.yaml
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("name: test"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// Create a node file with an unsafe name (contains a colon)
+	unsafeName := "bad:name.ts"
+	if err := os.WriteFile(filepath.Join(dir, "nodes", unsafeName), []byte("export default {}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	wf := makeTestWorkflow("test-wf")
+	_, err := GenerateCodeConfigMap(wf, dir, "default")
+	if err == nil {
+		t.Fatal("expected error for unsafe filename, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid ConfigMap key") {
+		t.Errorf("expected 'invalid ConfigMap key' in error, got: %s", err.Error())
+	}
+}

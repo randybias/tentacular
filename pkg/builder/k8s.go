@@ -10,6 +10,21 @@ import (
 	"github.com/randybias/tentacular/pkg/spec"
 )
 
+// isValidConfigMapKey checks that a key is safe for use in a K8s ConfigMap.
+// Keys must be non-empty, at most 253 characters, and contain only
+// alphanumerics, dots, underscores, and hyphens.
+func isValidConfigMapKey(key string) bool {
+	if len(key) == 0 || len(key) > 253 {
+		return false
+	}
+	for _, r := range key {
+		if (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') && (r < '0' || r > '9') && r != '.' && r != '_' && r != '-' {
+			return false
+		}
+	}
+	return true
+}
+
 // Manifest is a raw K8s manifest as YAML string.
 type Manifest struct {
 	Kind    string
@@ -55,6 +70,9 @@ func GenerateCodeConfigMap(wf *spec.Workflow, workflowDir, namespace string) (Ma
 			}
 			// Use __ instead of / since K8s ConfigMap keys cannot contain slashes
 			dataKey := "nodes__" + entry.Name()
+			if !isValidConfigMapKey(dataKey) {
+				return Manifest{}, fmt.Errorf("invalid ConfigMap key %q derived from filename %q: must contain only alphanumerics, dots, underscores, and hyphens", dataKey, entry.Name())
+			}
 			data[dataKey] = string(nodeContent)
 			totalSize += len(nodeContent)
 		}
@@ -365,6 +383,9 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 			sort.Strings(extraFiles)
 			for _, filename := range extraFiles {
 				flatKey := "nodes__" + filename
+				if !isValidConfigMapKey(flatKey) {
+					continue // skip files with unsafe names
+				}
 				targetPath := "nodes/" + filename
 				configMapItems = append(configMapItems, fmt.Sprintf("              - key: %s\n                path: %s", flatKey, targetPath))
 			}
