@@ -26,6 +26,7 @@ func newScaffoldInitCmd() *cobra.Command {
 	cmd.Flags().Bool("no-params", false, "Copy scaffold as-is without printing parameter prompts")
 	cmd.Flags().String("namespace", "", "Set deployment.namespace in workflow.yaml")
 	cmd.Flags().String("dir", "", "Override output directory (default: ~/tentacles/<tentacle-name>/)")
+	cmd.Flags().String("enclave", "", "Target enclave (scopes output to ~/tentacles/<enclave>/<name>/)")
 	return cmd
 }
 
@@ -45,6 +46,7 @@ func runScaffoldInit(cmd *cobra.Command, args []string) error {
 	noParams, _ := cmd.Flags().GetBool("no-params")
 	namespace, _ := cmd.Flags().GetString("namespace")
 	dirOverride, _ := cmd.Flags().GetString("dir")
+	enclaveName, _ := cmd.Flags().GetString("enclave")
 
 	cfg := LoadConfig()
 	client := scaffold.NewClient(cfg.Scaffold)
@@ -58,7 +60,7 @@ func runScaffoldInit(cmd *cobra.Command, args []string) error {
 	checkMinVersion(entry.MinTentacularVersion)
 
 	// Determine output directory
-	outDir, dirErr := resolveOutDir(dirOverride, tentacleName)
+	outDir, dirErr := resolveOutDir(dirOverride, enclaveName, tentacleName, cfg.GitState)
 	if dirErr != nil {
 		return dirErr
 	}
@@ -125,9 +127,19 @@ func runScaffoldInit(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
-func resolveOutDir(dirOverride, tentacleName string) (string, error) {
+func resolveOutDir(dirOverride, enclaveName, tentacleName string, gitState GitStateConfig) (string, error) {
 	if dirOverride != "" {
 		return dirOverride, nil
+	}
+	if enclaveName != "" {
+		enclaveDir, err := scaffold.TentacleDirForEnclave(enclaveName)
+		if err != nil {
+			return "", fmt.Errorf("resolving enclave directory: %w", err)
+		}
+		return filepath.Join(enclaveDir, tentacleName), nil
+	}
+	if gitState.Enabled {
+		return "", fmt.Errorf("git-state is enabled -- --enclave is required")
 	}
 	tentaclesDir, err := scaffold.TentaclesDir()
 	if err != nil {

@@ -62,6 +62,9 @@ func main() {
 	// Enclave commands
 	root.AddCommand(cli.NewEnclaveCmd())
 
+	// State commands
+	root.AddCommand(cli.NewStateCmd())
+
 	// Version
 	root.AddCommand(&cobra.Command{
 		Use:   "version",

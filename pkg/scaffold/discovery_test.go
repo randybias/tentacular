@@ -592,6 +592,62 @@ func TestEnsurePrivateScaffoldsDirPermissions(t *testing.T) {
 	}
 }
 
+// --- TentacleDirForEnclave ---
+
+// TestTentacleDirForEnclaveValid verifies that a valid enclave name returns
+// the correct path under ~/tentacles/<enclave>.
+func TestTentacleDirForEnclaveValid(t *testing.T) {
+	tmpHome := t.TempDir()
+	origHome := os.Getenv("HOME")
+	_ = os.Setenv("HOME", tmpHome)
+	defer func() { _ = os.Setenv("HOME", origHome) }()
+
+	got, err := TentacleDirForEnclave("my-enclave")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := filepath.Join(tmpHome, "tentacles", "my-enclave")
+	if got != want {
+		t.Errorf("got %q, want %q", got, want)
+	}
+}
+
+// TestTentacleDirForEnclaveEmptyNameReturnsError verifies that an empty
+// enclave name returns an error.
+func TestTentacleDirForEnclaveEmptyNameReturnsError(t *testing.T) {
+	_, err := TentacleDirForEnclave("")
+	if err == nil {
+		t.Fatal("expected error for empty enclave name, got nil")
+	}
+}
+
+// TestTentacleDirForEnclavePathTraversalReturnsError verifies that a '..'
+// sequence in the enclave name returns an error.
+func TestTentacleDirForEnclavePathTraversalReturnsError(t *testing.T) {
+	_, err := TentacleDirForEnclave("../../etc")
+	if err == nil {
+		t.Fatal("expected error for path traversal attempt, got nil")
+	}
+}
+
+// TestTentacleDirForEnclaveSlashReturnsError verifies that a forward slash
+// in the enclave name returns an error.
+func TestTentacleDirForEnclaveSlashReturnsError(t *testing.T) {
+	_, err := TentacleDirForEnclave("prod/myenclave")
+	if err == nil {
+		t.Fatal("expected error for path separator in enclave name, got nil")
+	}
+}
+
+// TestTentacleDirForEnclaveBackslashReturnsError verifies that a backslash
+// in the enclave name returns an error.
+func TestTentacleDirForEnclaveBackslashReturnsError(t *testing.T) {
+	_, err := TentacleDirForEnclave(`prod\myenclave`)
+	if err == nil {
+		t.Fatal("expected error for backslash in enclave name, got nil")
+	}
+}
+
 // TestEnsurePrivateScaffoldsDirIdempotent verifies that calling
 // EnsurePrivateScaffoldsDir twice does not fail and preserves the directory.
 func TestEnsurePrivateScaffoldsDirIdempotent(t *testing.T) {
