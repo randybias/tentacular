@@ -2,6 +2,9 @@ package cli
 
 import (
 	"context"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -207,11 +210,34 @@ func discoverOIDCEndpoints(issuer string) (deviceEndpoint, tokenEndpoint string,
 	return doc.DeviceAuthEndpoint, doc.TokenEndpoint, nil
 }
 
+// generatePKCE creates a PKCE code_verifier and S256 code_challenge pair.
+// The verifier is a 32-byte random value, base64url-encoded (43 chars).
+// The challenge is SHA256(verifier), base64url-encoded.
+func generatePKCE() (verifier, challenge string, err error) {
+	buf := make([]byte, 32)
+	if _, err := rand.Read(buf); err != nil {
+		return "", "", fmt.Errorf("generating PKCE verifier: %w", err)
+	}
+	verifier = base64.RawURLEncoding.EncodeToString(buf)
+	h := sha256.Sum256([]byte(verifier))
+	challenge = base64.RawURLEncoding.EncodeToString(h[:])
+	return verifier, challenge, nil
+}
+
 // requestDeviceAuth initiates the device authorization flow.
+// Includes PKCE parameters (S256) for compatibility with IdPs that enforce
+// PKCE on all client flows, including device authorization.
 func requestDeviceAuth(endpoint, clientID, clientSecret string) (*deviceAuthResponse, error) {
+	_, challenge, err := generatePKCE()
+	if err != nil {
+		return nil, err
+	}
+
 	data := url.Values{
-		"client_id": {clientID},
-		"scope":     {"openid email profile"},
+		"client_id":             {clientID},
+		"scope":                 {"openid email profile"},
+		"code_challenge":        {challenge},
+		"code_challenge_method": {"S256"},
 	}
 	if clientSecret != "" {
 		data.Set("client_secret", clientSecret)

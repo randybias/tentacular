@@ -204,6 +204,14 @@ func TestDeviceAuthFlow_MockServer(t *testing.T) {
 			})
 
 		case strings.HasSuffix(r.URL.Path, "/auth/device"):
+			// Verify PKCE parameters are present
+			_ = r.ParseForm()
+			if r.FormValue("code_challenge_method") != "S256" {
+				t.Errorf("expected code_challenge_method=S256, got %q", r.FormValue("code_challenge_method"))
+			}
+			if r.FormValue("code_challenge") == "" {
+				t.Error("expected non-empty code_challenge")
+			}
 			// Device auth endpoint
 			_ = json.NewEncoder(w).Encode(map[string]any{
 				"device_code":               "test-device-code",
@@ -520,5 +528,88 @@ func TestResolveOIDCToken_ValidToken(t *testing.T) {
 	}
 	if token != "valid-access-token" {
 		t.Errorf("expected valid-access-token, got %q", token)
+	}
+}
+
+func TestGeneratePKCE(t *testing.T) {
+	verifier, challenge, err := generatePKCE()
+	if err != nil {
+		t.Fatalf("generatePKCE: %v", err)
+	}
+
+	// Verifier should be 43 chars (32 bytes base64url-encoded without padding)
+	if len(verifier) != 43 {
+		t.Errorf("verifier length: got %d, want 43", len(verifier))
+	}
+
+	// Challenge should be 43 chars (32 bytes SHA256 base64url-encoded without padding)
+	if len(challenge) != 43 {
+		t.Errorf("challenge length: got %d, want 43", len(challenge))
+	}
+
+	// Verifier and challenge must be different
+	if verifier == challenge {
+		t.Error("verifier and challenge should not be equal")
+	}
+
+	// Two calls should produce different values (randomness)
+	verifier2, challenge2, err := generatePKCE()
+	if err != nil {
+		t.Fatalf("second generatePKCE: %v", err)
+	}
+	if verifier == verifier2 {
+		t.Error("two calls produced the same verifier")
+	}
+	if challenge == challenge2 {
+		t.Error("two calls produced the same challenge")
+	}
+}
+
+func TestDeviceAuth_PKCERequired(t *testing.T) {
+	// Simulates an IdP that requires PKCE on device auth (like misconfigured Keycloak).
+	// The request should succeed because tntc now always sends PKCE params.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = r.ParseForm()
+
+		// Reject if PKCE params are missing
+		if r.FormValue("code_challenge_method") == "" || r.FormValue("code_challenge") == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":             "invalid_request",
+				"error_description": "Missing parameter: code_challenge_method",
+			})
+			return
+		}
+
+		// Verify S256 method
+		if r.FormValue("code_challenge_method") != "S256" {
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"error":             "invalid_request",
+				"error_description": "Unsupported code_challenge_method",
+			})
+			return
+		}
+
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"device_code":               "pkce-device-code",
+			"user_code":                 "PKCE-TEST",
+			"verification_uri":          "http://example.com/verify",
+			"verification_uri_complete": "http://example.com/verify?code=PKCE-TEST",
+			"expires_in":                300,
+			"interval":                  5,
+		})
+	}))
+	defer server.Close()
+
+	resp, err := requestDeviceAuth(server.URL+"/auth/device", "test-client", "")
+	if err != nil {
+		t.Fatalf("requestDeviceAuth with PKCE-requiring server: %v", err)
+	}
+	if resp.DeviceCode != "pkce-device-code" {
+		t.Errorf("device_code: got %q, want %q", resp.DeviceCode, "pkce-device-code")
+	}
+	if resp.UserCode != "PKCE-TEST" {
+		t.Errorf("user_code: got %q, want %q", resp.UserCode, "PKCE-TEST")
 	}
 }
