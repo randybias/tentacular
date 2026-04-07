@@ -140,7 +140,9 @@ function enrichOpenAISpan(
     const choices = respBody["choices"];
     if (Array.isArray(choices) && choices.length > 0) {
       const finishReasons = choices
-        .map((c) => (c && typeof c === "object" ? (c as Record<string, unknown>)["finish_reason"] : null))
+        .map((
+          c,
+        ) => (c && typeof c === "object" ? (c as Record<string, unknown>)["finish_reason"] : null))
         .filter((r): r is string => typeof r === "string");
       if (finishReasons.length > 0) {
         span.setAttribute("gen_ai.response.finish_reasons", finishReasons);
@@ -200,7 +202,8 @@ export function installGenAIWrapper(): void {
     // Parse request body for model extraction (best effort)
     let reqBody: Record<string, unknown> | null = null;
     try {
-      const bodySource = init?.body ?? (input instanceof Request ? await input.clone().text() : null);
+      const bodySource = init?.body ??
+        (input instanceof Request ? await input.clone().text() : null);
       reqBody = parseRequestBody(bodySource as BodyInit | null);
     } catch {
       // Ignore body parse failures
