@@ -256,22 +256,24 @@ func HasModuleProxyDeps(wf *Workflow) bool {
 	return false
 }
 
+// otelCollectorHost is the well-known in-cluster OTel Collector endpoint.
+// Added unconditionally to --allow-net in all scoped Deno permission sets so
+// the engine can always export telemetry regardless of workflow contract.
+const otelCollectorHost = "otel-collector.tentacular-observability.svc.cluster.local:4318"
+
 // DeriveDenoFlags returns the complete Deno command with permission flags based on contract dependencies.
-// Returns nil only when there are no dependencies, no sidecars, AND no module proxy host.
-// When proxyHost is set, always generates flags with --allow-import so the engine can
+// Always generates flags (never returns nil) because the engine always needs OTel telemetry permissions.
+// When proxyHost is set, generates flags with --allow-import so the engine can
 // import its own std library modules from the in-cluster module proxy (Deno 2 requirement).
 // When any dependency has type "dynamic-target", returns broad --allow-net.
 // When all dependencies are fixed-host, returns scoped --allow-net=host1:port,host2:port,...
 // Always includes 0.0.0.0:8080 in scoped mode for internal health endpoints.
+// Always includes the OTel Collector endpoint in scoped mode.
 // When jsr/npm deps are present, adds the module proxy host to the scoped allow list.
 // When sidecars are present, adds localhost:PORT for each sidecar and /shared to read/write paths.
-// Scopes --allow-env to DENO_DIR,HOME,TELEMETRY_SINK.
+// Scopes --allow-env to DENO_DIR,HOME,OTEL_*,SPIFFE_*,TELEMETRY_SINK.
 func DeriveDenoFlags(c *Contract, sidecars []SidecarSpec, proxyHost string) []string {
-	if (c == nil || len(c.Dependencies) == 0) && len(sidecars) == 0 && proxyHost == "" {
-		return nil
-	}
-
-	// No contract dependencies — generate minimal flags (sidecars and/or proxy only)
+	// No contract dependencies — generate minimal flags (sidecars, proxy, and OTel only)
 	if c == nil || len(c.Dependencies) == 0 {
 		var allowedHosts []string
 		for _, sc := range sidecars {
@@ -281,6 +283,7 @@ func DeriveDenoFlags(c *Contract, sidecars []SidecarSpec, proxyHost string) []st
 			allowedHosts = append(allowedHosts, proxyHost)
 		}
 		allowedHosts = append(allowedHosts, "0.0.0.0:8080")
+		allowedHosts = append(allowedHosts, otelCollectorHost)
 		sort.Strings(allowedHosts)
 
 		allowReadFlag := "--allow-read=/app"
@@ -298,7 +301,7 @@ func DeriveDenoFlags(c *Contract, sidecars []SidecarSpec, proxyHost string) []st
 			"--allow-net=" + strings.Join(allowedHosts, ","),
 			allowReadFlag,
 			allowWriteFlag,
-			"--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK",
+			"--allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK",
 		}
 		if proxyHost != "" {
 			flags = append(flags, "--allow-import=deno.land:443,"+proxyHost)
@@ -381,6 +384,11 @@ func DeriveDenoFlags(c *Contract, sidecars []SidecarSpec, proxyHost string) []st
 			allowedHosts = append(allowedHosts, "0.0.0.0:8080")
 		}
 
+		// Always include OTel Collector endpoint — telemetry export is a platform feature
+		if !seen[otelCollectorHost] {
+			allowedHosts = append(allowedHosts, otelCollectorHost)
+		}
+
 		// Sort for deterministic output
 		sort.Strings(allowedHosts)
 		allowNetFlag = "--allow-net=" + strings.Join(allowedHosts, ",")
@@ -402,7 +410,7 @@ func DeriveDenoFlags(c *Contract, sidecars []SidecarSpec, proxyHost string) []st
 		allowNetFlag,
 		allowReadFlag,
 		allowWriteFlag,
-		"--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK",
+		"--allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK",
 	}
 
 	// Deno 2 requires explicit --allow-import permission for any host from which

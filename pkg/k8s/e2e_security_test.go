@@ -100,15 +100,15 @@ contract:
 		t.Error("expected NO scoped --allow-net= when dynamic-target is present")
 	}
 
-	// Should have scoped --allow-env
+	// Should have scoped --allow-env with OTel vars
 	foundScopedEnv := false
 	for _, flag := range denoFlags {
-		if flag == "--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
+		if flag == "--allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
 			foundScopedEnv = true
 		}
 	}
 	if !foundScopedEnv {
-		t.Error("expected --allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK in derived flags")
+		t.Error("expected --allow-env with OTel vars in derived flags")
 	}
 
 	// Step 4: Verify derived secrets
@@ -264,8 +264,8 @@ contract:
 		}
 	}
 
-	// Must be scoped (with =), sorted alphabetically, 0.0.0.0:8080 always first
-	expected := "--allow-net=0.0.0.0:8080,api.github.com:443,hooks.slack.com:443"
+	// Must be scoped (with =), sorted alphabetically, 0.0.0.0:8080 always first, OTel collector included
+	expected := "--allow-net=0.0.0.0:8080,api.github.com:443,hooks.slack.com:443,otel-collector.tentacular-observability.svc.cluster.local:4318"
 	if allowNetFlag != expected {
 		t.Errorf("expected %s, got %s", expected, allowNetFlag)
 	}
@@ -326,10 +326,10 @@ edges: []
 		t.Fatal("expected nil contract for word-counter")
 	}
 
-	// DeriveDenoFlags should return nil
+	// DeriveDenoFlags should return flags (OTel requires non-nil even for nil contract)
 	denoFlags := spec.DeriveDenoFlags(wf.Contract, nil, "")
-	if denoFlags != nil {
-		t.Errorf("expected nil DeriveDenoFlags for nil contract, got %v", denoFlags)
+	if denoFlags == nil {
+		t.Error("expected non-nil DeriveDenoFlags for nil contract (OTel requires allow-net)")
 	}
 
 	// NetworkPolicy should not be generated

@@ -219,10 +219,10 @@ func TestE2E_DenoFlagsCommandStructure(t *testing.T) {
 			"- run",
 			"- --no-lock",
 			"- --unstable-net",
-			"- --allow-net=0.0.0.0:8080,api.github.com:443,hooks.slack.com:443",
+			"- --allow-net=0.0.0.0:8080,api.github.com:443,hooks.slack.com:443,otel-collector.tentacular-observability.svc.cluster.local:4318",
 			"- --allow-read=/app",
 			"- --allow-write=/tmp",
-			"- --allow-env=DENO_DIR,HOME",
+			"- --allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK",
 			"- engine/main.ts",
 			"- --workflow",
 			"- /app/workflow/workflow.yaml",
@@ -297,11 +297,16 @@ func TestE2E_DenoFlagsCommandStructure(t *testing.T) {
 		manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 		dep := manifests[0].Content
 
-		if strings.Contains(dep, "command:") {
-			t.Error("expected NO command field when contract is nil (ENTRYPOINT fallback)")
+		// OTel telemetry requires command/args even without a contract.
+		if !strings.Contains(dep, "command:") {
+			t.Error("expected command field when contract is nil (OTel requires deno permission flags)")
 		}
-		if strings.Contains(dep, "args:") {
-			t.Error("expected NO args field when contract is nil (ENTRYPOINT fallback)")
+		if !strings.Contains(dep, "args:") {
+			t.Error("expected args field when contract is nil (OTel requires deno permission flags)")
+		}
+		// Collector endpoint must be in --allow-net
+		if !strings.Contains(dep, "otel-collector.tentacular-observability.svc.cluster.local:4318") {
+			t.Error("expected OTel collector in --allow-net for no-contract workflow")
 		}
 	})
 }

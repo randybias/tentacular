@@ -682,9 +682,12 @@ func TestDeploymentNoContainerArgs(t *testing.T) {
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	// Verify NO args field in container spec (relies on ENTRYPOINT defaults)
-	if strings.Contains(dep, "args:") {
-		t.Error("expected NO container args field (ENTRYPOINT provides defaults)")
+	// OTel telemetry requires command/args even without a contract, so they are always present.
+	if !strings.Contains(dep, "command:") {
+		t.Error("expected command field in container spec (OTel requires deno permission flags)")
+	}
+	if !strings.Contains(dep, "args:") {
+		t.Error("expected args field in container spec (OTel requires deno permission flags)")
 	}
 }
 
@@ -797,12 +800,12 @@ func TestDeploymentNoArgsWithoutContract(t *testing.T) {
 	manifests := GenerateK8sManifests(wf, "test:latest", "default", DeployOptions{})
 	dep := manifests[0].Content
 
-	// Without contract, should NOT inject command/args (rely on ENTRYPOINT)
-	if strings.Contains(dep, "command:") {
-		t.Error("expected NO command field when contract is nil")
+	// OTel telemetry requires command/args even without a contract, so they are always present.
+	if !strings.Contains(dep, "command:") {
+		t.Error("expected command field when contract is nil (OTel requires deno permission flags)")
 	}
-	if strings.Contains(dep, "args:") {
-		t.Error("expected NO args field when contract is nil")
+	if !strings.Contains(dep, "args:") {
+		t.Error("expected args field when contract is nil (OTel requires deno permission flags)")
 	}
 }
 
@@ -1287,5 +1290,54 @@ func TestGenerateCodeConfigMapRejectsUnsafeFilename(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "invalid ConfigMap key") {
 		t.Errorf("expected 'invalid ConfigMap key' in error, got: %s", err.Error())
+	}
+}
+
+func TestDeploymentOTelEnvVars(t *testing.T) {
+	// All Deployments must include OTel env vars so the engine can export telemetry.
+	wf := makeTestWorkflow("my-wf")
+	manifests := GenerateK8sManifests(wf, "test:latest", "team-alpha", DeployOptions{})
+	dep := manifests[0].Content
+
+	// Static env vars
+	if !strings.Contains(dep, "OTEL_DENO") {
+		t.Error("expected OTEL_DENO env var in Deployment")
+	}
+	if !strings.Contains(dep, `value: "true"`) {
+		t.Error("expected OTEL_DENO value true in Deployment")
+	}
+	if !strings.Contains(dep, "OTEL_EXPORTER_OTLP_PROTOCOL") {
+		t.Error("expected OTEL_EXPORTER_OTLP_PROTOCOL env var in Deployment")
+	}
+	if !strings.Contains(dep, "value: http/protobuf") {
+		t.Error("expected OTEL_EXPORTER_OTLP_PROTOCOL value http/protobuf in Deployment")
+	}
+	if !strings.Contains(dep, "OTEL_EXPORTER_OTLP_ENDPOINT") {
+		t.Error("expected OTEL_EXPORTER_OTLP_ENDPOINT env var in Deployment")
+	}
+	if !strings.Contains(dep, "http://otel-collector.tentacular-observability.svc.cluster.local:4318") {
+		t.Error("expected OTel Collector endpoint value in Deployment")
+	}
+
+	// Dynamic env vars — must use workflow name and namespace
+	if !strings.Contains(dep, "OTEL_SERVICE_NAME") {
+		t.Error("expected OTEL_SERVICE_NAME env var in Deployment")
+	}
+	if !strings.Contains(dep, "value: my-wf") {
+		t.Errorf("expected OTEL_SERVICE_NAME=my-wf in Deployment, got:\n%s", dep)
+	}
+	if !strings.Contains(dep, "OTEL_RESOURCE_ATTRIBUTES") {
+		t.Error("expected OTEL_RESOURCE_ATTRIBUTES env var in Deployment")
+	}
+	if !strings.Contains(dep, "k8s.namespace.name=team-alpha") {
+		t.Errorf("expected k8s.namespace.name=team-alpha in OTEL_RESOURCE_ATTRIBUTES, got:\n%s", dep)
+	}
+	if !strings.Contains(dep, "tentacular.enclave=team-alpha") {
+		t.Errorf("expected tentacular.enclave=team-alpha in OTEL_RESOURCE_ATTRIBUTES, got:\n%s", dep)
+	}
+
+	// DENO_DIR must still be present
+	if !strings.Contains(dep, "DENO_DIR") {
+		t.Error("expected DENO_DIR to still be present (not replaced by OTel vars)")
 	}
 }
