@@ -8,6 +8,9 @@ import type {
 import type { NodeRunner, WorkflowExecutor } from "./types.ts";
 import type { TelemetrySink } from "../telemetry/mod.ts";
 import { NoopSink } from "../telemetry/mod.ts";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
+
+const tracer = trace.getTracer("tentacular-engine");
 
 /**
  * SimpleExecutor — lightweight in-memory DAG executor.
@@ -41,52 +44,63 @@ export class SimpleExecutor implements WorkflowExecutor {
     for (const stage of graph.stages) {
       const stageResults = await Promise.all(
         stage.nodes.map(async (nodeId) => {
-          const nodeStart = Date.now();
-          this.sink.record({
-            type: "node-start",
-            timestamp: nodeStart,
-            metadata: { node: nodeId },
+          return await tracer.startActiveSpan("execute_node", async (span) => {
+            span.setAttribute("tentacular.node.name", nodeId);
+            span.setAttribute("tentacular.workflow.name", graph.workflow.name);
+            const nodeStart = Date.now();
+            this.sink.record({
+              type: "node-start",
+              timestamp: nodeStart,
+              metadata: { node: nodeId },
+            });
+            try {
+              // Build input for this node from its dependencies' outputs
+              const nodeInput = this.resolveInput(nodeId, inputMap, outputs, input);
+
+              // Execute with timeout and retries
+              const output = await this.executeWithRetry(
+                () => this.executeWithTimeout(runner, nodeId, ctx, nodeInput),
+                this.maxRetries,
+              );
+
+              outputs[nodeId] = output;
+              const nodeEnd = Date.now();
+              const durationMs = nodeEnd - nodeStart;
+              nodeTimings[nodeId] = {
+                startedAt: nodeStart,
+                completedAt: nodeEnd,
+                durationMs,
+              };
+              this.sink.record({
+                type: "node-complete",
+                timestamp: nodeEnd,
+                metadata: { node: nodeId, durationMs },
+              });
+              span.setAttribute("tentacular.node.duration_ms", durationMs);
+              span.setStatus({ code: SpanStatusCode.OK });
+              span.end();
+              return { nodeId, success: true };
+            } catch (err) {
+              const nodeEnd = Date.now();
+              const errMsg = err instanceof Error ? err.message : String(err);
+              errors[nodeId] = errMsg;
+              nodeTimings[nodeId] = {
+                startedAt: nodeStart,
+                completedAt: nodeEnd,
+                durationMs: nodeEnd - nodeStart,
+              };
+              this.sink.record({
+                type: "node-error",
+                timestamp: nodeEnd,
+                metadata: { node: nodeId, error: errMsg },
+              });
+              span.setAttribute("tentacular.node.duration_ms", nodeEnd - nodeStart);
+              span.setStatus({ code: SpanStatusCode.ERROR, message: errMsg });
+              span.recordException(err instanceof Error ? err : new Error(errMsg));
+              span.end();
+              return { nodeId, success: false, error: errMsg };
+            }
           });
-          try {
-            // Build input for this node from its dependencies' outputs
-            const nodeInput = this.resolveInput(nodeId, inputMap, outputs, input);
-
-            // Execute with timeout and retries
-            const output = await this.executeWithRetry(
-              () => this.executeWithTimeout(runner, nodeId, ctx, nodeInput),
-              this.maxRetries,
-            );
-
-            outputs[nodeId] = output;
-            const nodeEnd = Date.now();
-            const durationMs = nodeEnd - nodeStart;
-            nodeTimings[nodeId] = {
-              startedAt: nodeStart,
-              completedAt: nodeEnd,
-              durationMs,
-            };
-            this.sink.record({
-              type: "node-complete",
-              timestamp: nodeEnd,
-              metadata: { node: nodeId, durationMs },
-            });
-            return { nodeId, success: true };
-          } catch (err) {
-            const nodeEnd = Date.now();
-            const errMsg = err instanceof Error ? err.message : String(err);
-            errors[nodeId] = errMsg;
-            nodeTimings[nodeId] = {
-              startedAt: nodeStart,
-              completedAt: nodeEnd,
-              durationMs: nodeEnd - nodeStart,
-            };
-            this.sink.record({
-              type: "node-error",
-              timestamp: nodeEnd,
-              metadata: { node: nodeId, error: errMsg },
-            });
-            return { nodeId, success: false, error: errMsg };
-          }
         }),
       );
 

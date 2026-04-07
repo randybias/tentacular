@@ -7,6 +7,9 @@ import {
 } from "./triggers/webhook.ts";
 import type { TelemetrySink } from "./telemetry/mod.ts";
 import { NoopSink } from "./telemetry/mod.ts";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
+
+const tracer = trace.getTracer("tentacular-engine");
 
 export interface ServerOptions {
   port: number;
@@ -104,7 +107,25 @@ export function startServer(opts: ServerOptions): Deno.HttpServer {
           }
         }
 
-        const result = await executor.execute(opts.graph, opts.runner, opts.ctx, input);
+        const result = await tracer.startActiveSpan("invoke_workflow", async (span) => {
+          span.setAttribute("tentacular.workflow.name", opts.graph.workflow.name);
+          span.setAttribute("tentacular.workflow.version", opts.graph.workflow.version ?? "");
+          try {
+            const r = await executor.execute(opts.graph, opts.runner, opts.ctx, input);
+            if (!r.success) {
+              span.setStatus({ code: SpanStatusCode.ERROR, message: "Workflow execution failed" });
+            } else {
+              span.setStatus({ code: SpanStatusCode.OK });
+            }
+            return r;
+          } catch (err) {
+            span.setStatus({ code: SpanStatusCode.ERROR });
+            span.recordException(err instanceof Error ? err : new Error(String(err)));
+            throw err;
+          } finally {
+            span.end();
+          }
+        });
         sink.record({ type: "request-out", timestamp: Date.now(), metadata: { path: "/run" } });
 
         return new Response(JSON.stringify(result, null, 2), {
