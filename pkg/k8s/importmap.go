@@ -35,6 +35,7 @@ var engineDenoImports = map[string]string{
 	"@std/fmt/colors":         "https://deno.land/std@0.224.0/fmt/colors.ts",
 	"@std/io":                 "https://deno.land/std@0.224.0/io/mod.ts",
 	"@std/bytes":              "https://deno.land/std@0.224.0/bytes/mod.ts",
+	"@opentelemetry/api":      "npm:@opentelemetry/api@1",
 }
 
 // GenerateImportMap produces a ConfigMap manifest containing a merged deno.json that
@@ -60,6 +61,8 @@ func GenerateImportMap(wf *spec.Workflow, proxyURL string) *builder.Manifest {
 		if rewritten := rewriteJSRSpecifier(v, proxyURL); rewritten != "" {
 			imports[k] = rewritten
 		} else if rewritten := rewriteDenoLandURL(v, proxyURL); rewritten != "" {
+			imports[k] = rewritten
+		} else if rewritten := rewriteNPMSpecifier(v, proxyURL); rewritten != "" {
 			imports[k] = rewritten
 		} else {
 			imports[k] = v
@@ -183,6 +186,16 @@ func rewriteJSRSpecifier(value, proxyURL string) string {
 	}
 	rest := value[4:] // strip "jsr:"
 	return proxyURL + "/jsr/" + rest
+}
+
+// rewriteNPMSpecifier rewrites a "npm:@scope/pkg@version" value to a proxy URL.
+// Returns empty string if the value is not an npm: specifier.
+func rewriteNPMSpecifier(value, proxyURL string) string {
+	if !strings.HasPrefix(value, "npm:") {
+		return ""
+	}
+	rest := value[4:] // strip "npm:"
+	return proxyURL + "/" + rest
 }
 
 // denoLandStdPrefix is the URL prefix for deno.land standard library imports.

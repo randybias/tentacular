@@ -188,7 +188,7 @@ func TestGenerateImportMapContainsEngineEntries(t *testing.T) {
 	}
 
 	// Engine entries must be present
-	for _, entry := range []string{"std/path", "std/yaml", "tentacular", "@nats-io/transport-deno"} {
+	for _, entry := range []string{"std/path", "std/yaml", "tentacular", "@nats-io/transport-deno", "@opentelemetry/api"} {
 		if !strings.Contains(got.Content, entry) {
 			t.Errorf("expected engine entry %q in merged deno.json, missing from:\n%s", entry, got.Content)
 		}
@@ -244,6 +244,47 @@ func TestRewriteDenoLandURL(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("rewriteDenoLandURL(%q) = %q, want %q", tt.input, got, tt.want)
 		}
+	}
+}
+
+func TestRewriteNPMSpecifier(t *testing.T) {
+	proxy := "http://proxy:8080"
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"npm:@opentelemetry/api@1", proxy + "/@opentelemetry/api@1"},
+		{"npm:zod@3.22.0", proxy + "/zod@3.22.0"},
+		{"npm:lodash", proxy + "/lodash"},
+		{"./mod.ts", ""},      // not npm
+		{"jsr:@std/yaml", ""}, // jsr, not npm
+	}
+	for _, tt := range tests {
+		got := rewriteNPMSpecifier(tt.input, proxy)
+		if got != tt.want {
+			t.Errorf("rewriteNPMSpecifier(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestImportMapRewritesEngineNPMDeps(t *testing.T) {
+	// Engine npm: entries (like @opentelemetry/api) must be rewritten through the proxy
+	// so workflow pods don't need direct egress to npmjs.org.
+	wf := &spec.Workflow{Name: "npm-proxy-check"}
+	proxy := "http://esm-sh.tentacular-support.svc.cluster.local:8080"
+	got := GenerateImportMapWithNamespace(wf, "default", proxy)
+	if got == nil {
+		t.Fatal("expected non-nil manifest")
+	}
+
+	// No raw npm: specifiers should remain in the generated import map
+	if strings.Contains(got.Content, "\"npm:") {
+		t.Error("expected all npm: specifiers rewritten through proxy, but found raw npm: specifier")
+	}
+
+	// @opentelemetry/api must be present and routed through proxy
+	if !strings.Contains(got.Content, proxy+"/@opentelemetry/api@1") {
+		t.Errorf("expected @opentelemetry/api rewritten through proxy, got:\n%s", got.Content)
 	}
 }
 
