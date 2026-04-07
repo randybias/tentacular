@@ -9,6 +9,7 @@
 
 export type { TelemetryEvent, TelemetrySink, TelemetrySnapshot } from "./types.ts";
 export { BasicSink } from "./basic.ts";
+export { installGenAIWrapper } from "./genai.ts";
 
 import type { TelemetryEvent, TelemetrySink, TelemetrySnapshot } from "./types.ts";
 import { BasicSink } from "./basic.ts";
