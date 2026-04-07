@@ -482,6 +482,16 @@ metadata:
 %s          env:
             - name: DENO_DIR
               value: /tmp/deno-cache
+            - name: OTEL_DENO
+              value: "true"
+            - name: OTEL_EXPORTER_OTLP_PROTOCOL
+              value: http/protobuf
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: http://otel-collector.tentacular-observability.svc.cluster.local:4318
+            - name: OTEL_SERVICE_NAME
+              value: %s
+            - name: OTEL_RESOURCE_ATTRIBUTES
+              value: k8s.namespace.name=%s,tentacular.enclave=%s
           ports:
             - containerPort: 8080
               protocol: TCP
@@ -532,7 +542,7 @@ metadata:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
-%s%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, wf.Triggers, wf.Description), wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, engineSharedMount, importMapVolumeMount, sidecarContainersBlock, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, sidecarVolumesBlock, importMapVolume)
+%s%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, wf.Triggers, wf.Description), wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, wf.Name, namespace, namespace, engineSharedMount, importMapVolumeMount, sidecarContainersBlock, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, sidecarVolumesBlock, importMapVolume)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
