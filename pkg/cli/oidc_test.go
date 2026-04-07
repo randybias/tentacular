@@ -256,9 +256,12 @@ func TestDeviceAuthFlow_MockServer(t *testing.T) {
 	}
 
 	// Test device auth request
-	authResp, err := requestDeviceAuth(deviceEndpoint, "test-client", "test-secret")
+	authResp, pkceVerifier, err := requestDeviceAuth(deviceEndpoint, "test-client", "test-secret")
 	if err != nil {
 		t.Fatalf("requestDeviceAuth: %v", err)
+	}
+	if pkceVerifier == "" {
+		t.Fatal("requestDeviceAuth returned empty PKCE verifier")
 	}
 	if authResp.DeviceCode != "test-device-code" {
 		t.Errorf("device_code: got %q, want %q", authResp.DeviceCode, "test-device-code")
@@ -273,6 +276,7 @@ func TestDeviceAuthFlow_MockServer(t *testing.T) {
 		"test-device-code",
 		"test-client",
 		"test-secret",
+		pkceVerifier,
 		1*time.Second,
 		time.Now().Add(30*time.Second),
 	)
@@ -302,6 +306,7 @@ func TestDeviceAuthFlow_Timeout(t *testing.T) {
 		"test-device-code",
 		"test-client",
 		"",
+		"dummy-verifier",
 		100*time.Millisecond,
 		time.Now().Add(-1*time.Second), // Already expired
 	)
@@ -327,6 +332,7 @@ func TestDeviceAuthFlow_AccessDenied(t *testing.T) {
 		"test-device-code",
 		"test-client",
 		"",
+		"dummy-verifier",
 		100*time.Millisecond,
 		time.Now().Add(30*time.Second),
 	)
@@ -602,9 +608,12 @@ func TestDeviceAuth_PKCERequired(t *testing.T) {
 	}))
 	defer server.Close()
 
-	resp, err := requestDeviceAuth(server.URL+"/auth/device", "test-client", "")
+	resp, verifier, err := requestDeviceAuth(server.URL+"/auth/device", "test-client", "")
 	if err != nil {
 		t.Fatalf("requestDeviceAuth with PKCE-requiring server: %v", err)
+	}
+	if verifier == "" {
+		t.Fatal("requestDeviceAuth returned empty PKCE verifier")
 	}
 	if resp.DeviceCode != "pkce-device-code" {
 		t.Errorf("device_code: got %q, want %q", resp.DeviceCode, "pkce-device-code")
