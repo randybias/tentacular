@@ -256,8 +256,8 @@ func TestRewriteNPMSpecifier(t *testing.T) {
 		{"npm:@opentelemetry/api@1", proxy + "/@opentelemetry/api@1"},
 		{"npm:zod@3.22.0", proxy + "/zod@3.22.0"},
 		{"npm:lodash", proxy + "/lodash"},
-		{"./mod.ts", ""},       // not npm
-		{"jsr:@std/yaml", ""},  // jsr, not npm
+		{"./mod.ts", ""},      // not npm
+		{"jsr:@std/yaml", ""}, // jsr, not npm
 	}
 	for _, tt := range tests {
 		got := rewriteNPMSpecifier(tt.input, proxy)
