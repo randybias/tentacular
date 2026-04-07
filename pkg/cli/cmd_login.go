@@ -74,8 +74,8 @@ func runLogin(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("OIDC discovery failed: %w\n\nVerify the issuer URL is correct and reachable:\n  tntc configure -e %s --oidc-issuer <correct-url>", err, env)
 	}
 
-	// Step 2: Request device authorization
-	deviceAuth, err := requestDeviceAuth(deviceEndpoint, clientID, clientSecret)
+	// Step 2: Request device authorization (returns PKCE verifier for token exchange)
+	deviceAuth, pkceVerifier, err := requestDeviceAuth(deviceEndpoint, clientID, clientSecret)
 	if err != nil {
 		return fmt.Errorf("device authorization request failed: %w", err)
 	}
@@ -99,7 +99,7 @@ func runLogin(cmd *cobra.Command, args []string) error {
 	}
 	deadline := time.Now().Add(time.Duration(deviceAuth.ExpiresIn) * time.Second)
 
-	tokenResp, err := pollForToken(tokenEndpoint, deviceAuth.DeviceCode, clientID, clientSecret, interval, deadline)
+	tokenResp, err := pollForToken(tokenEndpoint, deviceAuth.DeviceCode, clientID, clientSecret, pkceVerifier, interval, deadline)
 	if err != nil {
 		return err
 	}
@@ -227,10 +227,11 @@ func generatePKCE() (verifier, challenge string, err error) {
 // requestDeviceAuth initiates the device authorization flow.
 // Includes PKCE parameters (S256) for compatibility with IdPs that enforce
 // PKCE on all client flows, including device authorization.
-func requestDeviceAuth(endpoint, clientID, clientSecret string) (*deviceAuthResponse, error) {
-	_, challenge, err := generatePKCE()
+// Returns the device auth response and the PKCE verifier (needed at token exchange).
+func requestDeviceAuth(endpoint, clientID, clientSecret string) (*deviceAuthResponse, string, error) {
+	verifier, challenge, err := generatePKCE()
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	data := url.Values{
@@ -248,43 +249,45 @@ func requestDeviceAuth(endpoint, clientID, clientSecret string) (*deviceAuthResp
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(data.Encode()))
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return nil, fmt.Errorf("requesting device authorization: %w", err)
+		return nil, "", fmt.Errorf("requesting device authorization: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, fmt.Errorf("reading device auth response: %w", err)
+		return nil, "", fmt.Errorf("reading device auth response: %w", err)
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("device auth endpoint returned HTTP %d: %s", resp.StatusCode, string(body))
+		return nil, "", fmt.Errorf("device auth endpoint returned HTTP %d: %s", resp.StatusCode, string(body))
 	}
 
 	var authResp deviceAuthResponse
 	if err := json.Unmarshal(body, &authResp); err != nil {
-		return nil, fmt.Errorf("parsing device auth response: %w", err)
+		return nil, "", fmt.Errorf("parsing device auth response: %w", err)
 	}
 
 	if authResp.DeviceCode == "" {
-		return nil, errors.New("device auth response missing device_code")
+		return nil, "", errors.New("device auth response missing device_code")
 	}
 
-	return &authResp, nil
+	return &authResp, verifier, nil
 }
 
 // pollForToken polls the token endpoint until the user completes authorization.
-func pollForToken(tokenEndpoint, deviceCode, clientID, clientSecret string, interval time.Duration, deadline time.Time) (*tokenResponse, error) {
+// The codeVerifier is the PKCE verifier generated during device authorization.
+func pollForToken(tokenEndpoint, deviceCode, clientID, clientSecret, codeVerifier string, interval time.Duration, deadline time.Time) (*tokenResponse, error) {
 	data := url.Values{
-		"grant_type":  {"urn:ietf:params:oauth:grant-type:device_code"},
-		"device_code": {deviceCode},
-		"client_id":   {clientID},
+		"grant_type":    {"urn:ietf:params:oauth:grant-type:device_code"},
+		"device_code":   {deviceCode},
+		"client_id":     {clientID},
+		"code_verifier": {codeVerifier},
 	}
 	if clientSecret != "" {
 		data.Set("client_secret", clientSecret)
