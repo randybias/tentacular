@@ -21,7 +21,7 @@ import { clearModuleCache, loadAllNodes } from "./loader.ts";
 import { startServer } from "./server.ts";
 import { watchFiles } from "./watcher.ts";
 import type { NodeRunner } from "./executor/types.ts";
-import { NewTelemetrySink } from "./telemetry/mod.ts";
+import { installGenAIWrapper, NewTelemetrySink } from "./telemetry/mod.ts";
 
 const flags = parseFlags(Deno.args, {
   string: ["workflow", "port", "secrets"],
@@ -50,6 +50,12 @@ async function loadWorkflow(): Promise<WorkflowSpec> {
 
 // Main startup
 async function main() {
+  // Install GenAI fetch wrapper early — before any fetch calls.
+  // When OTEL_DENO=true, this enriches active spans with GenAI semantic
+  // convention attributes (token counts, model info) from LLM API responses.
+  // Safe to call when OTel is disabled: no active span means no-op enrichment.
+  installGenAIWrapper();
+
   console.log("Tentacular Engine starting...");
 
   const spec = await loadWorkflow();
