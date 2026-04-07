@@ -16,6 +16,7 @@
     "jsr:@std/internal@^1.0.5": "1.0.12",
     "jsr:@std/io@0.225.2": "0.225.2",
     "jsr:@std/path@^1.0.8": "1.1.4",
+    "npm:@opentelemetry/api@1": "1.9.1",
     "npm:tweetnacl@1.0.3": "1.0.3"
   },
   "jsr": {
@@ -87,6 +88,9 @@
     }
   },
   "npm": {
+    "@opentelemetry/api@1.9.1": {
+      "integrity": "sha512-gLyJlPHPZYdAk1JENA9LeHejZe1Ti77/pTeFm/nMXmQH/HFZlcS/O2XJB+L8fkbrNSqhdtlvjBVjxwUYanNH5Q=="
+    },
     "tweetnacl@1.0.3": {
       "integrity": "sha512-6rt+RN7aOi1nGMyC4Xa5DdYiukl2UWCbcJft7YhxReBGQD7OAM8Pbxw6YMo4r2diNEA8FEmu32YOn9rhaiE5yw=="
     }
@@ -274,7 +278,8 @@
   },
   "workspace": {
     "dependencies": [
-      "jsr:@nats-io/transport-deno@3.3.0"
+      "jsr:@nats-io/transport-deno@3.3.0",
+      "npm:@opentelemetry/api@1"
     ]
   }
 }
