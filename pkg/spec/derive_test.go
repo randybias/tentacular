@@ -274,19 +274,43 @@ func TestGetSecretKeyName(t *testing.T) {
 }
 
 func TestDeriveDenoFlagsNilContract(t *testing.T) {
+	// OTel telemetry requires flags even for nil contract — never returns nil.
 	flags := DeriveDenoFlags(nil, nil, "")
-	if flags != nil {
-		t.Errorf("expected nil flags for nil contract, got %v", flags)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for nil contract (OTel requires allow-net)")
+	}
+	// Collector endpoint must be present
+	allowNet := ""
+	for _, f := range flags {
+		if strings.HasPrefix(f, "--allow-net=") {
+			allowNet = f
+			break
+		}
+	}
+	if !strings.Contains(allowNet, "otel-collector.tentacular-observability.svc.cluster.local:4318") {
+		t.Errorf("expected OTel collector in --allow-net, got %q", allowNet)
 	}
 }
 
 func TestDeriveDenoFlagsEmptyDependencies(t *testing.T) {
+	// OTel telemetry requires flags even for empty dependencies — never returns nil.
 	contract := &Contract{
 		Dependencies: map[string]Dependency{},
 	}
 	flags := DeriveDenoFlags(contract, nil, "")
-	if flags != nil {
-		t.Errorf("expected nil flags for empty dependencies, got %v", flags)
+	if flags == nil {
+		t.Fatal("expected non-nil flags for empty dependencies (OTel requires allow-net)")
+	}
+	// Collector endpoint must be present
+	allowNet := ""
+	for _, f := range flags {
+		if strings.HasPrefix(f, "--allow-net=") {
+			allowNet = f
+			break
+		}
+	}
+	if !strings.Contains(allowNet, "otel-collector.tentacular-observability.svc.cluster.local:4318") {
+		t.Errorf("expected OTel collector in --allow-net, got %q", allowNet)
 	}
 }
 
@@ -322,14 +346,14 @@ func TestDeriveDenoFlagsFixedHostScoped(t *testing.T) {
 		t.Error("expected --allow-net flag in derived flags")
 	}
 
-	// Should include api.github.com:443 and 0.0.0.0:8080
-	if allowNetFlag != "--allow-net=0.0.0.0:8080,api.github.com:443" {
-		t.Errorf("expected --allow-net=0.0.0.0:8080,api.github.com:443, got %s", allowNetFlag)
+	// Should include api.github.com:443, 0.0.0.0:8080, and OTel collector
+	if allowNetFlag != "--allow-net=0.0.0.0:8080,api.github.com:443,otel-collector.tentacular-observability.svc.cluster.local:4318" {
+		t.Errorf("expected --allow-net with OTel collector, got %s", allowNetFlag)
 	}
 
-	// Should include scoped --allow-env
-	if allowEnvFlag != "--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
-		t.Errorf("expected --allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK, got %s", allowEnvFlag)
+	// Should include scoped --allow-env with OTel vars
+	if allowEnvFlag != "--allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
+		t.Errorf("expected --allow-env with OTel vars, got %s", allowEnvFlag)
 	}
 }
 
@@ -426,9 +450,9 @@ func TestDeriveDenoFlagsDefaultPortResolution(t *testing.T) {
 		}
 	}
 
-	// Should include default ports
-	if allowNetFlag != "--allow-net=0.0.0.0:8080,api.github.com:443,postgres.svc:5432" {
-		t.Errorf("expected ports resolved with defaults, got %s", allowNetFlag)
+	// Should include default ports and OTel collector
+	if allowNetFlag != "--allow-net=0.0.0.0:8080,api.github.com:443,otel-collector.tentacular-observability.svc.cluster.local:4318,postgres.svc:5432" {
+		t.Errorf("expected ports resolved with defaults plus OTel collector, got %s", allowNetFlag)
 	}
 }
 
@@ -465,10 +489,10 @@ func TestDeriveDenoFlagsMultipleFixedSorted(t *testing.T) {
 		}
 	}
 
-	// Hosts should be sorted alphabetically
-	expected := "--allow-net=0.0.0.0:8080,a.example.com:443,m.example.com:5432,z.example.com:443"
+	// Hosts should be sorted alphabetically, including OTel collector
+	expected := "--allow-net=0.0.0.0:8080,a.example.com:443,m.example.com:5432,otel-collector.tentacular-observability.svc.cluster.local:4318,z.example.com:443"
 	if allowNetFlag != expected {
-		t.Errorf("expected sorted hosts, got %s, want %s", allowNetFlag, expected)
+		t.Errorf("expected sorted hosts with OTel collector, got %s, want %s", allowNetFlag, expected)
 	}
 }
 
@@ -517,17 +541,17 @@ func TestDeriveDenoFlagsScopedAllowEnv(t *testing.T) {
 		t.Fatal("expected non-nil flags")
 	}
 
-	// Should include scoped --allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK
+	// Should include scoped --allow-env with OTel vars
 	foundAllowEnv := false
 	for _, flag := range flags {
-		if flag == "--allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
+		if flag == "--allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK" {
 			foundAllowEnv = true
 			break
 		}
 	}
 
 	if !foundAllowEnv {
-		t.Errorf("expected --allow-env=DENO_DIR,HOME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK in derived flags, got %v", flags)
+		t.Errorf("expected --allow-env with OTel vars in derived flags, got %v", flags)
 	}
 }
 
@@ -582,9 +606,9 @@ func TestDenoFlagsSkipExoskeletonDeps(t *testing.T) {
 		}
 	}
 
-	// Should only contain 0.0.0.0:8080 (health endpoint), no postgres host
-	if allowNetFlag != "--allow-net=0.0.0.0:8080" {
-		t.Errorf("expected --allow-net=0.0.0.0:8080 only, got %s", allowNetFlag)
+	// Should contain 0.0.0.0:8080 and OTel collector (no postgres host — exoskeleton-managed)
+	if allowNetFlag != "--allow-net=0.0.0.0:8080,otel-collector.tentacular-observability.svc.cluster.local:4318" {
+		t.Errorf("expected --allow-net with OTel collector only, got %s", allowNetFlag)
 	}
 }
 
@@ -655,8 +679,8 @@ func TestMixedDepsDenoFlags(t *testing.T) {
 		t.Errorf("expected api.github.com:443 in allow-net, got %s", allowNetFlag)
 	}
 	// Verify no postgres host leaked (tentacular-postgres has no host anyway, but
-	// confirm the flag looks correct)
-	expected := "--allow-net=0.0.0.0:8080,api.github.com:443"
+	// confirm the flag looks correct, including OTel collector)
+	expected := "--allow-net=0.0.0.0:8080,api.github.com:443,otel-collector.tentacular-observability.svc.cluster.local:4318"
 	if allowNetFlag != expected {
 		t.Errorf("expected %s, got %s", expected, allowNetFlag)
 	}
@@ -993,5 +1017,131 @@ func TestDeriveDenoFlagsDynamicTargetWithSidecars(t *testing.T) {
 	}
 	if allowNetFlag != "--allow-net" {
 		t.Errorf("expected broad --allow-net for dynamic-target, got %v", flags)
+	}
+}
+
+// --- OTel Phase 1 Tests ---
+
+func TestDeriveDenoFlagsOTelAllowEnvScoped(t *testing.T) {
+	// Both scoped and dynamic paths must include OTel vars in --allow-env.
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"api": {Protocol: "https", Host: "api.example.com", Port: 443},
+		},
+	}
+	flags := DeriveDenoFlags(contract, nil, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	wantEnv := "--allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK"
+	found := false
+	for _, f := range flags {
+		if f == wantEnv {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected %q in flags, got %v", wantEnv, flags)
+	}
+}
+
+func TestDeriveDenoFlagsOTelAllowEnvDynamic(t *testing.T) {
+	// Dynamic path must also include OTel vars in --allow-env.
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"ext": {Protocol: "https", Type: "dynamic-target", CIDR: "0.0.0.0/0", DynPorts: []string{"443/TCP"}},
+		},
+	}
+	flags := DeriveDenoFlags(contract, nil, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	wantEnv := "--allow-env=DENO_DIR,HOME,OTEL_DENO,OTEL_EXPORTER_OTLP_ENDPOINT,OTEL_EXPORTER_OTLP_PROTOCOL,OTEL_RESOURCE_ATTRIBUTES,OTEL_SERVICE_NAME,SPIFFE_ENDPOINT_SOCKET,SPIFFE_ID,SPIFFE_ID_PATH,SVID_CERT_PATH,TELEMETRY_SINK"
+	found := false
+	for _, f := range flags {
+		if f == wantEnv {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected %q in dynamic flags, got %v", wantEnv, flags)
+	}
+}
+
+func TestDeriveDenoFlagsOTelCollectorInAllowNet(t *testing.T) {
+	// OTel collector endpoint must appear in --allow-net for the scoped path.
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"api": {Protocol: "https", Host: "api.example.com", Port: 443},
+		},
+	}
+	flags := DeriveDenoFlags(contract, nil, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	allowNet := ""
+	for _, f := range flags {
+		if strings.HasPrefix(f, "--allow-net=") {
+			allowNet = f
+			break
+		}
+	}
+	if !strings.Contains(allowNet, "otel-collector.tentacular-observability.svc.cluster.local:4318") {
+		t.Errorf("expected OTel collector in --allow-net, got %q", allowNet)
+	}
+}
+
+func TestDeriveDenoFlagsOTelCollectorNoDependencies(t *testing.T) {
+	// OTel collector must be in --allow-net even when there are no contract dependencies.
+	flags := DeriveDenoFlags(nil, nil, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags for nil contract (OTel requires flags)")
+	}
+
+	allowNet := ""
+	for _, f := range flags {
+		if strings.HasPrefix(f, "--allow-net=") {
+			allowNet = f
+			break
+		}
+	}
+	if !strings.Contains(allowNet, "otel-collector.tentacular-observability.svc.cluster.local:4318") {
+		t.Errorf("expected OTel collector in --allow-net for no-dep workflow, got %q", allowNet)
+	}
+}
+
+func TestDeriveDenoFlagsOTelSpiffeVarsPreserved(t *testing.T) {
+	// Existing SPIFFE and TELEMETRY_SINK vars must still be present alongside OTel vars.
+	contract := &Contract{
+		Dependencies: map[string]Dependency{
+			"api": {Protocol: "https", Host: "api.example.com", Port: 443},
+		},
+	}
+	flags := DeriveDenoFlags(contract, nil, "")
+	if flags == nil {
+		t.Fatal("expected non-nil flags")
+	}
+
+	allowEnv := ""
+	for _, f := range flags {
+		if strings.HasPrefix(f, "--allow-env=") {
+			allowEnv = f
+			break
+		}
+	}
+
+	existingVars := []string{
+		"DENO_DIR", "HOME", "SPIFFE_ENDPOINT_SOCKET", "SPIFFE_ID",
+		"SPIFFE_ID_PATH", "SVID_CERT_PATH", "TELEMETRY_SINK",
+	}
+	for _, v := range existingVars {
+		if !strings.Contains(allowEnv, v) {
+			t.Errorf("expected existing var %q preserved in --allow-env, got %q", v, allowEnv)
+		}
 	}
 }
