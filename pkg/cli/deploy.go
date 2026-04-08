@@ -335,6 +335,9 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 		return nil, fmt.Errorf("generating ConfigMap: %w", err)
 	}
 
+	// Read tentacle metadata (best-effort — never blocks deploy)
+	metaBundle, _ := builder.ReadMetadata(wf, workflowDir)
+
 	// Resolve module proxy URL
 	cfg := LoadConfig()
 	proxyURL := k8s.DefaultModuleProxyURL
@@ -344,6 +347,7 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 
 	// Generate K8s manifests
 	buildOpts := builder.DeployOptions{
+		Metadata:         metaBundle,
 		RuntimeClassName: runtimeClass,
 		ImagePullPolicy:  imagePullPolicy,
 		ModuleProxyURL:   proxyURL,
