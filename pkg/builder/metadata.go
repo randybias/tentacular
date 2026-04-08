@@ -37,7 +37,7 @@ type MetadataBundle struct {
 // ReadMetadata reads all metadata files from the tentacle directory
 // and extracts structural metadata from the parsed workflow.
 // Metadata errors never block a deploy — missing or unreadable files are silently skipped.
-func ReadMetadata(wf *spec.Workflow, tentacleDir string) (*MetadataBundle, error) {
+func ReadMetadata(wf *spec.Workflow, tentacleDir string) *MetadataBundle {
 	bundle := &MetadataBundle{
 		Annotations: make(map[string]string),
 	}
@@ -84,7 +84,7 @@ func ReadMetadata(wf *spec.Workflow, tentacleDir string) (*MetadataBundle, error
 	// --- Tier 2: Git provenance ---
 	bundle.GitProvenance = readGitProvenance(tentacleDir)
 
-	return bundle, nil
+	return bundle
 }
 
 // buildTier1Annotations extracts structural metadata from the workflow spec
@@ -282,7 +282,9 @@ func generateContractSummary(wf *spec.Workflow) string {
 		}
 	}
 
-	// Network Egress section (skip DNS-only entries)
+	// Network Egress section (skip DNS-only entries).
+	// DNS egress to kube-dns is infrastructure noise that every tentacle has;
+	// it adds no useful signal to a contract summary.
 	rules := spec.DeriveEgressRules(wf.Contract)
 	var nonDNSRules []spec.EgressRule
 	for _, r := range rules {

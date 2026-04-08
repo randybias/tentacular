@@ -336,7 +336,7 @@ func buildManifests(workflowDir string, wf *spec.Workflow, opts InternalDeployOp
 	}
 
 	// Read tentacle metadata (best-effort — never blocks deploy)
-	metaBundle, _ := builder.ReadMetadata(wf, workflowDir)
+	metaBundle := builder.ReadMetadata(wf, workflowDir)
 
 	// Resolve module proxy URL
 	cfg := LoadConfig()

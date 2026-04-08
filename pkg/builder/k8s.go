@@ -204,6 +204,10 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 		for _, k := range extraKeys {
 			v := sanitizeAnnotationValue(extraAnnotations[k])
 			if v != "" {
+				// Single quotes prevent YAML type coercion of JSON brackets/colons
+				// (e.g. ["a","b"] would be parsed as a YAML sequence without quoting).
+				// This is safe because annotation values are JSON from json.Marshal,
+				// which never produces single quotes.
 				lines = append(lines, fmt.Sprintf("    %s: '%s'", k, v))
 			}
 		}
