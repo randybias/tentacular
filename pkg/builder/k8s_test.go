@@ -890,14 +890,14 @@ func TestDeploymentImportMapMountPath(t *testing.T) {
 }
 
 func TestBuildDeployAnnotationsNilMetadata(t *testing.T) {
-	result := buildDeployAnnotations(nil, nil, "")
+	result := buildDeployAnnotations(nil, nil, "", nil)
 	if result != "" {
 		t.Errorf("expected empty string for nil metadata and no triggers, got %q", result)
 	}
 }
 
 func TestBuildDeployAnnotationsAllEmpty(t *testing.T) {
-	result := buildDeployAnnotations(&spec.WorkflowMetadata{}, nil, "")
+	result := buildDeployAnnotations(&spec.WorkflowMetadata{}, nil, "", nil)
 	if result != "" {
 		t.Errorf("expected empty string for empty metadata struct and no triggers, got %q", result)
 	}
@@ -909,7 +909,7 @@ func TestBuildDeployAnnotationsFullMetadata(t *testing.T) {
 		Tags:        []string{"production", "critical"},
 		Environment: "prod",
 	}
-	result := buildDeployAnnotations(meta, nil, "")
+	result := buildDeployAnnotations(meta, nil, "", nil)
 	if !strings.Contains(result, "tentacular.io/group: platform-team") {
 		t.Error("expected group annotation")
 	}
@@ -932,7 +932,7 @@ func TestBuildDeployAnnotationsPartialMetadata(t *testing.T) {
 		Group: "data-team",
 		// Tags, Environment intentionally omitted
 	}
-	result := buildDeployAnnotations(meta, nil, "")
+	result := buildDeployAnnotations(meta, nil, "", nil)
 	if !strings.Contains(result, "tentacular.io/group: data-team") {
 		t.Error("expected group annotation")
 	}
@@ -951,7 +951,7 @@ func TestBuildDeployAnnotationsCronScheduleSingle(t *testing.T) {
 	triggers := []spec.Trigger{
 		{Type: "cron", Schedule: "0 9 * * *"},
 	}
-	result := buildDeployAnnotations(nil, triggers, "")
+	result := buildDeployAnnotations(nil, triggers, "", nil)
 	if !strings.Contains(result, `tentacular.io/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected cron-schedule annotation with single schedule")
 	}
@@ -966,7 +966,7 @@ func TestBuildDeployAnnotationsCronScheduleMultiple(t *testing.T) {
 		{Type: "manual"},
 		{Type: "cron", Schedule: "0 * * * *"},
 	}
-	result := buildDeployAnnotations(nil, triggers, "")
+	result := buildDeployAnnotations(nil, triggers, "", nil)
 	if !strings.Contains(result, `tentacular.io/cron-schedule: "0 9 * * *,0 * * * *"`) {
 		t.Errorf("expected comma-joined schedules in cron-schedule annotation, got: %q", result)
 	}
@@ -976,7 +976,7 @@ func TestBuildDeployAnnotationsNewlineInjectionBlocked(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
 		Group: "foo\n    injected.key: evil-value",
 	}
-	result := buildDeployAnnotations(meta, nil, "")
+	result := buildDeployAnnotations(meta, nil, "", nil)
 
 	// Verify no additional YAML lines were injected. After sanitization the
 	// newlines are removed, so the only annotation lines should be

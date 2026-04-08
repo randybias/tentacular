@@ -329,7 +329,7 @@ metadata:
 
 // TestBuildDeployAnnotationsNil verifies nil metadata with no triggers returns empty string.
 func TestBuildDeployAnnotationsNil(t *testing.T) {
-	result := buildDeployAnnotations(nil, nil, "")
+	result := buildDeployAnnotations(nil, nil, "", nil)
 	if result != "" {
 		t.Errorf("expected empty string for nil metadata and no triggers, got %q", result)
 	}
@@ -337,7 +337,7 @@ func TestBuildDeployAnnotationsNil(t *testing.T) {
 
 // TestBuildDeployAnnotationsEmpty verifies empty struct with no triggers returns empty string.
 func TestBuildDeployAnnotationsEmpty(t *testing.T) {
-	result := buildDeployAnnotations(&spec.WorkflowMetadata{}, nil, "")
+	result := buildDeployAnnotations(&spec.WorkflowMetadata{}, nil, "", nil)
 	if result != "" {
 		t.Errorf("expected empty string for empty metadata struct and no triggers, got %q", result)
 	}
@@ -346,7 +346,7 @@ func TestBuildDeployAnnotationsEmpty(t *testing.T) {
 // TestBuildDeployAnnotationsGroupOnly verifies annotations block with just group.
 func TestBuildDeployAnnotationsGroupOnly(t *testing.T) {
 	meta := &spec.WorkflowMetadata{Group: "platform-team"}
-	result := buildDeployAnnotations(meta, nil, "")
+	result := buildDeployAnnotations(meta, nil, "", nil)
 	if !strings.Contains(result, "annotations:") {
 		t.Error("expected 'annotations:' in result")
 	}
@@ -368,7 +368,7 @@ func TestBuildDeployAnnotationsAllFields(t *testing.T) {
 		Tags:        []string{"etl", "daily", "reporting"},
 		Environment: "production",
 	}
-	result := buildDeployAnnotations(meta, nil, "")
+	result := buildDeployAnnotations(meta, nil, "", nil)
 	if !strings.Contains(result, "tentacular.io/group: platform-team") {
 		t.Error("expected tentacular.io/group annotation")
 	}
@@ -388,7 +388,7 @@ func TestBuildDeployAnnotationsSingleTag(t *testing.T) {
 	meta := &spec.WorkflowMetadata{
 		Tags: []string{"etl"},
 	}
-	result := buildDeployAnnotations(meta, nil, "")
+	result := buildDeployAnnotations(meta, nil, "", nil)
 	if !strings.Contains(result, "tentacular.io/tags: etl") {
 		t.Error("expected tentacular.io/tags: etl")
 	}
@@ -402,7 +402,7 @@ func TestBuildDeployAnnotationsCronSchedule(t *testing.T) {
 	triggers := []spec.Trigger{
 		{Type: "cron", Schedule: "0 9 * * *"},
 	}
-	result := buildDeployAnnotations(nil, triggers, "")
+	result := buildDeployAnnotations(nil, triggers, "", nil)
 	if !strings.Contains(result, `tentacular.io/cron-schedule: "0 9 * * *"`) {
 		t.Error("expected tentacular.io/cron-schedule annotation")
 	}

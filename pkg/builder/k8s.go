@@ -34,10 +34,11 @@ type Manifest struct {
 
 // DeployOptions controls optional features in generated manifests.
 type DeployOptions struct {
-	RuntimeClassName string // If empty, omit runtimeClassName from pod spec
-	ImagePullPolicy  string // If empty, defaults to "Always"
-	ModuleProxyURL   string // If set, used to scope Deno net flags for jsr/npm proxy host
-	WorkflowDir      string // If set, scan nodes/ for extra .ts files not declared as DAG nodes (shared modules)
+	Metadata         *MetadataBundle // If set, inject Tier 1 annotations and generate metadata ConfigMap
+	RuntimeClassName string          // If empty, omit runtimeClassName from pod spec
+	ImagePullPolicy  string          // If empty, defaults to "Always"
+	ModuleProxyURL   string          // If set, used to scope Deno net flags for jsr/npm proxy host
+	WorkflowDir      string          // If set, scan nodes/ for extra .ts files not declared as DAG nodes (shared modules)
 }
 
 // GenerateCodeConfigMap produces a ConfigMap containing workflow code (workflow.yaml + nodes/*.ts).
@@ -144,12 +145,15 @@ func sanitizeAnnotationValue(v string) string {
 	return strings.TrimSpace(v)
 }
 
-// buildDeployAnnotations converts workflow metadata, description, and cron triggers
-// into a YAML annotations block. Returns empty string if all fields are empty.
+// buildDeployAnnotations converts workflow metadata, description, cron triggers,
+// and extra (Tier 1 metadata) annotations into a YAML annotations block.
+// Returns empty string if all fields are empty.
 // Values are sanitized to prevent YAML injection via newlines or special characters.
 // If triggers contains cron triggers, a tentacular.io/cron-schedule annotation is
 // added with comma-separated schedules (one per cron trigger).
-func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger, description string) string {
+// extraAnnotations are appended last, sorted for deterministic output.
+// JSON values (nodes, edges, etc.) are single-quoted to prevent YAML interpretation.
+func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger, description string, extraAnnotations map[string]string) string {
 	var lines []string
 	if v := sanitizeAnnotationValue(description); v != "" {
 		lines = append(lines, "    tentacular.io/description: "+v)
@@ -189,6 +193,26 @@ func buildDeployAnnotations(meta *spec.WorkflowMetadata, triggers []spec.Trigger
 	if len(cronSchedules) > 0 {
 		lines = append(lines, fmt.Sprintf(`    tentacular.io/cron-schedule: "%s"`, strings.Join(cronSchedules, ",")))
 	}
+
+	// Append extra (Tier 1 metadata) annotations sorted for deterministic output.
+	if len(extraAnnotations) > 0 {
+		extraKeys := make([]string, 0, len(extraAnnotations))
+		for k := range extraAnnotations {
+			extraKeys = append(extraKeys, k)
+		}
+		sort.Strings(extraKeys)
+		for _, k := range extraKeys {
+			v := sanitizeAnnotationValue(extraAnnotations[k])
+			if v != "" {
+				// Single quotes prevent YAML type coercion of JSON brackets/colons
+				// (e.g. ["a","b"] would be parsed as a YAML sequence without quoting).
+				// This is safe because annotation values are JSON from json.Marshal,
+				// which never produces single quotes.
+				lines = append(lines, fmt.Sprintf("    %s: '%s'", k, v))
+			}
+		}
+	}
+
 	if len(lines) == 0 {
 		return ""
 	}
@@ -322,8 +346,10 @@ func buildSidecarVolumes(sidecars []spec.SidecarSpec) string {
 }
 
 // GenerateK8sManifests produces K8s manifests for deploying a workflow.
+// If opts.Metadata is set, Tier 1 annotations are injected into the Deployment
+// and a <name>-metadata ConfigMap is prepended to the returned manifest list.
 func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts DeployOptions) []Manifest {
-	manifests := make([]Manifest, 0, 2)
+	manifests := make([]Manifest, 0, 3)
 
 	labels := fmt.Sprintf(`app.kubernetes.io/name: %s
     app.kubernetes.io/version: "%s"
@@ -449,6 +475,12 @@ func GenerateK8sManifests(wf *spec.Workflow, imageTag, namespace string, opts De
 	// Build sidecar volumes block (empty string if no sidecars)
 	sidecarVolumesBlock := buildSidecarVolumes(wf.Sidecars)
 
+	// Extract Tier 1 metadata annotations from bundle (nil-safe)
+	var metaAnnotations map[string]string
+	if opts.Metadata != nil {
+		metaAnnotations = opts.Metadata.Annotations
+	}
+
 	// Deployment with security hardening
 	deployment := fmt.Sprintf(`apiVersion: apps/v1
 kind: Deployment
@@ -542,13 +574,13 @@ metadata:
         - name: tmp
           emptyDir:
             sizeLimit: 512Mi
-%s%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, wf.Triggers, wf.Description), wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, wf.Name, namespace, namespace, engineSharedMount, importMapVolumeMount, sidecarContainersBlock, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, sidecarVolumesBlock, importMapVolume)
+%s%s`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, wf.Triggers, wf.Description, metaAnnotations), wf.Name, labels, runtimeClassLine, imageTag, imagePullPolicy, commandArgsBlock, wf.Name, namespace, namespace, engineSharedMount, importMapVolumeMount, sidecarContainersBlock, wf.Name, strings.Join(configMapItems, "\n"), wf.Name, sidecarVolumesBlock, importMapVolume)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Deployment", Name: wf.Name, Content: deployment,
 	})
 
-	// Service
+	// Service (no Tier 1 metadata annotations on Service — annotations are Deployment-only)
 	service := fmt.Sprintf(`apiVersion: v1
 kind: Service
 metadata:
@@ -564,11 +596,18 @@ metadata:
     - port: 8080
       targetPort: 8080
       protocol: TCP
-`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, nil, wf.Description), wf.Name)
+`, wf.Name, namespace, labels, buildDeployAnnotations(wf.Metadata, nil, wf.Description, nil), wf.Name)
 
 	manifests = append(manifests, Manifest{
 		Kind: "Service", Name: wf.Name, Content: service,
 	})
+
+	// If metadata bundle provided, prepend metadata ConfigMap (before Deployment per spec ordering)
+	if opts.Metadata != nil {
+		if metaCM, cmErr := GenerateMetadataConfigMap(wf.Name, namespace, opts.Metadata); cmErr == nil && metaCM.Kind != "" {
+			manifests = append([]Manifest{metaCM}, manifests...)
+		}
+	}
 
 	return manifests
 }
