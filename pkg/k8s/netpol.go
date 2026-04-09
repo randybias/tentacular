@@ -65,6 +65,24 @@ func GenerateNetworkPolicy(wf *spec.Workflow, namespace, proxyNamespace string) 
 		}
 		egressBuf.WriteString(proxyEgress)
 	}
+
+	// Always add OTel collector egress — engine pods emit traces to the collector
+	// in tentacular-observability. Without this rule, telemetry is silently dropped.
+	{
+		otelEgress := `  # OTel collector: engine telemetry (OTLP/HTTP on 4318, gRPC on 4317)
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: tentacular-observability
+    ports:
+    - protocol: TCP
+      port: 4317
+    - protocol: TCP
+      port: 4318
+`
+		egressBuf.WriteString(otelEgress)
+	}
+
 	egressYAML := egressBuf.String()
 
 	// Build ingress rules YAML from derived rules.
