@@ -153,38 +153,31 @@ export class SimpleExecutor implements WorkflowExecutor {
     return merged;
   }
 
-  private executeWithTimeout(
+  private async executeWithTimeout(
     runner: NodeRunner,
     nodeId: string,
     ctx: Context,
     input: unknown,
   ): Promise<unknown> {
-    return new Promise<unknown>((resolve, reject) => {
-      let settled = false;
-      const timer = setTimeout(() => {
-        if (!settled) {
-          settled = true;
-          reject(new Error(`Node "${nodeId}" timed out after ${this.timeoutMs}ms`));
-        }
+    // Use AbortSignal.timeout + Promise.race to preserve OTel async context
+    // (AsyncLocalStorage). The previous .then() pattern broke span context
+    // propagation, causing trace.getActiveSpan() to return null inside node
+    // code — which prevented the GenAI fetch wrapper from enriching LLM spans.
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => {
+        reject(new Error(`Node "${nodeId}" timed out after ${this.timeoutMs}ms`));
       }, this.timeoutMs);
-
-      runner.run(nodeId, ctx, input).then(
-        (result) => {
-          if (!settled) {
-            settled = true;
-            clearTimeout(timer);
-            resolve(result);
-          }
-        },
-        (err) => {
-          if (!settled) {
-            settled = true;
-            clearTimeout(timer);
-            reject(err);
-          }
-        },
-      );
     });
+
+    try {
+      return await Promise.race([
+        runner.run(nodeId, ctx, input),
+        timeoutPromise,
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   private async executeWithRetry(
