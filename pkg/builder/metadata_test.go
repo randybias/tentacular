@@ -679,6 +679,69 @@ func TestGenerateK8sManifestsMetadataAnnotationsEscaped(t *testing.T) {
 
 // --- Tests: truncateIfNeeded ---
 
+// --- Tests: Prompts support ---
+
+func TestReadMetadataPromptsPresent(t *testing.T) {
+	dir := t.TempDir()
+	content := `version: "1"
+prompts:
+  - node: analyze
+    name: analysis-prompt
+    model: claude-sonnet-4-5
+    system_prompt: "You are an analyst."
+templates:
+  - node: report
+    name: report-template
+    format: markdown
+    template: "# {{title}}"
+`
+	if err := os.WriteFile(filepath.Join(dir, "prompts.yaml"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	// Need a minimal workflow.yaml too
+	if err := os.WriteFile(filepath.Join(dir, "workflow.yaml"), []byte("name: test-wf\nversion: \"1.0.0\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wf := &spec.Workflow{Name: "test-wf", Version: "1.0.0"}
+	bundle := ReadMetadata(wf, dir)
+	if bundle.Prompts == "" {
+		t.Error("expected prompts to be populated")
+	}
+	if bundle.Annotations["tentacular.io/prompt-count"] != "1" {
+		t.Errorf("expected prompt-count=1, got %q", bundle.Annotations["tentacular.io/prompt-count"])
+	}
+	if bundle.Annotations["tentacular.io/template-count"] != "1" {
+		t.Errorf("expected template-count=1, got %q", bundle.Annotations["tentacular.io/template-count"])
+	}
+}
+
+func TestReadMetadataPromptsMissing(t *testing.T) {
+	dir := t.TempDir()
+	wf := &spec.Workflow{Name: "test-wf", Version: "1.0.0"}
+	bundle := ReadMetadata(wf, dir)
+	if bundle.Prompts != "" {
+		t.Errorf("expected empty prompts, got: %q", bundle.Prompts)
+	}
+	if _, ok := bundle.Annotations["tentacular.io/prompt-count"]; ok {
+		t.Error("expected no prompt-count annotation")
+	}
+}
+
+func TestGenerateMetadataConfigMapIncludesPrompts(t *testing.T) {
+	bundle := &MetadataBundle{
+		Annotations: make(map[string]string),
+		Prompts:     "version: \"1\"\nprompts:\n  - node: x\n",
+	}
+	m, err := GenerateMetadataConfigMap("test", "ns", bundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The manifest YAML should contain "prompts:" key in the ConfigMap data
+	if !strings.Contains(m.Content, "prompts:") {
+		t.Error("expected ConfigMap to contain prompts key")
+	}
+}
+
 func TestTruncateIfNeededUnderLimit(t *testing.T) {
 	v := "hello world"
 	result := truncateIfNeeded(v, 100)

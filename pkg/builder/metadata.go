@@ -7,7 +7,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
+
+	"gopkg.in/yaml.v3"
 
 	"github.com/randybias/tentacular/pkg/spec"
 )
@@ -32,6 +35,7 @@ type MetadataBundle struct {
 	Readme          string
 	ContractSummary string
 	ParamsSchema    string
+	Prompts         string
 }
 
 // ReadMetadata reads all metadata files from the tentacle directory
@@ -71,6 +75,21 @@ func ReadMetadata(wf *spec.Workflow, tentacleDir string) *MetadataBundle {
 	paramsPath := filepath.Join(tentacleDir, "params.schema.yaml")
 	if data, err := os.ReadFile(paramsPath); err == nil { //nolint:gosec // reading user-specified files
 		bundle.ParamsSchema = string(data)
+	}
+
+	// --- Tier 2: prompts.yaml ---
+	promptsPath := filepath.Join(tentacleDir, "prompts.yaml")
+	if data, err := os.ReadFile(promptsPath); err == nil { //nolint:gosec // reading user-specified files
+		bundle.Prompts = string(data)
+	}
+	if bundle.Prompts != "" {
+		pc, tc := promptTemplateCounts(bundle.Prompts)
+		if pc > 0 {
+			bundle.Annotations["tentacular.io/prompt-count"] = strconv.Itoa(pc)
+		}
+		if tc > 0 {
+			bundle.Annotations["tentacular.io/template-count"] = strconv.Itoa(tc)
+		}
 	}
 
 	// --- Tier 2: Contract summary ---
@@ -187,6 +206,9 @@ func GenerateMetadataConfigMap(name, namespace string, bundle *MetadataBundle) (
 	if bundle.ParamsSchema != "" {
 		data["params_schema"] = truncateIfNeeded(bundle.ParamsSchema, maxConfigMapKeySize)
 	}
+	if bundle.Prompts != "" {
+		data["prompts"] = truncateIfNeeded(bundle.Prompts, maxConfigMapKeySize)
+	}
 	if bundle.GitProvenance != nil {
 		provJSON, err := json.Marshal(bundle.GitProvenance)
 		if err == nil {
@@ -300,6 +322,18 @@ func generateContractSummary(wf *spec.Workflow) string {
 	}
 
 	return sb.String()
+}
+
+// promptTemplateCounts parses prompts.yaml just enough to count entries.
+func promptTemplateCounts(raw string) (prompts, templates int) {
+	var doc struct {
+		Prompts   []any `yaml:"prompts"`
+		Templates []any `yaml:"templates"`
+	}
+	if err := yaml.Unmarshal([]byte(raw), &doc); err != nil {
+		return 0, 0
+	}
+	return len(doc.Prompts), len(doc.Templates)
 }
 
 // truncateIfNeeded truncates value to maxBytes, appending a [truncated] marker.
