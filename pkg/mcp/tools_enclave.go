@@ -134,12 +134,13 @@ func (c *Client) EnclaveList(ctx context.Context, callerEmail string) ([]Enclave
 
 // EnclaveSyncParams are the arguments for the enclave_sync MCP tool.
 type EnclaveSyncParams struct {
-	Name          string   `json:"name"`
-	NewOwner      string   `json:"new_owner,omitempty"`
-	ChannelName   string   `json:"new_channel_name,omitempty"`
-	Status        string   `json:"new_status,omitempty"`
-	AddMembers    []string `json:"add_members,omitempty"`
-	RemoveMembers []string `json:"remove_members,omitempty"`
+	Name           string   `json:"name"`
+	NewOwner       string   `json:"new_owner,omitempty"`
+	ChannelName    string   `json:"new_channel_name,omitempty"`
+	Status         string   `json:"new_status,omitempty"`
+	NewQuotaPreset string   `json:"new_quota_preset,omitempty"`
+	AddMembers     []string `json:"add_members,omitempty"`
+	RemoveMembers  []string `json:"remove_members,omitempty"`
 }
 
 // EnclaveSyncResult is the response from enclave_sync.

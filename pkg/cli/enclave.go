@@ -266,6 +266,7 @@ func newEnclaveSyncCmd() *cobra.Command {
 	cmd.Flags().String("new-owner", "", "Transfer ownership to this email")
 	cmd.Flags().String("channel-name", "", "Update the platform channel name")
 	cmd.Flags().String("status", "", "Set enclave status (active|frozen)")
+	cmd.Flags().String("quota", "", "Update resource quota preset (small|medium|large)")
 	return cmd
 }
 
@@ -278,9 +279,10 @@ func runEnclaveSync(cmd *cobra.Command, args []string) error {
 	newOwner, _ := cmd.Flags().GetString("new-owner")
 	channelName, _ := cmd.Flags().GetString("channel-name")
 	status, _ := cmd.Flags().GetString("status")
+	quota, _ := cmd.Flags().GetString("quota")
 
-	if addRaw == "" && removeRaw == "" && newOwner == "" && channelName == "" && status == "" {
-		return errors.New("at least one of --add-members, --remove-members, --new-owner, --channel-name, or --status must be specified")
+	if addRaw == "" && removeRaw == "" && newOwner == "" && channelName == "" && status == "" && quota == "" {
+		return errors.New("at least one of --add-members, --remove-members, --new-owner, --channel-name, --status, or --quota must be specified")
 	}
 
 	addMembers := splitEmails(addRaw)
@@ -292,12 +294,13 @@ func runEnclaveSync(cmd *cobra.Command, args []string) error {
 	}
 
 	params := mcp.EnclaveSyncParams{
-		Name:          name,
-		AddMembers:    addMembers,
-		RemoveMembers: removeMembers,
-		NewOwner:      newOwner,
-		ChannelName:   channelName,
-		Status:        status,
+		Name:           name,
+		AddMembers:     addMembers,
+		RemoveMembers:  removeMembers,
+		NewOwner:       newOwner,
+		ChannelName:    channelName,
+		Status:         status,
+		NewQuotaPreset: quota,
 	}
 
 	result, err := mcpClient.EnclaveSync(cmd.Context(), params)
