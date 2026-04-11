@@ -50,7 +50,7 @@ export function clearModuleCache(): void {
  * Returns a map of nodeId → NodeFunction.
  */
 export async function loadAllNodes(
-  nodes: Record<string, { path: string }>,
+  nodes: Record<string, { path: string; [key: string]: unknown }>,
   workflowDir: string,
   bustCache = false,
 ): Promise<Map<string, NodeFunction>> {

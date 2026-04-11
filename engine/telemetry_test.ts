@@ -233,7 +233,7 @@ Deno.test("NewTelemetrySink: unknown kind defaults to BasicSink", () => {
 // --- SimpleExecutor telemetry integration ---
 
 function makeSpec(
-  nodes: Record<string, { path: string }>,
+  nodes: Record<string, { path: string; description: string }>,
   edges: { from: string; to: string }[],
 ): WorkflowSpec {
   return {
@@ -246,7 +246,7 @@ function makeSpec(
 }
 
 Deno.test("SimpleExecutor: records node-start and node-complete on success", async () => {
-  const spec = makeSpec({ a: { path: "./a.ts" } }, []);
+  const spec = makeSpec({ a: { path: "./a.ts", description: "Test node" } }, []);
   const graph = compile(spec);
   const ctx = createMockContext();
   const sink = new BasicSink();
@@ -269,7 +269,7 @@ Deno.test("SimpleExecutor: records node-start and node-complete on success", asy
 });
 
 Deno.test("SimpleExecutor: records node-start and node-error on failure", async () => {
-  const spec = makeSpec({ a: { path: "./a.ts" } }, []);
+  const spec = makeSpec({ a: { path: "./a.ts", description: "Test node" } }, []);
   const graph = compile(spec);
   const ctx = createMockContext();
   const sink = new BasicSink();
@@ -293,7 +293,7 @@ Deno.test("SimpleExecutor: records node-start and node-error on failure", async 
 });
 
 Deno.test("SimpleExecutor: node events include node name in metadata", async () => {
-  const spec = makeSpec({ mynode: { path: "./mynode.ts" } }, []);
+  const spec = makeSpec({ mynode: { path: "./mynode.ts", description: "Test node" } }, []);
   const graph = compile(spec);
   const ctx = createMockContext();
   const sink = new BasicSink();
@@ -315,7 +315,7 @@ Deno.test("SimpleExecutor: node events include node name in metadata", async () 
 
 Deno.test("SimpleExecutor: records events for multiple nodes across stages", async () => {
   const spec = makeSpec(
-    { a: { path: "./a.ts" }, b: { path: "./b.ts" } },
+    { a: { path: "./a.ts", description: "Test node" }, b: { path: "./b.ts", description: "Test node" } },
     [{ from: "a", to: "b" }],
   );
   const graph = compile(spec);
@@ -337,7 +337,7 @@ Deno.test("SimpleExecutor: records events for multiple nodes across stages", asy
 });
 
 Deno.test("SimpleExecutor: uptimeMs is non-negative after execution", async () => {
-  const spec = makeSpec({ a: { path: "./a.ts" } }, []);
+  const spec = makeSpec({ a: { path: "./a.ts", description: "Test node" } }, []);
   const graph = compile(spec);
   const ctx = createMockContext();
   const sink = new BasicSink();

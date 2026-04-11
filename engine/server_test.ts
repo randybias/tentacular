@@ -11,7 +11,7 @@ function makeSpec(): WorkflowSpec {
     name: "test",
     version: "1.0",
     triggers: [{ type: "manual" }],
-    nodes: { a: { path: "./a.ts" } },
+    nodes: { a: { path: "./a.ts", description: "Test node" } },
     edges: [],
   };
 }
