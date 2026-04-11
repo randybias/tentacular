@@ -383,6 +383,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies:
@@ -429,6 +430,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies:
@@ -458,6 +460,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 `
 	required, err := scanContractSecrets([]byte(yamlContent))
 	if err != nil {
@@ -489,6 +492,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies:

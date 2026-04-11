@@ -14,8 +14,10 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
   transform:
     path: ./nodes/transform.ts
+    description: "Test node"
 edges:
   - from: fetch
     to: transform
@@ -37,6 +39,32 @@ config:
 	}
 }
 
+func TestParseNodeMissingDescription(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+edges: []
+`
+	_, errs := Parse([]byte(yaml))
+	if len(errs) == 0 {
+		t.Fatal("expected error for node missing description")
+	}
+	found := false
+	for _, e := range errs {
+		if strings.Contains(e, "description is required") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("expected 'description is required' error, got: %v", errs)
+	}
+}
+
 func TestParseMissingName(t *testing.T) {
 	yaml := `
 version: "1.0"
@@ -45,6 +73,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 `
 	_, errs := Parse([]byte(yaml))
@@ -71,6 +100,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 `
 	_, errs := Parse([]byte(yaml))
@@ -88,10 +118,13 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
   b:
     path: ./b.ts
+    description: "Test node"
   c:
     path: ./c.ts
+    description: "Test node"
 edges:
   - from: a
     to: b
@@ -124,6 +157,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges:
   - from: a
     to: nonexistent
@@ -143,6 +177,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 config:
   timeout: 30s
@@ -236,6 +271,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 `
 	wf, errs := Parse([]byte(yaml))
@@ -264,6 +300,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 `
 	_, errs := Parse([]byte(yaml))
@@ -292,6 +329,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 `
 	_, errs := Parse([]byte(yaml))
@@ -319,6 +357,7 @@ triggers:
 nodes:
   handler:
     path: ./nodes/handler.ts
+    description: "Test node"
 edges: []
 `
 	wf, errs := Parse([]byte(yaml))
@@ -342,6 +381,7 @@ triggers:
 nodes:
   handler:
     path: ./nodes/handler.ts
+    description: "Test node"
 edges: []
 `
 	_, errs := Parse([]byte(yaml))
@@ -368,6 +408,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 `
 	_, errs := Parse([]byte(yaml))
@@ -385,6 +426,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 deployment:
   namespace: pd-custom-ns
@@ -407,6 +449,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 `
 	wf, errs := Parse([]byte(yaml))
@@ -427,6 +470,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -473,6 +517,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -515,6 +560,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -546,6 +592,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   dependencies:
@@ -579,6 +626,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   dependencies:
@@ -618,6 +666,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 `
 	wf, errs := Parse([]byte(yaml))
@@ -639,6 +688,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -673,6 +723,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -704,6 +755,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -765,6 +817,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -801,6 +854,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -835,6 +889,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -901,6 +956,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -942,6 +998,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -1099,6 +1156,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -1128,6 +1186,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 ` + extra
 }
 

@@ -32,6 +32,7 @@ config:
 nodes:
   probe-endpoints:
     path: ./nodes/probe-endpoints.ts
+    description: "Test node"
 `
 
 // parseReferenceDoc parses referenceWorkflowYAML and returns the root mapping node.

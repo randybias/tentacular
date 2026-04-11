@@ -22,12 +22,16 @@ triggers:
 nodes:
   fetch-feeds:
     path: ./nodes/fetch-feeds.ts
+    description: "Test node"
   filter-24h:
     path: ./nodes/filter-24h.ts
+    description: "Test node"
   summarize-llm:
     path: ./nodes/summarize-llm.ts
+    description: "Test node"
   notify-slack:
     path: ./nodes/notify-slack.ts
+    description: "Test node"
 
 edges:
   - from: fetch-feeds
@@ -216,10 +220,13 @@ triggers:
 nodes:
   fetch-repos:
     path: ./nodes/fetch-repos.ts
+    description: "Test node"
   summarize:
     path: ./nodes/summarize.ts
+    description: "Test node"
   notify:
     path: ./nodes/notify.ts
+    description: "Test node"
 
 edges:
   - from: fetch-repos
@@ -312,6 +319,7 @@ triggers:
 nodes:
   count:
     path: ./nodes/count.ts
+    description: "Test node"
 
 edges: []
 `
@@ -354,8 +362,10 @@ triggers:
 nodes:
   handle:
     path: ./nodes/handle.ts
+    description: "Test node"
   process:
     path: ./nodes/process.ts
+    description: "Test node"
 
 edges:
   - from: handle

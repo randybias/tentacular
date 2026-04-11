@@ -152,6 +152,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 `), 0o644)
 
 	cmd := NewBuildCmd()

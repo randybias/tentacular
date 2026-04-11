@@ -64,6 +64,7 @@ export interface Trigger {
 
 export interface NodeSpec {
   path: string;
+  description: string;
   capabilities?: Record<string, string>;
 }
 

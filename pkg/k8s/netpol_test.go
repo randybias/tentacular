@@ -589,8 +589,10 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
   process:
     path: ./nodes/process.ts
+    description: "Test node"
 
 edges:
   - from: fetch

@@ -103,6 +103,9 @@ func Parse(data []byte) (*Workflow, []string) {
 		if node.Path == "" {
 			errs = append(errs, fmt.Sprintf("node %q: path is required", name))
 		}
+		if node.Description == "" {
+			errs = append(errs, fmt.Sprintf("node %q: description is required", name))
+		}
 	}
 
 	// Edges — reference integrity
