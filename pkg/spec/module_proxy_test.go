@@ -15,6 +15,7 @@ triggers:
 nodes:
   step1:
     path: nodes/step1.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -62,6 +63,7 @@ triggers:
 nodes:
   step1:
     path: nodes/step1.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"

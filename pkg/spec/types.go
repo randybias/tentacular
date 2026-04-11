@@ -41,6 +41,7 @@ type Trigger struct {
 
 type NodeSpec struct {
 	Capabilities map[string]string `yaml:"capabilities,omitempty"`
+	Description  string            `yaml:"description"`
 	Path         string            `yaml:"path"`
 }
 

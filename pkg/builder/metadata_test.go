@@ -541,6 +541,25 @@ func TestGenerateMetadataConfigMapAllKeys(t *testing.T) {
 	}
 }
 
+// TestGenerateMetadataConfigMapIncludesNodeDescriptions verifies that the
+// node_descriptions key is written to the ConfigMap when nodes have descriptions.
+func TestGenerateMetadataConfigMapIncludesNodeDescriptions(t *testing.T) {
+	bundle := &MetadataBundle{
+		Annotations:      make(map[string]string),
+		NodeDescriptions: `[{"name":"analyze","description":"Runs LLM analysis"},{"name":"fetch","description":"Fetches data"}]`,
+	}
+	m, err := GenerateMetadataConfigMap("test-wf", "ns", bundle)
+	if err != nil {
+		t.Fatalf("GenerateMetadataConfigMap failed: %v", err)
+	}
+	if !strings.Contains(m.Content, "node_descriptions:") {
+		t.Error("expected ConfigMap to contain node_descriptions key")
+	}
+	if !strings.Contains(m.Content, "Runs LLM analysis") {
+		t.Error("expected node_descriptions to contain node description text")
+	}
+}
+
 func TestGenerateMetadataConfigMapEmptyBundle(t *testing.T) {
 	bundle := &MetadataBundle{}
 	cm, err := GenerateMetadataConfigMap("empty-wf", "ns", bundle)

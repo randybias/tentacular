@@ -221,6 +221,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 metadata:
   group: platform-team
@@ -255,6 +256,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 metadata:
   owner: old-owner
@@ -288,6 +290,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 `
 	wf, errs := spec.Parse([]byte(yamlContent))
@@ -308,6 +311,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 edges: []
 metadata:
   group: team-a

@@ -27,6 +27,7 @@ triggers:
 nodes:
   handler:
     path: ./handler.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies: {}
@@ -80,6 +81,7 @@ triggers:
 nodes:
   handler:
     path: ./handler.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies:
@@ -152,6 +154,7 @@ triggers:
 nodes:
   handler:
     path: ./handler.ts
+    description: "Test node"
 `
 	dir := t.TempDir()
 	workflowPath := filepath.Join(dir, "workflow.yaml")

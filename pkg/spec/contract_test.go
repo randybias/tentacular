@@ -16,6 +16,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -42,6 +43,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -111,6 +113,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -146,6 +149,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -181,6 +185,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -232,6 +237,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -281,6 +287,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -313,6 +320,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -345,6 +353,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -378,6 +387,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -411,6 +421,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -443,6 +454,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -478,6 +490,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -520,6 +533,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 edges: []
 contract:
   version: "1"
@@ -556,6 +570,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies:
@@ -578,6 +593,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -595,6 +611,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -612,6 +629,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -647,6 +665,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -665,6 +684,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -683,6 +703,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -701,6 +722,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -741,6 +763,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -770,6 +793,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -803,6 +827,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies:
@@ -840,6 +865,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -866,6 +892,7 @@ triggers:
 nodes:
   a:
     path: ./a.ts
+    description: "Test node"
 contract:
   version: "1"
   networkPolicy:
@@ -907,6 +934,7 @@ triggers:
 nodes:
   check:
     path: ./check.ts
+    description: "Test node"
 contract:
   version: "1"
   dependencies:

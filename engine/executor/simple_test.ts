@@ -20,7 +20,7 @@ function makeRunner(handlers: Record<string, (input: unknown) => unknown>): Node
 }
 
 function makeSpec(
-  nodes: Record<string, { path: string }>,
+  nodes: Record<string, { path: string; description: string }>,
   edges: { from: string; to: string }[],
 ): WorkflowSpec {
   return {
@@ -33,7 +33,7 @@ function makeSpec(
 }
 
 Deno.test("SimpleExecutor: single node", async () => {
-  const spec = makeSpec({ a: { path: "./a.ts" } }, []);
+  const spec = makeSpec({ a: { path: "./a.ts", description: "Test node" } }, []);
   const graph = compile(spec);
   const ctx = createMockContext();
 
@@ -50,7 +50,10 @@ Deno.test("SimpleExecutor: single node", async () => {
 
 Deno.test("SimpleExecutor: linear chain passes data", async () => {
   const spec = makeSpec(
-    { a: { path: "./a.ts" }, b: { path: "./b.ts" } },
+    {
+      a: { path: "./a.ts", description: "Test node" },
+      b: { path: "./b.ts", description: "Test node" },
+    },
     [{ from: "a", to: "b" }],
   );
   const graph = compile(spec);
@@ -70,7 +73,10 @@ Deno.test("SimpleExecutor: linear chain passes data", async () => {
 
 Deno.test("SimpleExecutor: node failure stops execution", async () => {
   const spec = makeSpec(
-    { a: { path: "./a.ts" }, b: { path: "./b.ts" } },
+    {
+      a: { path: "./a.ts", description: "Test node" },
+      b: { path: "./b.ts", description: "Test node" },
+    },
     [{ from: "a", to: "b" }],
   );
   const graph = compile(spec);
@@ -94,9 +100,9 @@ Deno.test("SimpleExecutor: node failure stops execution", async () => {
 Deno.test("SimpleExecutor: parallel nodes in same stage", async () => {
   const spec = makeSpec(
     {
-      a: { path: "./a.ts" },
-      b: { path: "./b.ts" },
-      c: { path: "./c.ts" },
+      a: { path: "./a.ts", description: "Test node" },
+      b: { path: "./b.ts", description: "Test node" },
+      c: { path: "./c.ts", description: "Test node" },
     },
     [
       { from: "a", to: "b" },
@@ -125,7 +131,7 @@ Deno.test("SimpleExecutor: parallel nodes in same stage", async () => {
 });
 
 Deno.test("SimpleExecutor: retry with exponential backoff", async () => {
-  const spec = makeSpec({ a: { path: "./a.ts" } }, []);
+  const spec = makeSpec({ a: { path: "./a.ts", description: "Test node" } }, []);
   const graph = compile(spec);
   const ctx = createMockContext();
 
@@ -147,7 +153,7 @@ Deno.test("SimpleExecutor: retry with exponential backoff", async () => {
 });
 
 Deno.test("SimpleExecutor: retry exhausted returns failure", async () => {
-  const spec = makeSpec({ a: { path: "./a.ts" } }, []);
+  const spec = makeSpec({ a: { path: "./a.ts", description: "Test node" } }, []);
   const graph = compile(spec);
   const ctx = createMockContext();
 
@@ -172,7 +178,7 @@ Deno.test({
   sanitizeOps: false,
   sanitizeResources: false,
   fn: async () => {
-    const spec = makeSpec({ a: { path: "./a.ts" } }, []);
+    const spec = makeSpec({ a: { path: "./a.ts", description: "Test node" } }, []);
     const graph = compile(spec);
     const ctx = createMockContext();
 

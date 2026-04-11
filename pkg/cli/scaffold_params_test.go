@@ -61,6 +61,7 @@ config:
 nodes:
   probe:
     path: ./nodes/probe.ts
+    description: "Test node"
 `
 
 const paramsTestWorkflowExampleYAML = `name: my-tentacle
@@ -77,6 +78,7 @@ config:
 nodes:
   probe:
     path: ./nodes/probe.ts
+    description: "Test node"
 `
 
 const paramsTestSchemaYAML = `version: "1"

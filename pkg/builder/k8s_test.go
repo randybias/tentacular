@@ -482,6 +482,7 @@ triggers:
 nodes:
   fetch:
     path: ./nodes/fetch.ts
+    description: "Test node"
 `
 	if err := os.WriteFile(filepath.Join(tmpDir, "workflow.yaml"), []byte(workflowContent), 0o644); err != nil {
 		t.Fatal(err)

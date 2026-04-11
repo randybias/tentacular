@@ -7,7 +7,7 @@ function makeSpec(overrides: Partial<WorkflowSpec> = {}): WorkflowSpec {
     name: "test",
     version: "1.0",
     triggers: [{ type: "manual" }],
-    nodes: { a: { path: "./a.ts" } },
+    nodes: { a: { path: "./a.ts", description: "Test node" } },
     edges: [],
     ...overrides,
   };
@@ -24,9 +24,9 @@ Deno.test("compile: linear chain a→b→c", () => {
   const graph = compile(
     makeSpec({
       nodes: {
-        a: { path: "./a.ts" },
-        b: { path: "./b.ts" },
-        c: { path: "./c.ts" },
+        a: { path: "./a.ts", description: "Test node" },
+        b: { path: "./b.ts", description: "Test node" },
+        c: { path: "./c.ts", description: "Test node" },
       },
       edges: [
         { from: "a", to: "b" },
@@ -45,9 +45,9 @@ Deno.test("compile: fan-out a→b, a→c", () => {
   const graph = compile(
     makeSpec({
       nodes: {
-        a: { path: "./a.ts" },
-        b: { path: "./b.ts" },
-        c: { path: "./c.ts" },
+        a: { path: "./a.ts", description: "Test node" },
+        b: { path: "./b.ts", description: "Test node" },
+        c: { path: "./c.ts", description: "Test node" },
       },
       edges: [
         { from: "a", to: "b" },
@@ -66,10 +66,10 @@ Deno.test("compile: fan-in b→d, c→d", () => {
   const graph = compile(
     makeSpec({
       nodes: {
-        a: { path: "./a.ts" },
-        b: { path: "./b.ts" },
-        c: { path: "./c.ts" },
-        d: { path: "./d.ts" },
+        a: { path: "./a.ts", description: "Test node" },
+        b: { path: "./b.ts", description: "Test node" },
+        c: { path: "./c.ts", description: "Test node" },
+        d: { path: "./d.ts", description: "Test node" },
       },
       edges: [
         { from: "a", to: "b" },
@@ -90,10 +90,10 @@ Deno.test("compile: diamond pattern", () => {
   const graph = compile(
     makeSpec({
       nodes: {
-        a: { path: "./a.ts" },
-        b: { path: "./b.ts" },
-        c: { path: "./c.ts" },
-        d: { path: "./d.ts" },
+        a: { path: "./a.ts", description: "Test node" },
+        b: { path: "./b.ts", description: "Test node" },
+        c: { path: "./c.ts", description: "Test node" },
+        d: { path: "./d.ts", description: "Test node" },
       },
       edges: [
         { from: "a", to: "b" },
@@ -115,8 +115,8 @@ Deno.test("compile: cycle throws error", () => {
       compile(
         makeSpec({
           nodes: {
-            a: { path: "./a.ts" },
-            b: { path: "./b.ts" },
+            a: { path: "./a.ts", description: "Test node" },
+            b: { path: "./b.ts", description: "Test node" },
           },
           edges: [
             { from: "a", to: "b" },
@@ -135,9 +135,9 @@ Deno.test("compile: indirect cycle throws error", () => {
       compile(
         makeSpec({
           nodes: {
-            a: { path: "./a.ts" },
-            b: { path: "./b.ts" },
-            c: { path: "./c.ts" },
+            a: { path: "./a.ts", description: "Test node" },
+            b: { path: "./b.ts", description: "Test node" },
+            c: { path: "./c.ts", description: "Test node" },
           },
           edges: [
             { from: "a", to: "b" },
@@ -156,7 +156,7 @@ Deno.test("compile: undefined node in edge throws error", () => {
     () =>
       compile(
         makeSpec({
-          nodes: { a: { path: "./a.ts" } },
+          nodes: { a: { path: "./a.ts", description: "Test node" } },
           edges: [{ from: "a", to: "nonexistent" }],
         }),
       ),
@@ -170,7 +170,7 @@ Deno.test("compile: self-loop throws error", () => {
     () =>
       compile(
         makeSpec({
-          nodes: { a: { path: "./a.ts" } },
+          nodes: { a: { path: "./a.ts", description: "Test node" } },
           edges: [{ from: "a", to: "a" }],
         }),
       ),

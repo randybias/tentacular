@@ -30,12 +30,13 @@ type GitProvenance struct {
 
 // MetadataBundle holds all metadata extracted from the tentacle directory.
 type MetadataBundle struct {
-	Annotations     map[string]string
-	GitProvenance   *GitProvenance
-	Readme          string
-	ContractSummary string
-	ParamsSchema    string
-	Prompts         string
+	Annotations      map[string]string
+	GitProvenance    *GitProvenance
+	Readme           string
+	ContractSummary  string
+	ParamsSchema     string
+	Prompts          string
+	NodeDescriptions string
 }
 
 // ReadMetadata reads all metadata files from the tentacle directory
@@ -48,6 +49,9 @@ func ReadMetadata(wf *spec.Workflow, tentacleDir string) *MetadataBundle {
 
 	// --- Tier 1: Structural metadata from workflow spec ---
 	buildTier1Annotations(bundle, wf)
+
+	// --- Tier 1: Node descriptions for ConfigMap and MCP tools ---
+	bundle.NodeDescriptions = nodeDescriptions(wf.Nodes)
 
 	// --- Tier 1: Version from git + workflow.yaml ---
 	version := deriveVersion(wf.Version, tentacleDir)
@@ -215,6 +219,12 @@ func GenerateMetadataConfigMap(name, namespace string, bundle *MetadataBundle) (
 			data["git_provenance"] = string(provJSON)
 		}
 	}
+	// node_descriptions: JSON array of [{name, description}] for each workflow node.
+	// Read by tentacular-mcp/pkg/tools/discover.go (wf_describe) and validated by
+	// tentacular-mcp/pkg/tools/deploy.go (wf_apply). Format: [{"name":"x","description":"y"}]
+	if bundle.NodeDescriptions != "" {
+		data["node_descriptions"] = bundle.NodeDescriptions
+	}
 
 	if len(data) == 0 {
 		return Manifest{}, nil // no metadata to store
@@ -334,6 +344,29 @@ func promptTemplateCounts(raw string) (prompts, templates int) {
 		return 0, 0
 	}
 	return len(doc.Prompts), len(doc.Templates)
+}
+
+// nodeDescriptions builds a sorted JSON array of {name, description} for all nodes.
+// Returns empty string if nodes is empty or marshaling fails.
+func nodeDescriptions(nodes map[string]spec.NodeSpec) string {
+	type nodeMeta struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	names := make([]string, 0, len(nodes))
+	for name := range nodes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	entries := make([]nodeMeta, 0, len(names))
+	for _, name := range names {
+		entries = append(entries, nodeMeta{Name: name, Description: nodes[name].Description})
+	}
+	data, err := json.Marshal(entries)
+	if err != nil {
+		return ""
+	}
+	return string(data)
 }
 
 // truncateIfNeeded truncates value to maxBytes, appending a [truncated] marker.

@@ -29,6 +29,7 @@ triggers:
 nodes:
   handler:
     path: ./handler.ts
+    description: "Test node"
 `
 
 // contractWorkflowYAML includes a contract section with two dependencies.
@@ -47,8 +48,10 @@ triggers:
 nodes:
   fetch:
     path: ./fetch.ts
+    description: "Test node"
   store:
     path: ./store.ts
+    description: "Test node"
 edges:
   - from: fetch
     to: store
