@@ -50,7 +50,10 @@ Deno.test("SimpleExecutor: single node", async () => {
 
 Deno.test("SimpleExecutor: linear chain passes data", async () => {
   const spec = makeSpec(
-    { a: { path: "./a.ts", description: "Test node" }, b: { path: "./b.ts", description: "Test node" } },
+    {
+      a: { path: "./a.ts", description: "Test node" },
+      b: { path: "./b.ts", description: "Test node" },
+    },
     [{ from: "a", to: "b" }],
   );
   const graph = compile(spec);
@@ -70,7 +73,10 @@ Deno.test("SimpleExecutor: linear chain passes data", async () => {
 
 Deno.test("SimpleExecutor: node failure stops execution", async () => {
   const spec = makeSpec(
-    { a: { path: "./a.ts", description: "Test node" }, b: { path: "./b.ts", description: "Test node" } },
+    {
+      a: { path: "./a.ts", description: "Test node" },
+      b: { path: "./b.ts", description: "Test node" },
+    },
     [{ from: "a", to: "b" }],
   );
   const graph = compile(spec);

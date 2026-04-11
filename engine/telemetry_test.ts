@@ -315,7 +315,10 @@ Deno.test("SimpleExecutor: node events include node name in metadata", async () 
 
 Deno.test("SimpleExecutor: records events for multiple nodes across stages", async () => {
   const spec = makeSpec(
-    { a: { path: "./a.ts", description: "Test node" }, b: { path: "./b.ts", description: "Test node" } },
+    {
+      a: { path: "./a.ts", description: "Test node" },
+      b: { path: "./b.ts", description: "Test node" },
+    },
     [{ from: "a", to: "b" }],
   );
   const graph = compile(spec);
