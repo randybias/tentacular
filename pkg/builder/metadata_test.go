@@ -742,6 +742,79 @@ func TestGenerateMetadataConfigMapIncludesPrompts(t *testing.T) {
 	}
 }
 
+func TestReadMetadataPromptsWithNodesStoredVerbatim(t *testing.T) {
+	dir := t.TempDir()
+	content := `version: "1"
+nodes:
+  - name: fetch-data
+    description: "Fetches data from external API"
+  - name: analyze
+    description: "Runs LLM analysis"
+prompts:
+  - node: analyze
+    name: data-analysis
+    model: claude-3-haiku
+`
+	if err := os.WriteFile(filepath.Join(dir, "prompts.yaml"), []byte(content), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	wf := &spec.Workflow{Name: "nodes-wf", Version: "1.0.0"}
+	bundle := ReadMetadata(wf, dir)
+
+	if bundle.Prompts == "" {
+		t.Fatal("expected prompts to be populated")
+	}
+	// The raw YAML must be stored verbatim, including the nodes section
+	if !strings.Contains(bundle.Prompts, "nodes:") {
+		t.Error("expected raw prompts to contain 'nodes:' section")
+	}
+	if !strings.Contains(bundle.Prompts, "fetch-data") {
+		t.Error("expected raw prompts to contain node name 'fetch-data'")
+	}
+	if !strings.Contains(bundle.Prompts, "Fetches data from external API") {
+		t.Error("expected raw prompts to contain node description")
+	}
+	if !strings.Contains(bundle.Prompts, "analyze") {
+		t.Error("expected raw prompts to contain node name 'analyze'")
+	}
+	if !strings.Contains(bundle.Prompts, "Runs LLM analysis") {
+		t.Error("expected raw prompts to contain second node description")
+	}
+	// Verify prompts section is also present
+	if !strings.Contains(bundle.Prompts, "prompts:") {
+		t.Error("expected raw prompts to contain 'prompts:' section")
+	}
+}
+
+func TestPromptTemplateCountsIgnoresNodesSection(t *testing.T) {
+	raw := `version: "1"
+nodes:
+  - name: fetch-data
+    description: "Fetches data from external API"
+  - name: analyze
+    description: "Runs LLM analysis"
+prompts:
+  - node: analyze
+    name: data-analysis
+    model: claude-3-haiku
+  - node: fetch-data
+    name: fetch-prompt
+    model: claude-3-haiku
+templates:
+  - node: report
+    name: report-template
+    format: markdown
+    template: "# {{title}}"
+`
+	pc, tc := promptTemplateCounts(raw)
+	if pc != 2 {
+		t.Errorf("expected 2 prompts, got %d", pc)
+	}
+	if tc != 1 {
+		t.Errorf("expected 1 template, got %d", tc)
+	}
+}
+
 func TestTruncateIfNeededUnderLimit(t *testing.T) {
 	v := "hello world"
 	result := truncateIfNeeded(v, 100)
