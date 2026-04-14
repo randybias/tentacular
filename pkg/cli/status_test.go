@@ -14,7 +14,7 @@ import (
 func TestStatusCmd_BasicOutput(t *testing.T) {
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
-		"namespace": "staging",
+		"enclave":   "staging",
 		"version":   "v1.2.0",
 		"ready":     true,
 		"replicas":  3,
@@ -32,7 +32,7 @@ func TestStatusCmd_BasicOutput(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewStatusCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	cmd.SetContext(context.Background())
@@ -73,7 +73,7 @@ func TestStatusCmd_BasicOutput(t *testing.T) {
 func TestStatusCmd_NotReady(t *testing.T) {
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
-		"namespace": "default",
+		"enclave":   "default",
 		"ready":     false,
 		"replicas":  2,
 		"available": 1,
@@ -90,7 +90,7 @@ func TestStatusCmd_NotReady(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewStatusCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	cmd.SetContext(context.Background())
@@ -122,7 +122,7 @@ func TestStatusCmd_NotReady(t *testing.T) {
 func TestStatusCmd_DetailMode(t *testing.T) {
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
-		"namespace": "prod",
+		"enclave":   "prod",
 		"ready":     true,
 		"replicas":  2,
 		"available": 2,
@@ -147,7 +147,7 @@ func TestStatusCmd_DetailMode(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewStatusCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	_ = cmd.Flags().Set("detail", "true")
@@ -192,7 +192,7 @@ func TestStatusCmd_DetailMode(t *testing.T) {
 func TestStatusCmd_JSONOutput(t *testing.T) {
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "json-app",
-		"namespace": "default",
+		"enclave":   "default",
 		"ready":     true,
 		"replicas":  1,
 		"available": 1,
@@ -209,7 +209,7 @@ func TestStatusCmd_JSONOutput(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewStatusCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.Flags().StringP("output", "o", "", "Output format")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	_ = cmd.Flags().Set("output", "json")
@@ -254,7 +254,7 @@ func TestStatusCmd_ToolError(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewStatusCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	cmd.SetContext(context.Background())

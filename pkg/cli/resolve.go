@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -29,7 +28,7 @@ func flagString(cmd *cobra.Command, name string) string {
 // 3. global config namespace
 // 4. "default"
 func resolveNamespace(cmd *cobra.Command, workflowDir string) string {
-	envName := flagString(cmd, "env")
+	clusterName := flagString(cmd, "cluster")
 
 	// Try workflow.yaml deployment.namespace first
 	if workflowDir != "" {
@@ -39,7 +38,7 @@ func resolveNamespace(cmd *cobra.Command, workflowDir string) string {
 	}
 
 	// Try env config namespace
-	env, err := ResolveEnvironment(envName)
+	env, err := ResolveEnvironment(clusterName)
 	if err == nil && env.Namespace != "" {
 		return env.Namespace
 	}
@@ -73,38 +72,38 @@ func readWorkflowNamespace(workflowDir string) string {
 }
 
 // resolveMCPClient attempts to create an MCP client using the per-env resolution cascade:
-// 1. OIDC token (from `tntc login`) -- preferred when available and not expired
-// 2. Active environment's mcp_endpoint / mcp_token_path (--env > TENTACULAR_ENV > default_env)
-// 3. Global mcp.endpoint / mcp.token_path from config files
-// 4. TNTC_MCP_ENDPOINT / TNTC_MCP_TOKEN environment variables
+// 1. OIDC token (from `tntc login` or TNTC_ACCESS_TOKEN env var)
+// 2. Active cluster's mcp_endpoint (--cluster > TENTACULAR_CLUSTER > default_cluster)
+// 3. Global mcp.endpoint from config files
+// 4. TNTC_MCP_ENDPOINT environment variable
 //
 // Returns (client, nil) if MCP is configured and available.
 // Returns (nil, nil) if no MCP configuration is found.
 // Returns (nil, err) if configuration is invalid.
 func resolveMCPClient(cmd *cobra.Command) (*mcp.Client, error) {
 	// Determine active environment name
-	envName := ""
+	clusterName := ""
 	if cmd != nil {
-		if f := cmd.Flag("env"); f != nil {
-			envName = f.Value.String()
+		if f := cmd.Flag("cluster"); f != nil {
+			clusterName = f.Value.String()
 		}
 	}
-	if envName == "" {
-		envName = os.Getenv("TENTACULAR_ENV")
+	if clusterName == "" {
+		clusterName = os.Getenv("TENTACULAR_CLUSTER")
 	}
 	cfg := LoadConfig()
-	if envName == "" {
-		envName = cfg.DefaultEnv
+	if clusterName == "" {
+		clusterName = cfg.DefaultCluster
 	}
 
 	// Resolve the MCP endpoint first (needed regardless of auth method)
-	endpoint := resolveEndpoint(envName, cfg)
+	endpoint := resolveEndpoint(clusterName, cfg)
 	if endpoint == "" {
 		return nil, nil
 	}
 
 	// Try OIDC token first (from `tntc login`)
-	oidcToken, err := resolveOIDCToken(envName)
+	oidcToken, err := resolveOIDCToken(clusterName)
 	if err != nil {
 		// OIDC was configured but failed (expired, refresh error, etc.).
 		// Do NOT fall back to bearer token — that would silently escalate
@@ -115,18 +114,14 @@ func resolveMCPClient(cmd *cobra.Command) (*mcp.Client, error) {
 		return mcp.NewClient(mcp.Config{Endpoint: endpoint, Token: oidcToken}), nil
 	}
 
-	// No OIDC configured — use static bearer token (admin/bootstrap mode)
-	token, err := resolveStaticToken(envName, cfg)
-	if err != nil {
-		return nil, err
-	}
-	return mcp.NewClient(mcp.Config{Endpoint: endpoint, Token: token}), nil
+	// No OIDC token available — connect without auth (server may reject)
+	return mcp.NewClient(mcp.Config{Endpoint: endpoint}), nil
 }
 
 // resolveEndpoint determines the MCP endpoint from env config, global config, or env vars.
-func resolveEndpoint(envName string, cfg TentacularConfig) string {
-	if envName != "" {
-		if env, ok := cfg.Environments[envName]; ok && env.MCPEndpoint != "" {
+func resolveEndpoint(clusterName string, cfg TentacularConfig) string {
+	if clusterName != "" {
+		if env, ok := cfg.Clusters[clusterName]; ok && env.MCPEndpoint != "" {
 			return env.MCPEndpoint
 		}
 	}
@@ -146,7 +141,7 @@ func resolveEndpoint(envName string, cfg TentacularConfig) string {
 //  1. TNTC_ACCESS_TOKEN env var (transitive trust: orchestrators inject the user's token)
 //  2. Cached token on disk (~/.tentacular/tokens/<env>.json)
 //  3. Refresh expired cached token using refresh_token
-func resolveOIDCToken(envName string) (string, error) {
+func resolveOIDCToken(clusterName string) (string, error) {
 	// 1. Environment variable override (transitive trust for multi-tenant orchestrators).
 	// When The Kraken or another orchestrator acts on behalf of a user, it injects
 	// the user's OIDC access token here. This skips device flow entirely.
@@ -159,7 +154,7 @@ func resolveOIDCToken(envName string) (string, error) {
 		if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
 			// Token expired -- try refresh via env var if available.
 			if refreshToken := os.Getenv("TNTC_REFRESH_TOKEN"); refreshToken != "" {
-				refreshed, refreshErr := refreshWithToken(envName, injected, refreshToken)
+				refreshed, refreshErr := refreshWithToken(clusterName, injected, refreshToken)
 				if refreshErr != nil {
 					return "", fmt.Errorf("TNTC_ACCESS_TOKEN expired and refresh failed: %w", refreshErr)
 				}
@@ -171,7 +166,7 @@ func resolveOIDCToken(envName string) (string, error) {
 	}
 
 	// 2. Cached token on disk.
-	tokenEnv := envName
+	tokenEnv := clusterName
 	if tokenEnv == "" {
 		tokenEnv = "default"
 	}
@@ -202,8 +197,8 @@ func resolveOIDCToken(envName string) (string, error) {
 
 // refreshWithToken attempts to refresh an expired access token using the provided refresh token.
 // Used when tokens are injected via environment variables (transitive trust).
-func refreshWithToken(envName, accessToken, refreshToken string) (string, error) {
-	tokenEnv := envName
+func refreshWithToken(clusterName, accessToken, refreshToken string) (string, error) {
+	tokenEnv := clusterName
 	if tokenEnv == "" {
 		tokenEnv = "default"
 	}
@@ -221,48 +216,6 @@ func refreshWithToken(envName, accessToken, refreshToken string) (string, error)
 	return refreshed.AccessToken, nil
 }
 
-// resolveStaticToken resolves a static bearer token from env config, global config, or env vars.
-func resolveStaticToken(envName string, cfg TentacularConfig) (string, error) {
-	if envName != "" {
-		if env, ok := cfg.Environments[envName]; ok {
-			tokenPath := env.MCPTokenPath
-			if tokenPath != "" {
-				tokenPath = expandHome(tokenPath)
-				token, err := readTokenFile(tokenPath)
-				if err != nil {
-					return "", fmt.Errorf("reading MCP token for env %q: %w", envName, err)
-				}
-				return token, nil
-			}
-		}
-	}
-
-	// Global config token path
-	if cfg.MCP.TokenPath != "" {
-		token, err := readTokenFile(expandHome(cfg.MCP.TokenPath))
-		if err != nil {
-			return "", fmt.Errorf("reading MCP token: %w", err)
-		}
-		return token, nil
-	}
-
-	// Environment variable
-	if v := os.Getenv("TNTC_MCP_TOKEN"); v != "" {
-		return v, nil
-	}
-
-	return "", nil
-}
-
-// readTokenFile reads a bearer token from a file, trimming whitespace.
-func readTokenFile(path string) (string, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // path is a known config file
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(data)), nil
-}
-
 // requireMCPClient is like resolveMCPClient but returns an error if MCP is not configured.
 // Use this for commands that require MCP.
 func requireMCPClient(cmd *cobra.Command) (*mcp.Client, error) {
@@ -277,32 +230,26 @@ func requireMCPClient(cmd *cobra.Command) (*mcp.Client, error) {
 }
 
 // buildMCPClientForEnv creates an MCP client for a named environment,
-// using OIDC token (preferred), per-env mcp_token_path, or global config fallback.
-func buildMCPClientForEnv(envName string) (*mcp.Client, error) {
+// using OIDC token from `tntc login` or TNTC_ACCESS_TOKEN.
+func buildMCPClientForEnv(clusterName string) (*mcp.Client, error) {
 	cfg := LoadConfig()
 
-	endpoint := resolveEndpoint(envName, cfg)
+	endpoint := resolveEndpoint(clusterName, cfg)
 	if endpoint == "" {
-		return nil, fmt.Errorf("no MCP endpoint configured for environment %q; add mcp_endpoint to your config", envName)
+		return nil, fmt.Errorf("no MCP endpoint configured for cluster %q; add mcp_endpoint to your config", clusterName)
 	}
 
-	// Try OIDC token first
-	oidcToken, err := resolveOIDCToken(envName)
+	// Use OIDC token for authentication
+	oidcToken, err := resolveOIDCToken(clusterName)
 	if err != nil {
-		// OIDC configured but failed — hard error, no silent escalation to bearer token.
 		return nil, fmt.Errorf("OIDC token expired. Run `tntc login` to re-authenticate (detail: %w)", err)
 	}
 	if oidcToken != "" {
 		return mcp.NewClient(mcp.Config{Endpoint: endpoint, Token: oidcToken}), nil
 	}
 
-	// No OIDC configured — use static bearer token (admin/bootstrap mode)
-	token, err := resolveStaticToken(envName, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("resolving token for env %q: %w", envName, err)
-	}
-
-	return mcp.NewClient(mcp.Config{Endpoint: endpoint, Token: token}), nil
+	// No OIDC token available — connect without auth (server may reject)
+	return mcp.NewClient(mcp.Config{Endpoint: endpoint}), nil
 }
 
 // mcpErrorHint returns a user-friendly hint for common MCP errors.
@@ -311,7 +258,7 @@ func mcpErrorHint(err error) string {
 		return "MCP server unreachable; check with: kubectl get deploy -n tentacular-system"
 	}
 	if mcp.IsUnauthorized(err) {
-		return "MCP authentication failed; try 'tntc login' or check your mcp_token_path / TNTC_MCP_TOKEN"
+		return "MCP authentication failed; run 'tntc login' to re-authenticate"
 	}
 	if mcp.IsForbidden(err) {
 		return "MCP namespace guard rejected request; check namespace permissions"

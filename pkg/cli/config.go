@@ -21,8 +21,7 @@ type ModuleProxyConfig struct {
 
 // MCPConfig holds MCP server connection settings.
 type MCPConfig struct {
-	Endpoint  string `yaml:"endpoint,omitempty"`   // e.g. http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
-	TokenPath string `yaml:"token_path,omitempty"` // path to bearer token file
+	Endpoint string `yaml:"endpoint,omitempty"` // e.g. http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
 }
 
 // GitStateConfig configures the git-backed state repository for tentacle source and secrets.
@@ -33,17 +32,17 @@ type GitStateConfig struct {
 
 // TentacularConfig holds default configuration values.
 type TentacularConfig struct {
-	Environments map[string]EnvironmentConfig `yaml:"environments,omitempty"`
-	MCP          MCPConfig                    `yaml:"mcp,omitempty"`
-	Catalog      catalog.CatalogConfig        `yaml:"catalog,omitempty"`
-	Scaffold     scaffold.ClientConfig        `yaml:"scaffold,omitempty"`
-	GitState     GitStateConfig               `yaml:"git_state,omitempty"`
-	Workspace    string                       `yaml:"workspace,omitempty"`
-	Registry     string                       `yaml:"registry,omitempty"`
-	Namespace    string                       `yaml:"namespace,omitempty"`
-	RuntimeClass string                       `yaml:"runtime_class,omitempty"`
-	DefaultEnv   string                       `yaml:"default_env,omitempty"`
-	ModuleProxy  ModuleProxyConfig            `yaml:"moduleProxy,omitempty"`
+	Clusters       map[string]EnvironmentConfig `yaml:"clusters,omitempty"`
+	MCP            MCPConfig                    `yaml:"mcp,omitempty"`
+	Catalog        catalog.CatalogConfig        `yaml:"catalog,omitempty"`
+	Scaffold       scaffold.ClientConfig        `yaml:"scaffold,omitempty"`
+	GitState       GitStateConfig               `yaml:"git_state,omitempty"`
+	Workspace      string                       `yaml:"workspace,omitempty"`
+	Registry       string                       `yaml:"registry,omitempty"`
+	Namespace      string                       `yaml:"namespace,omitempty"`
+	RuntimeClass   string                       `yaml:"runtime_class,omitempty"`
+	DefaultCluster string                       `yaml:"default_cluster,omitempty"`
+	ModuleProxy    ModuleProxyConfig            `yaml:"moduleProxy,omitempty"`
 }
 
 // LoadConfig returns merged config: project > user > defaults.
@@ -84,21 +83,21 @@ func mergeConfig(base, override *TentacularConfig) {
 	if override.RuntimeClass != "" {
 		base.RuntimeClass = override.RuntimeClass
 	}
-	if override.DefaultEnv != "" {
-		base.DefaultEnv = override.DefaultEnv
+	if override.DefaultCluster != "" {
+		base.DefaultCluster = override.DefaultCluster
 	}
-	if len(override.Environments) > 0 {
-		if base.Environments == nil {
-			base.Environments = make(map[string]EnvironmentConfig)
+	if len(override.Clusters) > 0 {
+		if base.Clusters == nil {
+			base.Clusters = make(map[string]EnvironmentConfig)
 		}
-		for k, v := range override.Environments {
-			existing, ok := base.Environments[k]
+		for k, v := range override.Clusters {
+			existing, ok := base.Clusters[k]
 			if !ok {
-				base.Environments[k] = v
+				base.Clusters[k] = v
 				continue
 			}
 			mergeEnvConfig(&existing, &v)
-			base.Environments[k] = existing
+			base.Clusters[k] = existing
 		}
 	}
 	if override.ModuleProxy.Enabled {
@@ -124,9 +123,6 @@ func mergeConfig(base, override *TentacularConfig) {
 	}
 	if override.MCP.Endpoint != "" {
 		base.MCP.Endpoint = override.MCP.Endpoint
-	}
-	if override.MCP.TokenPath != "" {
-		base.MCP.TokenPath = override.MCP.TokenPath
 	}
 	if override.Catalog.URL != "" {
 		base.Catalog.URL = override.Catalog.URL
@@ -173,9 +169,6 @@ func mergeEnvConfig(base, override *EnvironmentConfig) {
 	}
 	if override.MCPEndpoint != "" {
 		base.MCPEndpoint = override.MCPEndpoint
-	}
-	if override.MCPTokenPath != "" {
-		base.MCPTokenPath = override.MCPTokenPath
 	}
 	if override.OIDCIssuer != "" {
 		base.OIDCIssuer = override.OIDCIssuer

@@ -69,7 +69,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("resolving path: %w", err)
 	}
 
-	envName := flagString(cmd, "env")
+	clusterName := flagString(cmd, "cluster")
 	imageFlagValue, _ := cmd.Flags().GetString("image")
 	clusterRegistry, _ := cmd.Flags().GetString("cluster-registry")
 	runtimeClass, _ := cmd.Flags().GetString("runtime-class")
@@ -92,10 +92,10 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	cfg := LoadConfig()
 
 	// Resolve --env: environment config provides namespace, runtime-class defaults.
-	if envName != "" {
-		env, envErr := cfg.LoadEnvironment(envName)
+	if clusterName != "" {
+		env, envErr := cfg.LoadEnvironment(clusterName)
 		if envErr != nil {
-			return fmt.Errorf("loading environment %q: %w", envName, envErr)
+			return fmt.Errorf("loading environment %q: %w", clusterName, envErr)
 		}
 		if !cmd.Flags().Changed("runtime-class") && env.RuntimeClass != "" {
 			runtimeClass = env.RuntimeClass
@@ -149,7 +149,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Namespace cascade (pre-MCP): workflow.yaml > env config > global config > "default"
 	// --enclave override is applied after MCP client is available.
 	namespace := resolveNamespace(cmd, absDir)
-	if !cmd.Flags().Changed("runtime-class") && envName == "" && cfg.RuntimeClass != "" {
+	if !cmd.Flags().Changed("runtime-class") && clusterName == "" && cfg.RuntimeClass != "" {
 		runtimeClass = cfg.RuntimeClass
 	}
 

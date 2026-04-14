@@ -57,7 +57,7 @@ func TestWfRemove_WithoutExoCleanup(t *testing.T) {
 func TestWfDescribe_FullResponse(t *testing.T) {
 	h := makeToolServer(t, "wf_describe", map[string]any{
 		"name":      "my-wf",
-		"namespace": "staging",
+		"enclave":   "staging",
 		"ready":     true,
 		"replicas":  2,
 		"available": 2,
@@ -97,7 +97,7 @@ func TestWfDescribe_FullResponse(t *testing.T) {
 func TestWfDescribe_MinimalResponse(t *testing.T) {
 	h := makeToolServer(t, "wf_describe", map[string]any{
 		"name":      "bare-wf",
-		"namespace": "default",
+		"enclave":   "default",
 		"ready":     false,
 		"replicas":  1,
 		"available": 0,

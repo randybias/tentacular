@@ -11,7 +11,7 @@ import (
 
 // WfApplyParams are the arguments for the wf_apply MCP tool.
 type WfApplyParams struct {
-	Namespace string           `json:"namespace"`
+	Namespace string           `json:"enclave"`
 	Name      string           `json:"name"`
 	Manifests []map[string]any `json:"manifests"`
 }
@@ -44,7 +44,7 @@ func (c *Client) WfApply(ctx context.Context, namespace, name string, manifests 
 
 // WfRemoveParams are the arguments for the wf_remove MCP tool.
 type WfRemoveParams struct {
-	Namespace string `json:"namespace"`
+	Namespace string `json:"enclave"`
 	Name      string `json:"name"`
 }
 
@@ -99,7 +99,7 @@ func (c *Client) WfRemove(ctx context.Context, namespace, name string) (*WfRemov
 
 // WfStatusParams are the arguments for the wf_status MCP tool.
 type WfStatusParams struct {
-	Namespace string `json:"namespace"`
+	Namespace string `json:"enclave"`
 	Name      string `json:"name"`
 	Detail    bool   `json:"detail,omitempty"`
 }
@@ -107,7 +107,7 @@ type WfStatusParams struct {
 // WfStatusResult is the response from wf_status.
 type WfStatusResult struct {
 	Name      string      `json:"name"`
-	Namespace string      `json:"namespace"`
+	Namespace string      `json:"enclave"`
 	Version   string      `json:"version,omitempty"`
 	Pods      []PodInfo   `json:"pods,omitempty"`
 	Events    []EventInfo `json:"events,omitempty"`
@@ -153,14 +153,14 @@ func (c *Client) WfStatus(ctx context.Context, namespace, name string, detail bo
 
 // WfListParams are the arguments for the wf_list MCP tool.
 type WfListParams struct {
-	Namespace string `json:"namespace"`
+	Namespace string `json:"enclave"`
 }
 
 // WfListItem represents a single workflow in the list response.
 type WfListItem struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Namespace   string `json:"namespace"`
+	Namespace   string `json:"enclave"`
 	Version     string `json:"version,omitempty"`
 	Owner       string `json:"owner,omitempty"`
 	Team        string `json:"team,omitempty"`
@@ -202,7 +202,7 @@ func (c *Client) WfList(ctx context.Context, namespace string) ([]WfListItem, er
 
 // WfPodsParams are the arguments for the wf_pods MCP tool.
 type WfPodsParams struct {
-	Namespace string `json:"namespace"`
+	Namespace string `json:"enclave"`
 }
 
 // WfPod represents a single pod in the wf_pods response.
@@ -239,7 +239,7 @@ func (c *Client) WfPods(ctx context.Context, namespace string) (*WfPodsResult, e
 
 // WfLogsParams are the arguments for the wf_logs MCP tool.
 type WfLogsParams struct {
-	Namespace string `json:"namespace"`
+	Namespace string `json:"enclave"`
 	Pod       string `json:"pod"`
 	Container string `json:"container,omitempty"`
 	TailLines int64  `json:"tail_lines,omitempty"`
@@ -282,7 +282,7 @@ func (c *Client) WfLogs(ctx context.Context, namespace, pod string, tailLines in
 
 // WfRunParams are the arguments for the wf_run MCP tool.
 type WfRunParams struct {
-	Namespace      string          `json:"namespace"`
+	Namespace      string          `json:"enclave"`
 	Name           string          `json:"name"`
 	Input          json.RawMessage `json:"input,omitempty"`
 	TimeoutSeconds int             `json:"timeout_seconds,omitempty"`
@@ -291,7 +291,7 @@ type WfRunParams struct {
 // WfRunResult is the response from wf_run.
 type WfRunResult struct {
 	Name       string          `json:"name"`
-	Namespace  string          `json:"namespace"`
+	Namespace  string          `json:"enclave"`
 	PodName    string          `json:"pod_name,omitempty"`
 	Output     json.RawMessage `json:"output"`
 	DurationMs int64           `json:"duration_ms"`
@@ -319,7 +319,7 @@ func (c *Client) WfRun(ctx context.Context, namespace, name string, input json.R
 
 // ClusterPreflightParams are the arguments for the cluster_preflight MCP tool.
 type ClusterPreflightParams struct {
-	Namespace string `json:"namespace"`
+	Namespace string `json:"enclave"`
 }
 
 // CheckResult mirrors k8s.CheckResult for deserialization from MCP.
@@ -362,7 +362,7 @@ func (r *ClusterPreflightResult) UnmarshalJSON(data []byte) error {
 
 // ClusterPreflight calls the cluster_preflight MCP tool.
 func (c *Client) ClusterPreflight(ctx context.Context, namespace string) (*ClusterPreflightResult, error) {
-	raw, err := c.CallTool(ctx, "cluster_preflight", ClusterPreflightParams{Namespace: namespace})
+	raw, err := c.CallTool(ctx, "enclave_preflight", ClusterPreflightParams{Namespace: namespace})
 	if err != nil {
 		return nil, err
 	}
@@ -378,7 +378,7 @@ func (c *Client) ClusterPreflight(ctx context.Context, namespace string) (*Clust
 // AuditResourcesParams are the arguments for the audit_resources MCP tool.
 type AuditResourcesParams struct {
 	Expected     map[string]any `json:"expected"`
-	Namespace    string         `json:"namespace"`
+	Namespace    string         `json:"enclave"`
 	WorkflowName string         `json:"workflowName"`
 }
 
@@ -419,7 +419,7 @@ func (c *Client) AuditResources(ctx context.Context, namespace, workflowName str
 
 // ClusterProfileParams are the arguments for the cluster_profile MCP tool.
 type ClusterProfileParams struct {
-	Namespace string `json:"namespace,omitempty"`
+	Namespace string `json:"enclave,omitempty"`
 }
 
 // ClusterProfileResult is the raw JSON response from cluster_profile.
@@ -446,7 +446,7 @@ func (c *Client) ClusterProfile(ctx context.Context, namespace string) (*Cluster
 
 // WfDescribeParams are the arguments for the wf_describe MCP tool.
 type WfDescribeParams struct {
-	Namespace string `json:"namespace"`
+	Namespace string `json:"enclave"`
 	Name      string `json:"name"`
 }
 
@@ -454,7 +454,7 @@ type WfDescribeParams struct {
 type WfDescribeResult struct {
 	Annotations map[string]string `json:"annotations,omitempty"`
 	Name        string            `json:"name"`
-	Namespace   string            `json:"namespace"`
+	Namespace   string            `json:"enclave"`
 	Image       string            `json:"image,omitempty"`
 	Nodes       []PodInfo         `json:"nodes,omitempty"`
 	Triggers    []string          `json:"triggers,omitempty"`

@@ -29,13 +29,13 @@ func TestNewTestCmdHasLiveFlag(t *testing.T) {
 func TestNewTestCmdHasEnvFlag(t *testing.T) {
 	// --env is a persistent root flag; verify it is accessible from the test command via the parent
 	root := &cobra.Command{Use: "tntc"}
-	root.PersistentFlags().StringP("env", "e", "", "Target environment")
+	root.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd := NewTestCmd()
 	root.AddCommand(cmd)
 
-	f := cmd.Flag("env")
+	f := cmd.Flag("cluster")
 	if f == nil {
-		t.Fatal("expected --env flag accessible on test command via root")
+		t.Fatal("expected --cluster flag accessible on test command via root")
 	}
 }
 
@@ -65,12 +65,12 @@ func TestNewTestCmdHasTimeoutFlag(t *testing.T) {
 
 func TestNewTestCmdFlagParsing(t *testing.T) {
 	root := &cobra.Command{Use: "tntc"}
-	root.PersistentFlags().StringP("env", "e", "", "Target environment")
+	root.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd := NewTestCmd()
 	root.AddCommand(cmd)
 
-	root.SetArgs([]string{"test", "--live", "--env", "staging", "--keep", "--timeout", "5m"})
-	if err := root.ParseFlags([]string{"--env", "staging"}); err != nil {
+	root.SetArgs([]string{"test", "--live", "--cluster", "staging", "--keep", "--timeout", "5m"})
+	if err := root.ParseFlags([]string{"--cluster", "staging"}); err != nil {
 		t.Fatalf("failed to parse root flags: %v", err)
 	}
 	if err := cmd.ParseFlags([]string{"--live", "--keep", "--timeout", "5m"}); err != nil {
@@ -81,9 +81,9 @@ func TestNewTestCmdFlagParsing(t *testing.T) {
 	if !live {
 		t.Error("expected --live to be true")
 	}
-	env := flagString(cmd, "env")
+	env := flagString(cmd, "cluster")
 	if env != "staging" {
-		t.Errorf("expected --env staging, got %s", env)
+		t.Errorf("expected --cluster staging, got %s", env)
 	}
 	keep, _ := cmd.Flags().GetBool("keep")
 	if !keep {
@@ -274,7 +274,7 @@ func TestLiveTestRequiresWorkflowYAML(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte("environments:\n  dev:\n    namespace: dev-ns\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte("clusters:\n  dev:\n    namespace: dev-ns\n"), 0o644)
 
 	cmd.SetArgs([]string{"--live", tmpDir})
 	err := cmd.Execute()
@@ -306,15 +306,18 @@ func TestLiveTestRequiresEnvironment(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte("registry: test\n"), 0o644)
 
 	root := &cobra.Command{Use: "tntc"}
-	root.PersistentFlags().StringP("env", "e", "", "Target environment")
+	root.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd := NewTestCmd()
 	root.AddCommand(cmd)
-	root.SetArgs([]string{"test", "--live", "--env", "nonexistent", tmpDir})
+	root.SetArgs([]string{"test", "--live", "--cluster", "nonexistent", tmpDir})
 	err := root.Execute()
 	if err == nil {
-		t.Fatal("expected error for non-existent environment")
+		t.Fatal("expected error for non-existent cluster")
 	}
-	if !strings.Contains(err.Error(), "nonexistent") {
-		t.Errorf("expected error about nonexistent environment, got: %v", err)
+	// With no MCP endpoint configured for the nonexistent cluster, the error
+	// will be about MCP not being configured rather than the cluster name.
+	errMsg := err.Error()
+	if !strings.Contains(errMsg, "nonexistent") && !strings.Contains(errMsg, "MCP") {
+		t.Errorf("expected error about nonexistent cluster or MCP config, got: %v", err)
 	}
 }

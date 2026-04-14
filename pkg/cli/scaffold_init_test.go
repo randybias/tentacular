@@ -115,7 +115,7 @@ parameters:
 `
 
 // setTestHome sets HOME to the given dir for the duration of the test,
-// and also clears TENTACULAR_ENV to avoid config file lookups bleeding through.
+// and also clears TENTACULAR_CLUSTER to avoid config file lookups bleeding through.
 func setTestHome(t *testing.T, home string) {
 	t.Helper()
 	orig := os.Getenv("HOME")

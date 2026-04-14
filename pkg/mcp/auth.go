@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -13,15 +12,13 @@ import (
 
 const (
 	envEndpoint = "TNTC_MCP_ENDPOINT"
-	envToken    = "TNTC_MCP_TOKEN"
 
 	defaultTimeout = 30 * time.Second
 )
 
 // mcpYAMLConfig mirrors the yaml structure under `mcp:` in config.yaml.
 type mcpYAMLConfig struct {
-	Endpoint  string `yaml:"endpoint,omitempty"`
-	TokenPath string `yaml:"token_path,omitempty"`
+	Endpoint string `yaml:"endpoint,omitempty"`
 }
 
 type tentacularYAMLConfig struct {
@@ -29,9 +26,12 @@ type tentacularYAMLConfig struct {
 }
 
 // LoadConfigFromCluster resolves MCP connection settings using the cascade:
-// 1. Environment variables: TNTC_MCP_ENDPOINT, TNTC_MCP_TOKEN
-// 2. Project config: .tentacular/config.yaml (mcp.endpoint, mcp.token_path)
-// 3. User config: ~/.tentacular/config.yaml (mcp.endpoint, mcp.token_path)
+// 1. Environment variable: TNTC_MCP_ENDPOINT
+// 2. Project config: .tentacular/config.yaml (mcp.endpoint)
+// 3. User config: ~/.tentacular/config.yaml (mcp.endpoint)
+//
+// Note: Authentication is handled via OIDC tokens resolved by the CLI layer,
+// not by this function. This only resolves the endpoint.
 //
 // Returns nil, nil if no MCP configuration is found anywhere.
 func LoadConfigFromCluster(ctx context.Context) (*Config, error) {
@@ -44,21 +44,9 @@ func LoadConfigFromCluster(ctx context.Context) (*Config, error) {
 	}
 	loadMCPFromFile(filepath.Join(".tentacular", "config.yaml"), cfg)
 
-	// 2. Environment variables override config file values
+	// 2. Environment variable overrides config file value
 	if v := os.Getenv(envEndpoint); v != "" {
 		cfg.Endpoint = v
-	}
-	if v := os.Getenv(envToken); v != "" {
-		cfg.Token = v
-	}
-
-	// If token not set directly, try token_path
-	if cfg.Token == "" && cfg.TokenPath != "" {
-		token, err := readTokenFile(cfg.TokenPath)
-		if err != nil {
-			return nil, fmt.Errorf("reading MCP token from %s: %w", cfg.TokenPath, err)
-		}
-		cfg.Token = token
 	}
 
 	if cfg.Endpoint == "" {
@@ -82,23 +70,11 @@ func loadMCPFromFile(path string, cfg *Config) {
 	if raw.MCP.Endpoint != "" {
 		cfg.Endpoint = raw.MCP.Endpoint
 	}
-	if raw.MCP.TokenPath != "" {
-		cfg.TokenPath = raw.MCP.TokenPath
-	}
 }
 
-// readTokenFile reads a bearer token from a file, trimming whitespace.
-func readTokenFile(path string) (string, error) {
-	data, err := os.ReadFile(path) //nolint:gosec // reading token file by configured path
-	if err != nil {
-		return "", err
-	}
-	return strings.TrimSpace(string(data)), nil
-}
-
-// SaveConfig writes MCP endpoint and token path to the user-level config file.
+// SaveConfig writes MCP endpoint to the user-level config file.
 // Creates the file if it does not exist; merges with existing content.
-func SaveConfig(endpoint, tokenPath string) error {
+func SaveConfig(endpoint string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf("finding home directory: %w", err)
@@ -121,8 +97,7 @@ func SaveConfig(endpoint, tokenPath string) error {
 	}
 
 	raw["mcp"] = map[string]any{
-		"endpoint":   endpoint,
-		"token_path": tokenPath,
+		"endpoint": endpoint,
 	}
 
 	data, err := yaml.Marshal(raw)

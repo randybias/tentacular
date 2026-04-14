@@ -387,8 +387,8 @@ func TestTokenRefresh_MockServer(t *testing.T) {
 	// Write config with OIDC settings pointing to mock server
 	configDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(configDir, 0o755)
-	configContent := fmt.Sprintf(`default_env: test
-environments:
+	configContent := fmt.Sprintf(`default_cluster: test
+clusters:
   test:
     oidc_issuer: %s
     oidc_client_id: test-client
@@ -445,8 +445,8 @@ func TestWhoami_NotAuthenticated(t *testing.T) {
 
 	cmd := NewWhoamiCmd()
 	// Add env flag like root command does
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
-	_ = cmd.Flags().Set("env", "nonexistent")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
+	_ = cmd.Flags().Set("cluster", "nonexistent")
 	cmd.SetOut(&strings.Builder{})
 
 	err := cmd.RunE(cmd, nil)
@@ -472,7 +472,7 @@ func TestEnvironmentConfig_OIDCFields(t *testing.T) {
 	// Write config with OIDC settings
 	configDir := filepath.Join(tmpDir, ".tentacular")
 	_ = os.MkdirAll(configDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   staging:
     namespace: staging
     mcp_endpoint: http://mcp.example.com/mcp
@@ -483,7 +483,7 @@ func TestEnvironmentConfig_OIDCFields(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(configYAML), 0o644)
 
 	cfg := LoadConfig()
-	env, ok := cfg.Environments["staging"]
+	env, ok := cfg.Clusters["staging"]
 	if !ok {
 		t.Fatal("staging environment not found")
 	}

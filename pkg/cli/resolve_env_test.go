@@ -26,8 +26,7 @@ func setupEnvConfig(t *testing.T, configYAML string) func() {
 
 	// Clear env vars that would interfere
 	_ = os.Unsetenv("TNTC_MCP_ENDPOINT")
-	_ = os.Unsetenv("TNTC_MCP_TOKEN")
-	_ = os.Unsetenv("TENTACULAR_ENV")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
 
 	return func() {
 		_ = os.Setenv("HOME", origHome)
@@ -40,7 +39,7 @@ func setupEnvConfig(t *testing.T, configYAML string) func() {
 // TestResolveMCPClient_UsesEnvMCPEndpoint verifies that when an environment has
 // mcp_endpoint configured, resolveMCPClient uses it when --env matches.
 func TestResolveMCPClient_UsesEnvMCPEndpoint(t *testing.T) {
-	cleanup := setupEnvConfig(t, `environments:
+	cleanup := setupEnvConfig(t, `clusters:
   staging:
     namespace: staging-ns
     mcp_endpoint: http://staging-mcp:8080
@@ -57,9 +56,9 @@ func TestResolveMCPClient_UsesEnvMCPEndpoint(t *testing.T) {
 	}
 }
 
-// TestResolveMCPClient_EnvFlagTakesPriority verifies --env flag overrides TENTACULAR_ENV.
+// TestResolveMCPClient_EnvFlagTakesPriority verifies --env flag overrides TENTACULAR_CLUSTER.
 func TestResolveMCPClient_EnvFlagTakesPriority(t *testing.T) {
-	cleanup := setupEnvConfig(t, `environments:
+	cleanup := setupEnvConfig(t, `clusters:
   dev:
     mcp_endpoint: http://dev-mcp:8080
   staging:
@@ -67,9 +66,9 @@ func TestResolveMCPClient_EnvFlagTakesPriority(t *testing.T) {
 `)
 	defer cleanup()
 
-	// TENTACULAR_ENV=staging but --env=dev → dev should win
-	_ = os.Setenv("TENTACULAR_ENV", "staging")
-	defer func() { _ = os.Unsetenv("TENTACULAR_ENV") }()
+	// TENTACULAR_CLUSTER=staging but --env=dev → dev should win
+	_ = os.Setenv("TENTACULAR_CLUSTER", "staging")
+	defer func() { _ = os.Unsetenv("TENTACULAR_CLUSTER") }()
 
 	cmd := newTestCmdWithEnv("dev")
 	client, err := resolveMCPClient(cmd)
@@ -81,17 +80,17 @@ func TestResolveMCPClient_EnvFlagTakesPriority(t *testing.T) {
 	}
 }
 
-// TestResolveMCPClient_TENTACULAR_ENVFallback verifies TENTACULAR_ENV is used
+// TestResolveMCPClient_TENTACULAR_CLUSTERFallback verifies TENTACULAR_CLUSTER is used
 // when --env flag is not set.
-func TestResolveMCPClient_TENTACULAR_ENVFallback(t *testing.T) {
-	cleanup := setupEnvConfig(t, `environments:
+func TestResolveMCPClient_TENTACULAR_CLUSTERFallback(t *testing.T) {
+	cleanup := setupEnvConfig(t, `clusters:
   prod:
     mcp_endpoint: http://prod-mcp:8080
 `)
 	defer cleanup()
 
-	_ = os.Setenv("TENTACULAR_ENV", "prod")
-	defer func() { _ = os.Unsetenv("TENTACULAR_ENV") }()
+	_ = os.Setenv("TENTACULAR_CLUSTER", "prod")
+	defer func() { _ = os.Unsetenv("TENTACULAR_CLUSTER") }()
 
 	cmd := newTestCmd()
 	client, err := resolveMCPClient(cmd)
@@ -99,15 +98,15 @@ func TestResolveMCPClient_TENTACULAR_ENVFallback(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if client == nil {
-		t.Error("expected non-nil client when TENTACULAR_ENV=prod")
+		t.Error("expected non-nil client when TENTACULAR_CLUSTER=prod")
 	}
 }
 
-// TestResolveMCPClient_DefaultEnvFallback verifies default_env from config
+// TestResolveMCPClient_DefaultEnvFallback verifies default_cluster from config
 // is used when no explicit env is set.
 func TestResolveMCPClient_DefaultEnvFallback(t *testing.T) {
-	cleanup := setupEnvConfig(t, `default_env: dev
-environments:
+	cleanup := setupEnvConfig(t, `default_cluster: dev
+clusters:
   dev:
     mcp_endpoint: http://dev-mcp:8080
 `)
@@ -119,7 +118,7 @@ environments:
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if client == nil {
-		t.Error("expected non-nil client when default_env=dev")
+		t.Error("expected non-nil client when default_cluster=dev")
 	}
 }
 
@@ -129,7 +128,7 @@ environments:
 func TestResolveMCPClient_EnvWithNoMCPFallsBackToGlobal(t *testing.T) {
 	cleanup := setupEnvConfig(t, `mcp:
   endpoint: http://global-mcp:8080
-environments:
+clusters:
   dev:
     namespace: dev-ns
     # No mcp_endpoint -- should fall back to global
@@ -151,7 +150,7 @@ environments:
 func TestResolveMCPClient_UnknownEnvWithGlobalMCPUsesGlobal(t *testing.T) {
 	cleanup := setupEnvConfig(t, `mcp:
   endpoint: http://global-mcp:8080
-environments:
+clusters:
   dev:
     namespace: dev-ns
 `)
@@ -165,44 +164,6 @@ environments:
 	}
 	if client == nil {
 		t.Error("expected non-nil client from global mcp.endpoint when env not found")
-	}
-}
-
-// TestResolveMCPClient_MCPTokenPathExpandsTilde verifies that mcp_token_path
-// with ~ is expanded to the home directory.
-func TestResolveMCPClient_MCPTokenPathExpandsTilde(t *testing.T) {
-	tmpHome := t.TempDir()
-	origHome := os.Getenv("HOME")
-	_ = os.Setenv("HOME", tmpHome)
-	defer func() { _ = os.Setenv("HOME", origHome) }()
-
-	// Write a token file in tmpHome
-	tokenFile := filepath.Join(tmpHome, "mcp-token")
-	_ = os.WriteFile(tokenFile, []byte("my-token\n"), 0o600)
-
-	configDir := filepath.Join(tmpHome, ".tentacular")
-	_ = os.MkdirAll(configDir, 0o755)
-	_ = os.WriteFile(filepath.Join(configDir, "config.yaml"), []byte(`environments:
-  prod:
-    mcp_endpoint: http://prod-mcp:8080
-    mcp_token_path: ~/mcp-token
-`), 0o644)
-
-	origDir, _ := os.Getwd()
-	_ = os.Chdir(t.TempDir())
-	defer func() { _ = os.Chdir(origDir) }()
-	_ = os.Unsetenv("TNTC_MCP_ENDPOINT")
-	_ = os.Unsetenv("TNTC_MCP_TOKEN")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-
-	// Load the environment config and check token path expansion
-	env, err := LoadEnvironment("prod")
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
-	expectedPath := filepath.Join(tmpHome, "mcp-token")
-	if env.MCPTokenPath != expectedPath {
-		t.Errorf("expected MCPTokenPath %s, got %s", expectedPath, env.MCPTokenPath)
 	}
 }
 
@@ -230,7 +191,7 @@ func TestRequireMCPClient_NoLongerMentionsClusterInstall(t *testing.T) {
 // TestBuildMCPClientForEnv_UsesEnvEndpoint verifies buildMCPClientForEnv
 // uses the env's mcp_endpoint.
 func TestBuildMCPClientForEnv_UsesEnvEndpoint(t *testing.T) {
-	cleanup := setupEnvConfig(t, `environments:
+	cleanup := setupEnvConfig(t, `clusters:
   prod:
     mcp_endpoint: http://prod-mcp:8080
 `)
@@ -248,7 +209,7 @@ func TestBuildMCPClientForEnv_UsesEnvEndpoint(t *testing.T) {
 // TestBuildMCPClientForEnv_ErrorWhenNoEndpoint verifies buildMCPClientForEnv
 // returns an error when neither env nor global MCP endpoint is configured.
 func TestBuildMCPClientForEnv_ErrorWhenNoEndpoint(t *testing.T) {
-	cleanup := setupEnvConfig(t, `environments:
+	cleanup := setupEnvConfig(t, `clusters:
   dev:
     namespace: dev-ns
 `)
@@ -268,7 +229,7 @@ func TestBuildMCPClientForEnv_ErrorWhenNoEndpoint(t *testing.T) {
 func TestBuildMCPClientForEnv_FallsBackToGlobalMCP(t *testing.T) {
 	cleanup := setupEnvConfig(t, `mcp:
   endpoint: http://global-mcp:8080
-environments:
+clusters:
   dev:
     namespace: dev-ns
 `)
@@ -283,9 +244,9 @@ environments:
 	}
 }
 
-// newTestCmdWithEnv creates a minimal cobra command with --env set to the given value.
+// newTestCmdWithEnv creates a minimal cobra command with --cluster set to the given value.
 func newTestCmdWithEnv(envName string) *cobra.Command {
 	cmd := &cobra.Command{Use: "test"}
-	cmd.Flags().String("env", envName, "target environment")
+	cmd.Flags().String("cluster", envName, "target cluster")
 	return cmd
 }

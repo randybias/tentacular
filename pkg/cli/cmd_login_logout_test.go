@@ -15,9 +15,9 @@ func TestRunLogout_Success(t *testing.T) {
 	_ = os.Setenv("HOME", tmpHome)
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -40,7 +40,7 @@ func TestRunLogout_Success(t *testing.T) {
 	}
 
 	cmd := NewLogoutCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -74,9 +74,9 @@ func TestRunLogout_NoExistingToken(t *testing.T) {
 	_ = os.Setenv("HOME", tmpHome)
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -88,7 +88,7 @@ func TestRunLogout_NoExistingToken(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(""), 0o644)
 
 	cmd := NewLogoutCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -110,9 +110,9 @@ func TestRunLogout_SpecificEnv(t *testing.T) {
 	_ = os.Setenv("HOME", tmpHome)
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -136,8 +136,8 @@ func TestRunLogout_SpecificEnv(t *testing.T) {
 	}
 
 	cmd := NewLogoutCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
-	_ = cmd.PersistentFlags().Set("env", "staging")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
+	_ = cmd.PersistentFlags().Set("cluster", "staging")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -168,9 +168,9 @@ func TestRunLogin_MissingOIDCConfig(t *testing.T) {
 	_ = os.Setenv("HOME", tmpHome)
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -180,14 +180,14 @@ func TestRunLogin_MissingOIDCConfig(t *testing.T) {
 	// Config exists but has no OIDC settings
 	cfgDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(cfgDir, 0o755)
-	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(`default_env: test
-environments:
+	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(`default_cluster: test
+clusters:
   test:
     namespace: test-ns
 `), 0o644)
 
 	cmd := NewLoginCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -209,9 +209,9 @@ func TestRunLogin_MissingClientID(t *testing.T) {
 	_ = os.Setenv("HOME", tmpHome)
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -220,15 +220,15 @@ func TestRunLogin_MissingClientID(t *testing.T) {
 
 	cfgDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(cfgDir, 0o755)
-	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(`default_env: test
-environments:
+	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(`default_cluster: test
+clusters:
   test:
     namespace: test-ns
     oidc_issuer: https://auth.example.com/realms/test
 `), 0o644)
 
 	cmd := NewLoginCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	err := cmd.RunE(cmd, nil)
 	if err == nil {
@@ -245,9 +245,9 @@ func TestRunLogin_NoEnvironment(t *testing.T) {
 	_ = os.Setenv("HOME", tmpHome)
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -260,7 +260,7 @@ func TestRunLogin_NoEnvironment(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(""), 0o644)
 
 	cmd := NewLoginCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	err := cmd.RunE(cmd, nil)
 	if err == nil {

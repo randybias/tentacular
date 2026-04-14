@@ -59,8 +59,8 @@ type tokenResponse struct {
 }
 
 func runLogin(cmd *cobra.Command, args []string) error {
-	envName := flagString(cmd, "env")
-	env, issuer, clientID, clientSecret, err := resolveOIDCConfig(envName)
+	clusterName := flagString(cmd, "cluster")
+	env, issuer, clientID, clientSecret, err := resolveOIDCConfig(clusterName)
 	if err != nil {
 		return err
 	}
@@ -135,33 +135,33 @@ func runLogin(cmd *cobra.Command, args []string) error {
 }
 
 // resolveOIDCConfig resolves OIDC configuration for the given environment.
-// Returns envName, issuer, clientID, clientSecret.
-func resolveOIDCConfig(envName string) (envResult, issuer, clientID, clientSecret string, err error) {
-	if envName == "" {
-		envName = os.Getenv("TENTACULAR_ENV")
+// Returns clusterName, issuer, clientID, clientSecret.
+func resolveOIDCConfig(clusterName string) (envResult, issuer, clientID, clientSecret string, err error) {
+	if clusterName == "" {
+		clusterName = os.Getenv("TENTACULAR_CLUSTER")
 	}
 	cfg := LoadConfig()
-	if envName == "" {
-		envName = cfg.DefaultEnv
+	if clusterName == "" {
+		clusterName = cfg.DefaultCluster
 	}
 
-	if envName == "" {
-		return "", "", "", "", errors.New("no environment specified; use -e <env> or set TENTACULAR_ENV")
+	if clusterName == "" {
+		return "", "", "", "", errors.New("no environment specified; use -e <env> or set TENTACULAR_CLUSTER")
 	}
 
-	env, ok := cfg.Environments[envName]
+	env, ok := cfg.Clusters[clusterName]
 	if !ok {
-		return "", "", "", "", fmt.Errorf("environment %q not found in config; create it with:\n  tntc configure -e %s --oidc-issuer <url> --oidc-client-id <id>", envName, envName)
+		return "", "", "", "", fmt.Errorf("environment %q not found in config; create it with:\n  tntc configure -e %s --oidc-issuer <url> --oidc-client-id <id>", clusterName, clusterName)
 	}
 
 	if env.OIDCIssuer == "" {
-		return "", "", "", "", fmt.Errorf("OIDC not configured for environment %q; run:\n  tntc configure -e %s --oidc-issuer <url> --oidc-client-id <id>\nor use interactive setup:\n  tntc configure --sso -e %s", envName, envName, envName)
+		return "", "", "", "", fmt.Errorf("OIDC not configured for environment %q; run:\n  tntc configure -e %s --oidc-issuer <url> --oidc-client-id <id>\nor use interactive setup:\n  tntc configure --sso -e %s", clusterName, clusterName, clusterName)
 	}
 	if env.OIDCClientID == "" {
-		return "", "", "", "", fmt.Errorf("oidc_client_id not configured for environment %q; run:\n  tntc configure -e %s --oidc-client-id <id>", envName, envName)
+		return "", "", "", "", fmt.Errorf("oidc_client_id not configured for environment %q; run:\n  tntc configure -e %s --oidc-client-id <id>", clusterName, clusterName)
 	}
 
-	return envName, env.OIDCIssuer, env.OIDCClientID, env.OIDCClientSecret, nil
+	return clusterName, env.OIDCIssuer, env.OIDCClientID, env.OIDCClientSecret, nil
 }
 
 // discoverOIDCEndpoints fetches the OIDC discovery document and returns
@@ -356,8 +356,8 @@ func pollForToken(tokenEndpoint, deviceCode, clientID, clientSecret, codeVerifie
 
 // RefreshOIDCToken attempts to refresh an expired access token using the refresh token.
 // Returns the updated token store, or an error if refresh fails.
-func RefreshOIDCToken(envName string, store *OIDCTokenStore) (*OIDCTokenStore, error) {
-	_, issuer, clientID, clientSecret, err := resolveOIDCConfig(envName)
+func RefreshOIDCToken(clusterName string, store *OIDCTokenStore) (*OIDCTokenStore, error) {
+	_, issuer, clientID, clientSecret, err := resolveOIDCConfig(clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -430,7 +430,7 @@ func RefreshOIDCToken(envName string, store *OIDCTokenStore) (*OIDCTokenStore, e
 		newStore.RefreshToken = store.RefreshToken
 	}
 
-	if err := SaveOIDCToken(envName, newStore); err != nil {
+	if err := SaveOIDCToken(clusterName, newStore); err != nil {
 		return nil, fmt.Errorf("saving refreshed token: %w", err)
 	}
 
