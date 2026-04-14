@@ -33,26 +33,26 @@ type whoamiResult struct {
 }
 
 func runWhoami(cmd *cobra.Command, args []string) error {
-	envName := flagString(cmd, "env")
-	if envName == "" {
-		envName = os.Getenv("TENTACULAR_ENV")
+	clusterName := flagString(cmd, "cluster")
+	if clusterName == "" {
+		clusterName = os.Getenv("TENTACULAR_CLUSTER")
 	}
 	cfg := LoadConfig()
-	if envName == "" {
-		envName = cfg.DefaultEnv
+	if clusterName == "" {
+		clusterName = cfg.DefaultCluster
 	}
-	if envName == "" {
-		envName = "default"
+	if clusterName == "" {
+		clusterName = "default"
 	}
 
 	outputFormat := flagString(cmd, "output")
 
-	store, err := LoadOIDCToken(envName)
+	store, err := LoadOIDCToken(clusterName)
 	if err != nil {
 		return fmt.Errorf("reading tokens: %w", err)
 	}
 	if store == nil {
-		return fmt.Errorf("not authenticated for environment %q; run 'tntc login -e %s'", envName, envName)
+		return fmt.Errorf("not authenticated for environment %q; run 'tntc login -e %s'", clusterName, clusterName)
 	}
 
 	// Decode claims from access token for fresh info
@@ -62,7 +62,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 		if outputFormat == "json" {
 			result := whoamiResult{
 				Email:       store.Email,
-				Environment: envName,
+				Environment: clusterName,
 				Expired:     store.IsExpired(),
 			}
 			if !store.IsExpired() {
@@ -71,7 +71,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 			return emitWhoamiJSON(cmd, result)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Email:       %s\n", store.Email)
-		fmt.Fprintf(cmd.OutOrStdout(), "Environment: %s\n", envName)
+		fmt.Fprintf(cmd.OutOrStdout(), "Environment: %s\n", clusterName)
 		if store.IsExpired() {
 			fmt.Fprintln(cmd.OutOrStdout(), "Token:       EXPIRED")
 		} else {
@@ -105,7 +105,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 			Subject:     claims.Sub,
 			Issuer:      issuer,
 			Provider:    provider,
-			Environment: envName,
+			Environment: clusterName,
 			Expired:     expired,
 			ExpiresAt:   expiresAt,
 			Groups:      claims.Groups,
@@ -135,7 +135,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintln(out)
 	}
-	fmt.Fprintf(out, "Environment: %s\n", envName)
+	fmt.Fprintf(out, "Environment: %s\n", clusterName)
 
 	if expired {
 		fmt.Fprintln(out, "Token:       EXPIRED (run 'tntc login' to re-authenticate)")

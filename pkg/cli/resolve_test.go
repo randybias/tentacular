@@ -25,7 +25,6 @@ func newTestCmd() *cobra.Command {
 // returns (nil, nil) when no MCP endpoint is configured.
 func TestResolveMCPClient_NilWhenNotConfigured(t *testing.T) {
 	_ = os.Unsetenv("TNTC_MCP_ENDPOINT")
-	_ = os.Unsetenv("TNTC_MCP_TOKEN")
 
 	tmpHome := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -50,7 +49,6 @@ func TestResolveMCPClient_NilWhenNotConfigured(t *testing.T) {
 // returns a non-nil client when TNTC_MCP_ENDPOINT is set.
 func TestResolveMCPClient_ReturnsClientWhenEnvSet(t *testing.T) {
 	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
-	t.Setenv("TNTC_MCP_TOKEN", "test-token")
 
 	tmpHome := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -74,7 +72,6 @@ func TestResolveMCPClient_ReturnsClientWhenEnvSet(t *testing.T) {
 // TestResolveMCPClient_ReturnsClientWhenConfigFileSet verifies config file path.
 func TestResolveMCPClient_ReturnsClientWhenConfigFileSet(t *testing.T) {
 	_ = os.Unsetenv("TNTC_MCP_ENDPOINT")
-	_ = os.Unsetenv("TNTC_MCP_TOKEN")
 
 	tmpHome := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -106,7 +103,6 @@ func TestResolveMCPClient_ReturnsClientWhenConfigFileSet(t *testing.T) {
 // an error when MCP is not configured.
 func TestRequireMCPClient_ErrorWhenNotConfigured(t *testing.T) {
 	_ = os.Unsetenv("TNTC_MCP_ENDPOINT")
-	_ = os.Unsetenv("TNTC_MCP_TOKEN")
 
 	tmpHome := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -131,7 +127,6 @@ func TestRequireMCPClient_ErrorWhenNotConfigured(t *testing.T) {
 // a client when configured.
 func TestRequireMCPClient_SuccessWhenConfigured(t *testing.T) {
 	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
-	t.Setenv("TNTC_MCP_TOKEN", "tok")
 
 	tmpHome := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -181,12 +176,12 @@ func TestMCPErrorHint_ServerUnavailable(t *testing.T) {
 	}
 }
 
-// TestMCPErrorHint_Unauthorized verifies the hint mentions token config.
+// TestMCPErrorHint_Unauthorized verifies the hint mentions re-authentication.
 func TestMCPErrorHint_Unauthorized(t *testing.T) {
 	authErr := &mcp.Error{Code: 401, Message: "unauthorized"}
 	hint := mcpErrorHint(authErr)
-	if !strings.Contains(hint, "token") {
-		t.Errorf("expected hint to mention token for 401, got %q", hint)
+	if !strings.Contains(hint, "tntc login") {
+		t.Errorf("expected hint to mention tntc login for 401, got %q", hint)
 	}
 }
 
@@ -224,8 +219,7 @@ func TestResolveMCPClient_OIDCFailure_NoFallback(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
-	t.Setenv("TNTC_MCP_TOKEN", "superuser-bearer-token")
-	t.Setenv("TENTACULAR_ENV", "")
+	t.Setenv("TENTACULAR_CLUSTER", "")
 
 	origDir, _ := os.Getwd()
 	_ = os.Chdir(t.TempDir())
@@ -257,8 +251,7 @@ func TestResolveMCPClient_NoOIDC_BearerTokenWorks(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
-	t.Setenv("TNTC_MCP_TOKEN", "admin-bearer-token")
-	t.Setenv("TENTACULAR_ENV", "")
+	t.Setenv("TENTACULAR_CLUSTER", "")
 
 	origDir, _ := os.Getwd()
 	_ = os.Chdir(t.TempDir())
@@ -281,8 +274,7 @@ func TestResolveMCPClient_OIDCValid(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("TNTC_MCP_ENDPOINT", "http://mcp.test:8080")
-	t.Setenv("TNTC_MCP_TOKEN", "")
-	t.Setenv("TENTACULAR_ENV", "")
+	t.Setenv("TENTACULAR_CLUSTER", "")
 
 	origDir, _ := os.Getwd()
 	_ = os.Chdir(t.TempDir())

@@ -15,10 +15,10 @@ func setupWhoamiEnv(t *testing.T, token *OIDCTokenStore) func() {
 	t.Helper()
 
 	origHome := os.Getenv("HOME")
-	origEnv := os.Getenv("TENTACULAR_ENV")
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
 	tmpHome := t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
-	_ = os.Unsetenv("TENTACULAR_ENV")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -37,7 +37,7 @@ func setupWhoamiEnv(t *testing.T, token *OIDCTokenStore) func() {
 
 	return func() {
 		_ = os.Setenv("HOME", origHome)
-		_ = os.Setenv("TENTACULAR_ENV", origEnv)
+		_ = os.Setenv("TENTACULAR_CLUSTER", origEnv)
 		_ = os.Chdir(origDir)
 	}
 }
@@ -64,7 +64,7 @@ func TestWhoami_TextOutput_AllFields(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewWhoamiCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 
 	var out bytes.Buffer
@@ -119,7 +119,7 @@ func TestWhoami_JSONOutput(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewWhoamiCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 	_ = cmd.PersistentFlags().Set("output", "json")
 
@@ -167,7 +167,7 @@ func TestWhoami_NoToken(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewWhoamiCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 
 	var out bytes.Buffer
@@ -199,7 +199,7 @@ func TestWhoami_ExpiredToken(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewWhoamiCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 
 	var out bytes.Buffer
@@ -233,7 +233,7 @@ func TestWhoami_JSONOutput_ExpiredToken(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewWhoamiCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 	_ = cmd.PersistentFlags().Set("output", "json")
 
@@ -267,7 +267,7 @@ func TestWhoami_FallbackToStoredEmail(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewWhoamiCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 
 	var out bytes.Buffer

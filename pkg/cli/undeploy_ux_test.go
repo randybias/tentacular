@@ -90,7 +90,7 @@ func newUndeployTestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use: "test",
 	}
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("output", "o", "", "Output format")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	cmd.Flags().BoolP("yes", "y", false, "Skip confirmation")
@@ -103,9 +103,9 @@ func newUndeployTestCmd() *cobra.Command {
 
 func TestCheckExoskeletonCleanup_FullWarning(t *testing.T) {
 	enclaveInfoJSON, _ := json.Marshal(map[string]any{
-		"name":      "test-ns",
-		"namespace": "test-ns",
-		"owner":     "alice@example.com",
+		"name":    "test-ns",
+		"enclave": "test-ns",
+		"owner":   "alice@example.com",
 		"exo_services": []map[string]any{
 			{"name": "postgres", "available": true},
 			{"name": "nats", "available": true},
@@ -145,7 +145,7 @@ func TestCheckExoskeletonCleanup_FullWarning(t *testing.T) {
 func TestCheckExoskeletonCleanup_NoExoServices(t *testing.T) {
 	enclaveInfoJSON, _ := json.Marshal(map[string]any{
 		"name":         "ns",
-		"namespace":    "ns",
+		"enclave":      "ns",
 		"owner":        "alice@example.com",
 		"exo_services": []map[string]any{},
 	})
@@ -187,9 +187,9 @@ func TestCheckExoskeletonCleanup_InfoError(t *testing.T) {
 
 func TestCheckExoskeletonCleanup_NoneAvailable(t *testing.T) {
 	enclaveInfoJSON, _ := json.Marshal(map[string]any{
-		"name":      "ns",
-		"namespace": "ns",
-		"owner":     "alice@example.com",
+		"name":    "ns",
+		"enclave": "ns",
+		"owner":   "alice@example.com",
 		"exo_services": []map[string]any{
 			{"name": "postgres", "available": false},
 			{"name": "rustfs", "available": false},
@@ -215,9 +215,9 @@ func TestCheckExoskeletonCleanup_NoneAvailable(t *testing.T) {
 
 func TestCheckExoskeletonCleanup_OnlyPostgres(t *testing.T) {
 	enclaveInfoJSON, _ := json.Marshal(map[string]any{
-		"name":      "ns",
-		"namespace": "ns",
-		"owner":     "alice@example.com",
+		"name":    "ns",
+		"enclave": "ns",
+		"owner":   "alice@example.com",
 		"exo_services": []map[string]any{
 			{"name": "postgres", "available": true},
 			{"name": "nats", "available": false},
@@ -257,14 +257,12 @@ func setupMCPEnv(t *testing.T, endpoint string) func() {
 
 	origHome := os.Getenv("HOME")
 	origEndpoint := os.Getenv("TNTC_MCP_ENDPOINT")
-	origToken := os.Getenv("TNTC_MCP_TOKEN")
-	origEnv := os.Getenv("TENTACULAR_ENV")
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
 
 	tmpHome := t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
 	_ = os.Setenv("TNTC_MCP_ENDPOINT", endpoint)
-	_ = os.Setenv("TNTC_MCP_TOKEN", "test-token")
-	_ = os.Unsetenv("TENTACULAR_ENV")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -278,8 +276,7 @@ func setupMCPEnv(t *testing.T, endpoint string) func() {
 	return func() {
 		_ = os.Setenv("HOME", origHome)
 		_ = os.Setenv("TNTC_MCP_ENDPOINT", origEndpoint)
-		_ = os.Setenv("TNTC_MCP_TOKEN", origToken)
-		_ = os.Setenv("TENTACULAR_ENV", origEnv)
+		_ = os.Setenv("TENTACULAR_CLUSTER", origEnv)
 		_ = os.Chdir(origDir)
 	}
 }
@@ -306,7 +303,7 @@ func TestRunUndeployWith_UserConfirmsY(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewUndeployCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	cmd.SetContext(context.Background())
 	cmd.SetOut(&bytes.Buffer{})
@@ -350,7 +347,7 @@ func TestRunUndeployWith_UserDeclinesN(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewUndeployCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	cmd.SetContext(context.Background())
 
@@ -394,7 +391,7 @@ func TestRunUndeployWith_YesFlag(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewUndeployCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	_ = cmd.Flags().Set("yes", "true")
 	cmd.SetContext(context.Background())
@@ -420,9 +417,9 @@ func TestRunUndeployWith_YesFlag(t *testing.T) {
 func TestRunUndeployWith_ForceFlag(t *testing.T) {
 	// Set up a server that reports exo services are provisioned
 	enclaveInfoJSON, _ := json.Marshal(map[string]any{
-		"name":      "default",
-		"namespace": "default",
-		"owner":     "alice@example.com",
+		"name":    "default",
+		"enclave": "default",
+		"owner":   "alice@example.com",
 		"exo_services": []map[string]any{
 			{"name": "postgres", "available": true},
 			{"name": "nats", "available": true},
@@ -449,7 +446,7 @@ func TestRunUndeployWith_ForceFlag(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewUndeployCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	_ = cmd.Flags().Set("yes", "true")
 	_ = cmd.Flags().Set("force", "true")
@@ -475,9 +472,9 @@ func TestRunUndeployWith_ForceFlag(t *testing.T) {
 
 func TestRunUndeployWith_ExoWarningUserDeclines(t *testing.T) {
 	enclaveInfoJSON, _ := json.Marshal(map[string]any{
-		"name":      "default",
-		"namespace": "default",
-		"owner":     "alice@example.com",
+		"name":    "default",
+		"enclave": "default",
+		"owner":   "alice@example.com",
 		"exo_services": []map[string]any{
 			{"name": "postgres", "available": true},
 		},
@@ -499,7 +496,7 @@ func TestRunUndeployWith_ExoWarningUserDeclines(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewUndeployCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	_ = cmd.Flags().Set("yes", "true") // skip basic confirm
 	cmd.SetContext(context.Background())
@@ -545,7 +542,7 @@ func TestRunUndeployWith_ExoCleanupResult(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewUndeployCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	_ = cmd.Flags().Set("yes", "true")
 	cmd.SetContext(context.Background())
@@ -587,7 +584,7 @@ func TestRunUndeployWith_NoResources(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewUndeployCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 	cmd.PersistentFlags().StringP("namespace", "n", "", "Namespace")
 	_ = cmd.Flags().Set("yes", "true")
 	cmd.SetContext(context.Background())

@@ -16,10 +16,9 @@ import (
 
 // Config holds MCP connection settings.
 type Config struct {
-	Endpoint  string        // e.g. "http://tentacular-mcp.tentacular-system.svc.cluster.local:8080/mcp"
-	Token     string        // Bearer token (resolved from TokenPath if empty)
-	TokenPath string        // Path to token file (used when Token is empty)
-	Timeout   time.Duration // Per-request timeout (default: 30s)
+	Endpoint string        // e.g. "http://tentacular-mcp.tentacular-system.svc.cluster.local:8080/mcp"
+	Token    string        // OIDC access token for authentication
+	Timeout  time.Duration // Per-request timeout (default: 30s)
 }
 
 // Client communicates with the tentacular-mcp server via the MCP protocol.

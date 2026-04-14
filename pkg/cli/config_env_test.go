@@ -27,7 +27,7 @@ func TestLoadConfigWithEnvironments(t *testing.T) {
 	_ = os.MkdirAll(userDir, 0o755)
 	configYAML := `registry: default-registry
 namespace: default-ns
-environments:
+clusters:
   dev:
     namespace: dev-ns
     runtime_class: ""
@@ -59,15 +59,15 @@ environments:
 		t.Errorf("expected default-ns, got %s", cfg.Namespace)
 	}
 
-	// Environments map should be populated
-	if cfg.Environments == nil {
-		t.Fatal("expected Environments map to be non-nil")
+	// Clusters map should be populated
+	if cfg.Clusters == nil {
+		t.Fatal("expected Clusters map to be non-nil")
 	}
-	if len(cfg.Environments) != 3 {
-		t.Errorf("expected 3 environments, got %d", len(cfg.Environments))
+	if len(cfg.Clusters) != 3 {
+		t.Errorf("expected 3 environments, got %d", len(cfg.Clusters))
 	}
 
-	devEnv, ok := cfg.Environments["dev"]
+	devEnv, ok := cfg.Clusters["dev"]
 	if !ok {
 		t.Fatal("expected 'dev' environment to exist")
 	}
@@ -75,7 +75,7 @@ environments:
 		t.Errorf("expected dev namespace dev-ns, got %s", devEnv.Namespace)
 	}
 
-	stagingEnv, ok := cfg.Environments["staging"]
+	stagingEnv, ok := cfg.Clusters["staging"]
 	if !ok {
 		t.Fatal("expected 'staging' environment to exist")
 	}
@@ -104,7 +104,7 @@ func TestLoadEnvironmentFound(t *testing.T) {
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
 	configYAML := `registry: base-reg
-environments:
+clusters:
   staging:
     namespace: staging-ns
     context: staging-ctx
@@ -142,7 +142,7 @@ func TestLoadEnvironmentNotFound(t *testing.T) {
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
 	configYAML := `registry: base-reg
-environments:
+clusters:
   dev:
     namespace: dev-ns
 `
@@ -192,7 +192,7 @@ func TestProjectEnvOverridesUserEnv(t *testing.T) {
 	// User-level config has dev environment
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	userYAML := `environments:
+	userYAML := `clusters:
   dev:
     namespace: user-dev-ns
     context: user-dev-ctx
@@ -203,7 +203,7 @@ func TestProjectEnvOverridesUserEnv(t *testing.T) {
 	// Project-level config overrides dev namespace only
 	projDir := filepath.Join(tmpDir, ".tentacular")
 	_ = os.MkdirAll(projDir, 0o755)
-	projYAML := `environments:
+	projYAML := `clusters:
   dev:
     namespace: project-dev-ns
 `
@@ -266,28 +266,28 @@ func TestMergeConfigWithEnvironments(t *testing.T) {
 	base := &TentacularConfig{
 		Registry:  "base-reg",
 		Namespace: "base-ns",
-		Environments: map[string]EnvironmentConfig{
+		Clusters: map[string]EnvironmentConfig{
 			"dev": {Namespace: "base-dev-ns", RuntimeClass: "base-rc"},
 		},
 	}
 	override := &TentacularConfig{
-		Environments: map[string]EnvironmentConfig{
+		Clusters: map[string]EnvironmentConfig{
 			"dev":     {Namespace: "override-dev-ns"},
 			"staging": {Namespace: "staging-ns"},
 		},
 	}
 	mergeConfig(base, override)
 
-	if len(base.Environments) != 2 {
-		t.Errorf("expected 2 environments after merge, got %d", len(base.Environments))
+	if len(base.Clusters) != 2 {
+		t.Errorf("expected 2 environments after merge, got %d", len(base.Clusters))
 	}
 	// dev environment should be overridden
-	if base.Environments["dev"].Namespace != "override-dev-ns" {
-		t.Errorf("expected override-dev-ns, got %s", base.Environments["dev"].Namespace)
+	if base.Clusters["dev"].Namespace != "override-dev-ns" {
+		t.Errorf("expected override-dev-ns, got %s", base.Clusters["dev"].Namespace)
 	}
 	// staging should be added
-	if base.Environments["staging"].Namespace != "staging-ns" {
-		t.Errorf("expected staging-ns, got %s", base.Environments["staging"].Namespace)
+	if base.Clusters["staging"].Namespace != "staging-ns" {
+		t.Errorf("expected staging-ns, got %s", base.Clusters["staging"].Namespace)
 	}
 }
 
@@ -309,7 +309,7 @@ func TestEnvWithEmptyFieldsDoesNotOverrideTopLevel(t *testing.T) {
 	configYAML := `registry: top-registry
 namespace: top-ns
 runtime_class: top-rc
-environments:
+clusters:
   minimal:
     namespace: minimal-ns
 `
@@ -359,7 +359,7 @@ func TestResolveEnvironmentEquivalentToLoadEnvironment(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   dev:
     namespace: dev-ns
     context: dev-ctx
@@ -442,7 +442,7 @@ func TestEnvironmentConfigOverridesFieldTypes(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   dev:
     namespace: dev-ns
     config_overrides:
@@ -482,16 +482,16 @@ func TestResolveEnvironmentEmptyReturnsTopLevel(t *testing.T) {
 	_ = os.Chdir(tmpDir)
 	defer func() { _ = os.Chdir(origDir) }()
 
-	// Clear TENTACULAR_ENV to ensure we test the empty-name path
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	// Clear TENTACULAR_CLUSTER to ensure we test the empty-name path
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
 	configYAML := `namespace: top-ns
 runtime_class: top-rc
-environments:
+clusters:
   dev:
     namespace: dev-ns
 `
@@ -514,7 +514,7 @@ environments:
 	}
 }
 
-func TestResolveEnvironmentTENTACULAR_ENVFallback(t *testing.T) {
+func TestResolveEnvironmentTENTACULAR_CLUSTERFallback(t *testing.T) {
 	origHome := os.Getenv("HOME")
 	tmpHome := t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
@@ -528,31 +528,31 @@ func TestResolveEnvironmentTENTACULAR_ENVFallback(t *testing.T) {
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
 	configYAML := `namespace: top-ns
-environments:
+clusters:
   staging:
     namespace: staging-ns
     context: staging-ctx
 `
 	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
 
-	// Set TENTACULAR_ENV and call ResolveEnvironment with empty name
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Setenv("TENTACULAR_ENV", "staging")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	// Set TENTACULAR_CLUSTER and call ResolveEnvironment with empty name
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Setenv("TENTACULAR_CLUSTER", "staging")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	env, err := ResolveEnvironment("")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if env.Namespace != "staging-ns" {
-		t.Errorf("expected staging-ns from TENTACULAR_ENV, got %s", env.Namespace)
+		t.Errorf("expected staging-ns from TENTACULAR_CLUSTER, got %s", env.Namespace)
 	}
 	if env.Context != "staging-ctx" {
-		t.Errorf("expected staging-ctx from TENTACULAR_ENV, got %s", env.Context)
+		t.Errorf("expected staging-ctx from TENTACULAR_CLUSTER, got %s", env.Context)
 	}
 }
 
-func TestResolveEnvironmentExplicitOverridesTENTACULAR_ENV(t *testing.T) {
+func TestResolveEnvironmentExplicitOverridesTENTACULAR_CLUSTER(t *testing.T) {
 	origHome := os.Getenv("HOME")
 	tmpHome := t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
@@ -565,7 +565,7 @@ func TestResolveEnvironmentExplicitOverridesTENTACULAR_ENV(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   dev:
     namespace: dev-ns
   staging:
@@ -573,16 +573,16 @@ func TestResolveEnvironmentExplicitOverridesTENTACULAR_ENV(t *testing.T) {
 `
 	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
 
-	// Set TENTACULAR_ENV to staging, but explicitly ask for dev
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Setenv("TENTACULAR_ENV", "staging")
-	defer func() { _ = os.Setenv("TENTACULAR_ENV", origEnv) }()
+	// Set TENTACULAR_CLUSTER to staging, but explicitly ask for dev
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Setenv("TENTACULAR_CLUSTER", "staging")
+	defer func() { _ = os.Setenv("TENTACULAR_CLUSTER", origEnv) }()
 
 	env, err := ResolveEnvironment("dev")
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Explicit name should win over TENTACULAR_ENV
+	// Explicit name should win over TENTACULAR_CLUSTER
 	if env.Namespace != "dev-ns" {
 		t.Errorf("expected dev-ns (explicit wins over env var), got %s", env.Namespace)
 	}
@@ -592,7 +592,7 @@ func TestLoadEnvironmentEmptyNameReturnsTopLevel(t *testing.T) {
 	cfg := &TentacularConfig{
 		Namespace:    "default-ns",
 		RuntimeClass: "default-rc",
-		Environments: map[string]EnvironmentConfig{
+		Clusters: map[string]EnvironmentConfig{
 			"dev": {Namespace: "dev-ns"},
 		},
 	}
@@ -622,7 +622,7 @@ func TestEnvironmentSecretsSource(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   prod:
     namespace: prod-ns
     secrets_source: vault://prod/tentacular
@@ -653,7 +653,7 @@ func TestEnvironmentEnforcementModes(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   dev:
     namespace: dev-ns
     enforcement: audit
@@ -707,7 +707,7 @@ func TestEnvironmentEnforcementRoundTrip(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   test:
     namespace: test-ns
     enforcement: audit
@@ -715,10 +715,10 @@ func TestEnvironmentEnforcementRoundTrip(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
 
 	cfg := LoadConfig()
-	if cfg.Environments == nil {
-		t.Fatal("expected Environments to be non-nil")
+	if cfg.Clusters == nil {
+		t.Fatal("expected Clusters to be non-nil")
 	}
-	testEnv, ok := cfg.Environments["test"]
+	testEnv, ok := cfg.Clusters["test"]
 	if !ok {
 		t.Fatal("expected test environment to exist")
 	}
@@ -742,7 +742,7 @@ func TestEnvironmentLegacyKubeconfigFieldIgnored(t *testing.T) {
 	_ = os.MkdirAll(userDir, 0o755)
 	// Config files from older versions may still contain kubeconfig fields;
 	// they should be silently ignored without error.
-	configYAML := `environments:
+	configYAML := `clusters:
   dev:
     kubeconfig: ~/dev-secrets/nats-admin.kubeconfig
     namespace: tentacular-dev
@@ -783,7 +783,7 @@ func TestEnvironmentEnforcementOmittedWhenEmpty(t *testing.T) {
 
 	userDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(userDir, 0o755)
-	configYAML := `environments:
+	configYAML := `clusters:
   minimal:
     namespace: minimal-ns
 `

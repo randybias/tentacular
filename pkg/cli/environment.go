@@ -17,7 +17,6 @@ type EnvironmentConfig struct {
 	SecretsSource   string         `yaml:"secrets_source,omitempty"`
 	Enforcement     string         `yaml:"enforcement,omitempty"` // "strict" (default) or "audit"
 	MCPEndpoint     string         `yaml:"mcp_endpoint,omitempty"`
-	MCPTokenPath    string         `yaml:"mcp_token_path,omitempty"`
 
 	// OIDC fields (optional). When present, `tntc login` uses device authorization flow.
 	OIDCIssuer       string `yaml:"oidc_issuer,omitempty"`
@@ -26,18 +25,18 @@ type EnvironmentConfig struct {
 }
 
 // ResolveEnvironment loads the merged config and returns the named environment.
-// Resolution cascade: explicit envName > TENTACULAR_ENV env var > default_env config > "" (top-level defaults).
-// When envName is empty (and TENTACULAR_ENV is unset and default_env is not set),
+// Resolution cascade: explicit clusterName > TENTACULAR_CLUSTER env var > default_cluster config > "" (top-level defaults).
+// When clusterName is empty (and TENTACULAR_CLUSTER is unset and default_cluster is not set),
 // returns top-level config promoted to an EnvironmentConfig.
-func ResolveEnvironment(envName string) (*EnvironmentConfig, error) {
-	if envName == "" {
-		envName = os.Getenv("TENTACULAR_ENV")
+func ResolveEnvironment(clusterName string) (*EnvironmentConfig, error) {
+	if clusterName == "" {
+		clusterName = os.Getenv("TENTACULAR_CLUSTER")
 	}
 	cfg := LoadConfig()
-	if envName == "" {
-		envName = cfg.DefaultEnv
+	if clusterName == "" {
+		clusterName = cfg.DefaultCluster
 	}
-	return cfg.LoadEnvironment(envName)
+	return cfg.LoadEnvironment(clusterName)
 }
 
 // LoadEnvironment is a package-level convenience that loads config and looks up
@@ -55,13 +54,9 @@ func (c *TentacularConfig) LoadEnvironment(name string) (*EnvironmentConfig, err
 			RuntimeClass: c.RuntimeClass,
 		}, nil
 	}
-	env, ok := c.Environments[name]
+	env, ok := c.Clusters[name]
 	if !ok {
 		return nil, fmt.Errorf("environment %q not found in config", name)
-	}
-	// Expand ~ in path fields
-	if env.MCPTokenPath != "" {
-		env.MCPTokenPath = expandHome(env.MCPTokenPath)
 	}
 	return &env, nil
 }

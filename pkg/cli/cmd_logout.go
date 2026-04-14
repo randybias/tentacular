@@ -18,22 +18,22 @@ func NewLogoutCmd() *cobra.Command {
 }
 
 func runLogout(cmd *cobra.Command, args []string) error {
-	envName := flagString(cmd, "env")
-	if envName == "" {
-		envName = os.Getenv("TENTACULAR_ENV")
+	clusterName := flagString(cmd, "cluster")
+	if clusterName == "" {
+		clusterName = os.Getenv("TENTACULAR_CLUSTER")
 	}
 	cfg := LoadConfig()
-	if envName == "" {
-		envName = cfg.DefaultEnv
+	if clusterName == "" {
+		clusterName = cfg.DefaultCluster
 	}
-	if envName == "" {
-		envName = "default"
+	if clusterName == "" {
+		clusterName = "default"
 	}
 
-	if err := RemoveOIDCToken(envName); err != nil {
+	if err := RemoveOIDCToken(clusterName); err != nil {
 		return fmt.Errorf("removing tokens: %w", err)
 	}
 
-	fmt.Fprintf(cmd.OutOrStdout(), "Logged out of environment %q\n", envName)
+	fmt.Fprintf(cmd.OutOrStdout(), "Logged out of environment %q\n", clusterName)
 	return nil
 }

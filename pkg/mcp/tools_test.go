@@ -41,7 +41,7 @@ func makeInvalidTextServer(t *testing.T) (*testServerHandle, *Client) {
 	tools := map[string]func(map[string]any) (string, bool){}
 	for _, name := range []string{
 		"wf_apply", "wf_remove", "wf_status", "wf_list", "wf_logs",
-		"wf_run", "cluster_preflight", "audit_resources",
+		"wf_run", "enclave_preflight", "audit_resources",
 		"exo_status", "exo_registration",
 	} {
 		tools[name] = func(args map[string]any) (string, bool) {
@@ -179,7 +179,7 @@ func TestWfRun(t *testing.T) {
 }
 
 func TestClusterPreflight(t *testing.T) {
-	h := makeToolServer(t, "cluster_preflight", ClusterPreflightResult{
+	h := makeToolServer(t, "enclave_preflight", ClusterPreflightResult{
 		Results: []CheckResult{
 			{Name: "Namespace", Passed: true},
 			{Name: "RBAC", Passed: true},
@@ -301,7 +301,7 @@ func TestWfRun_WithInput(t *testing.T) {
 }
 
 func TestClusterPreflight_Failure(t *testing.T) {
-	h := makeToolServer(t, "cluster_preflight", ClusterPreflightResult{
+	h := makeToolServer(t, "enclave_preflight", ClusterPreflightResult{
 		Results: []CheckResult{{Name: "Namespace", Passed: false, Remediation: "create namespace first"}},
 		AllPass: false,
 	}, false)
@@ -415,13 +415,13 @@ func TestClusterProfile_Success(t *testing.T) {
 	}
 }
 
-// TestClusterProfile_WithNamespace verifies namespace is passed as a parameter.
-func TestClusterProfile_WithNamespace(t *testing.T) {
-	var receivedNS string
+// TestClusterProfile_WithEnclave verifies enclave is passed as a parameter.
+func TestClusterProfile_WithEnclave(t *testing.T) {
+	var receivedEnclave string
 	srv, client := makeTestServer(t, map[string]func(map[string]any) (string, bool){
 		"cluster_profile": func(args map[string]any) (string, bool) {
-			if ns, ok := args["namespace"]; ok {
-				receivedNS, _ = ns.(string)
+			if ns, ok := args["enclave"]; ok {
+				receivedEnclave, _ = ns.(string)
 			}
 			return `{"k8sVersion":"v1.29.0"}`, false
 		},
@@ -433,8 +433,8 @@ func TestClusterProfile_WithNamespace(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ClusterProfile: %v", err)
 	}
-	if receivedNS != "my-namespace" {
-		t.Errorf("expected namespace=my-namespace to be passed, got %q", receivedNS)
+	if receivedEnclave != "my-namespace" {
+		t.Errorf("expected enclave=my-namespace to be passed, got %q", receivedEnclave)
 	}
 }
 

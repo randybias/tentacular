@@ -50,7 +50,6 @@ Examples:
 	cmd.Flags().String("oidc-client-id", "", "OIDC client ID")
 	cmd.Flags().String("oidc-client-secret", "", "OIDC client secret")
 	cmd.Flags().String("mcp-endpoint", "", "MCP server endpoint URL")
-	cmd.Flags().String("mcp-token-path", "", "Path to static bearer token file")
 	cmd.Flags().String("context", "", "Kubernetes context name")
 
 	// SSO guided setup
@@ -61,7 +60,7 @@ Examples:
 
 func runConfigure(cmd *cobra.Command, args []string) error {
 	project, _ := cmd.Flags().GetBool("project")
-	envName := flagString(cmd, "env")
+	clusterName := flagString(cmd, "cluster")
 	sso, _ := cmd.Flags().GetBool("sso")
 
 	// Determine config file path
@@ -82,19 +81,19 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		_ = yaml.Unmarshal(data, &cfg)
 	}
 
-	// Validate: env-scoped flags require --env
-	envScopedFlags := []string{"oidc-issuer", "oidc-client-id", "oidc-client-secret", "mcp-endpoint", "mcp-token-path", "context"}
-	if envName == "" && !sso {
-		for _, f := range envScopedFlags {
+	// Validate: cluster-scoped flags require --cluster
+	clusterScopedFlags := []string{"oidc-issuer", "oidc-client-id", "oidc-client-secret", "mcp-endpoint", "context"}
+	if clusterName == "" && !sso {
+		for _, f := range clusterScopedFlags {
 			if cmd.Flags().Changed(f) {
-				return fmt.Errorf("--%s requires --env/-e to specify which environment to configure", f)
+				return fmt.Errorf("--%s requires --cluster/-c to specify which cluster to configure", f)
 			}
 		}
 	}
 
-	// Validate: --sso requires --env
-	if sso && envName == "" {
-		return errors.New("--sso requires --env/-e to specify which environment to configure")
+	// Validate: --sso requires --cluster
+	if sso && clusterName == "" {
+		return errors.New("--sso requires --cluster/-c to specify which cluster to configure")
 	}
 
 	// Apply top-level flag overrides
@@ -108,15 +107,15 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		cfg.RuntimeClass, _ = cmd.Flags().GetString("runtime-class")
 	}
 	if cmd.Flags().Changed("default-env") {
-		cfg.DefaultEnv, _ = cmd.Flags().GetString("default-env")
+		cfg.DefaultCluster, _ = cmd.Flags().GetString("default-env")
 	}
 
 	// Environment-scoped configuration
-	if envName != "" {
-		if cfg.Environments == nil {
-			cfg.Environments = make(map[string]EnvironmentConfig)
+	if clusterName != "" {
+		if cfg.Clusters == nil {
+			cfg.Clusters = make(map[string]EnvironmentConfig)
 		}
-		env := cfg.Environments[envName] // zero value if new
+		env := cfg.Clusters[clusterName] // zero value if new
 
 		// Apply env-scoped flags
 		if cmd.Flags().Changed("oidc-issuer") {
@@ -131,9 +130,6 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		if cmd.Flags().Changed("mcp-endpoint") {
 			env.MCPEndpoint, _ = cmd.Flags().GetString("mcp-endpoint")
 		}
-		if cmd.Flags().Changed("mcp-token-path") {
-			env.MCPTokenPath, _ = cmd.Flags().GetString("mcp-token-path")
-		}
 		if cmd.Flags().Changed("context") {
 			env.Context, _ = cmd.Flags().GetString("context")
 		}
@@ -147,7 +143,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 			}
 		}
 
-		cfg.Environments[envName] = env
+		cfg.Clusters[clusterName] = env
 	}
 
 	// Write config
@@ -186,12 +182,12 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 	if cfg.RuntimeClass != "" {
 		fmt.Fprintf(cmd.OutOrStdout(), "  runtime_class: %s\n", cfg.RuntimeClass)
 	}
-	if cfg.DefaultEnv != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "  default_env: %s\n", cfg.DefaultEnv)
+	if cfg.DefaultCluster != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "  default_cluster: %s\n", cfg.DefaultCluster)
 	}
-	if envName != "" {
-		env := cfg.Environments[envName]
-		fmt.Fprintf(cmd.OutOrStdout(), "  environment %q:\n", envName)
+	if clusterName != "" {
+		env := cfg.Clusters[clusterName]
+		fmt.Fprintf(cmd.OutOrStdout(), "  environment %q:\n", clusterName)
 		if env.OIDCIssuer != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "    oidc_issuer: %s\n", env.OIDCIssuer)
 		}
@@ -204,21 +200,18 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		if env.MCPEndpoint != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "    mcp_endpoint: %s\n", env.MCPEndpoint)
 		}
-		if env.MCPTokenPath != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "    mcp_token_path: %s\n", env.MCPTokenPath)
-		}
 		if env.Context != "" {
 			fmt.Fprintf(cmd.OutOrStdout(), "    context: %s\n", env.Context)
 		}
 
 		// Hint for next step if OIDC was configured
 		if env.OIDCIssuer != "" && env.OIDCClientID != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "\nNext step: run 'tntc login -e %s' to authenticate.\n", envName)
+			fmt.Fprintf(cmd.OutOrStdout(), "\nNext step: run 'tntc login -e %s' to authenticate.\n", clusterName)
 		}
 	}
 
 	// Auto-profile all configured environments (best-effort; skips unreachable clusters)
-	if len(cfg.Environments) > 0 {
+	if len(cfg.Clusters) > 0 {
 		fmt.Fprintln(cmd.OutOrStdout(), "\nGenerating cluster profiles...")
 		AutoProfileEnvironments()
 	}
@@ -284,7 +277,7 @@ func promptValue(cmd *cobra.Command, reader *bufio.Reader, label string) (string
 
 // configHasSecret returns true if any environment contains an oidc_client_secret.
 func configHasSecret(cfg *TentacularConfig) bool {
-	for _, env := range cfg.Environments {
+	for _, env := range cfg.Clusters {
 		if env.OIDCClientSecret != "" {
 			return true
 		}

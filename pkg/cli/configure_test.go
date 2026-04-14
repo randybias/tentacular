@@ -17,8 +17,8 @@ func setupConfigTest(t *testing.T) (tmpHome string, cleanup func()) {
 	tmpHome = t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
 
-	origEnv := os.Getenv("TENTACULAR_ENV")
-	_ = os.Unsetenv("TENTACULAR_ENV")
+	origEnv := os.Getenv("TENTACULAR_CLUSTER")
+	_ = os.Unsetenv("TENTACULAR_CLUSTER")
 
 	origDir, _ := os.Getwd()
 	tmpDir := t.TempDir()
@@ -26,7 +26,7 @@ func setupConfigTest(t *testing.T) (tmpHome string, cleanup func()) {
 
 	cleanup = func() {
 		_ = os.Setenv("HOME", origHome)
-		_ = os.Setenv("TENTACULAR_ENV", origEnv)
+		_ = os.Setenv("TENTACULAR_CLUSTER", origEnv)
 		_ = os.Chdir(origDir)
 	}
 	return tmpHome, cleanup
@@ -37,7 +37,7 @@ func TestConfigure_TopLevelFlags(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -78,13 +78,13 @@ func TestConfigure_EnvScoped_NewEnvironment(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
-	_ = cmd.PersistentFlags().Set("env", "staging")
+	_ = cmd.PersistentFlags().Set("cluster", "staging")
 	_ = cmd.Flags().Set("oidc-issuer", "https://auth.example.com/realms/dev")
 	_ = cmd.Flags().Set("oidc-client-id", "myclient")
 	_ = cmd.Flags().Set("oidc-client-secret", "mysecret")
@@ -107,7 +107,7 @@ func TestConfigure_EnvScoped_NewEnvironment(t *testing.T) {
 		t.Fatalf("parsing config: %v", err)
 	}
 
-	env, ok := cfg.Environments["staging"]
+	env, ok := cfg.Clusters["staging"]
 	if !ok {
 		t.Fatal("staging environment not found in config")
 	}
@@ -135,7 +135,7 @@ func TestConfigure_EnvScoped_UpdatePreservesOtherFields(t *testing.T) {
 	// Pre-populate config with existing environment
 	cfgDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(cfgDir, 0o755)
-	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(`environments:
+	_ = os.WriteFile(filepath.Join(cfgDir, "config.yaml"), []byte(`clusters:
   prod:
     namespace: prod-ns
     oidc_issuer: https://auth.example.com/realms/prod
@@ -143,14 +143,14 @@ func TestConfigure_EnvScoped_UpdatePreservesOtherFields(t *testing.T) {
 `), 0o644)
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
 	// Only update the MCP endpoint -- other fields should be preserved
-	_ = cmd.PersistentFlags().Set("env", "prod")
+	_ = cmd.PersistentFlags().Set("cluster", "prod")
 	_ = cmd.Flags().Set("mcp-endpoint", "https://mcp.prod.example.com")
 
 	if err := cmd.RunE(cmd, nil); err != nil {
@@ -168,7 +168,7 @@ func TestConfigure_EnvScoped_UpdatePreservesOtherFields(t *testing.T) {
 		t.Fatalf("parsing config: %v", err)
 	}
 
-	env := cfg.Environments["prod"]
+	env := cfg.Clusters["prod"]
 	if env.MCPEndpoint != "https://mcp.prod.example.com" {
 		t.Errorf("mcp_endpoint: got %q", env.MCPEndpoint)
 	}
@@ -189,7 +189,7 @@ func TestConfigure_DefaultEnv(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -211,8 +211,8 @@ func TestConfigure_DefaultEnv(t *testing.T) {
 		t.Fatalf("parsing config: %v", err)
 	}
 
-	if cfg.DefaultEnv != "staging" {
-		t.Errorf("default_env: got %q, want %q", cfg.DefaultEnv, "staging")
+	if cfg.DefaultCluster != "staging" {
+		t.Errorf("default_cluster: got %q, want %q", cfg.DefaultCluster, "staging")
 	}
 }
 
@@ -221,14 +221,14 @@ func TestConfigure_SSOWithAllFlags_SkipsPrompts(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
 	// Provide all OIDC fields via flags -- --sso should not prompt
-	_ = cmd.PersistentFlags().Set("env", "test")
+	_ = cmd.PersistentFlags().Set("cluster", "test")
 	_ = cmd.Flags().Set("sso", "true")
 	_ = cmd.Flags().Set("oidc-issuer", "https://auth.example.com/realms/test")
 	_ = cmd.Flags().Set("oidc-client-id", "testclient")
@@ -253,7 +253,7 @@ func TestConfigure_SSOWithAllFlags_SkipsPrompts(t *testing.T) {
 		t.Fatalf("parsing config: %v", err)
 	}
 
-	env, ok := cfg.Environments["test"]
+	env, ok := cfg.Clusters["test"]
 	if !ok {
 		t.Fatal("test environment not found")
 	}
@@ -270,13 +270,13 @@ func TestConfigure_SecretPresent_FilePermissions0600(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
-	_ = cmd.PersistentFlags().Set("env", "secure")
+	_ = cmd.PersistentFlags().Set("cluster", "secure")
 	_ = cmd.Flags().Set("oidc-issuer", "https://auth.example.com/realms/secure")
 	_ = cmd.Flags().Set("oidc-client-id", "secureclient")
 	_ = cmd.Flags().Set("oidc-client-secret", "topsecret")
@@ -305,14 +305,14 @@ func TestConfigure_ProjectConfig(t *testing.T) {
 	workdir, _ := os.Getwd()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 	cmd.SetErr(&out)
 
 	_ = cmd.Flags().Set("project", "true")
-	_ = cmd.PersistentFlags().Set("env", "dev")
+	_ = cmd.PersistentFlags().Set("cluster", "dev")
 	_ = cmd.Flags().Set("oidc-issuer", "https://auth.example.com/realms/dev")
 	_ = cmd.Flags().Set("oidc-client-id", "devclient")
 
@@ -331,7 +331,7 @@ func TestConfigure_ProjectConfig(t *testing.T) {
 		t.Fatalf("parsing project config: %v", err)
 	}
 
-	env, ok := cfg.Environments["dev"]
+	env, ok := cfg.Clusters["dev"]
 	if !ok {
 		t.Fatal("dev environment not found in project config")
 	}
@@ -345,7 +345,7 @@ func TestConfigure_EnvFlagWithoutEnv_Errors(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)
@@ -367,7 +367,7 @@ func TestConfigure_SSOWithoutEnv_Errors(t *testing.T) {
 	defer cleanup()
 
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("env", "e", "", "Target environment")
+	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
 
 	var out bytes.Buffer
 	cmd.SetOut(&out)

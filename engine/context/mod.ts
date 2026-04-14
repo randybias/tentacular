@@ -109,6 +109,12 @@ function createDependencyAccessor(
       }
 
       authType = dep.auth.type;
+      if (authType === "bearer-token") {
+        console.warn(
+          `[tentacular] Deprecation: dependency "${name}" uses auth.type "bearer-token" which is deprecated. ` +
+            `Update your workflow.yaml to use auth.type "api-token" instead.`,
+        );
+      }
     }
 
     const conn: DependencyConnection = {
