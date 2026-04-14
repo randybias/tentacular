@@ -78,13 +78,13 @@ func TestWhoami_TextOutput_AllFields(t *testing.T) {
 	output := out.String()
 
 	checks := map[string]string{
-		"Email":       "alice@example.com",
-		"Name":        "Alice Smith",
-		"Subject":     "user-123",
-		"Issuer":      "https://auth.example.com/realms/test",
-		"Provider":    "google",
-		"Environment": "default",
-		"Expires":     "", // just check it's present
+		"Email":    "alice@example.com",
+		"Name":     "Alice Smith",
+		"Subject":  "user-123",
+		"Issuer":   "https://auth.example.com/realms/test",
+		"Provider": "google",
+		"Cluster":  "default",
+		"Expires":  "", // just check it's present
 	}
 
 	for label, value := range checks {
@@ -151,8 +151,8 @@ func TestWhoami_JSONOutput(t *testing.T) {
 	if result.Provider != "github" {
 		t.Errorf("expected provider=github, got %q", result.Provider)
 	}
-	if result.Environment != "default" {
-		t.Errorf("expected environment=default, got %q", result.Environment)
+	if result.Cluster != "default" {
+		t.Errorf("expected environment=default, got %q", result.Cluster)
 	}
 	if result.Expired {
 		t.Error("expected expired=false")

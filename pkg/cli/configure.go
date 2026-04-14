@@ -19,22 +19,22 @@ func NewConfigureCmd() *cobra.Command {
 		Short: "Set default configuration",
 		Long: `Set default configuration values for tntc.
 
-Without --env, sets top-level defaults (registry, namespace, runtime-class).
-With --env, creates or updates an environment with OIDC, MCP, and Kubernetes settings.
+Without --cluster, sets top-level defaults (registry, namespace, runtime-class).
+With --cluster, creates or updates a cluster with OIDC, MCP, and Kubernetes settings.
 
 Examples:
   # Set top-level defaults
   tntc configure --registry ghcr.io/myorg --default-namespace myapp
 
-  # Configure an environment with OIDC SSO
-  tntc configure -e staging --oidc-issuer https://auth.example.com/realms/dev \
+  # Configure a cluster with OIDC SSO
+  tntc configure -c staging --oidc-issuer https://auth.example.com/realms/dev \
     --oidc-client-id myclient --mcp-endpoint https://mcp.example.com
 
   # Interactive SSO setup
-  tntc configure --sso -e staging
+  tntc configure --sso -c staging
 
-  # Set the default environment
-  tntc configure --default-env staging`,
+  # Set the default cluster
+  tntc configure --default-cluster staging`,
 		RunE: runConfigure,
 	}
 
@@ -42,10 +42,10 @@ Examples:
 	cmd.Flags().String("registry", "", "Default container registry URL")
 	cmd.Flags().String("default-namespace", "", "Default Kubernetes namespace")
 	cmd.Flags().String("runtime-class", "", "Default RuntimeClass name")
-	cmd.Flags().String("default-env", "", "Set the default environment name")
+	cmd.Flags().String("default-cluster", "", "Set the default cluster name")
 	cmd.Flags().Bool("project", false, "Write to project config (.tentacular/config.yaml) instead of user config")
 
-	// Environment-scoped flags (require --env)
+	// Cluster-scoped flags (require --cluster)
 	cmd.Flags().String("oidc-issuer", "", "OIDC issuer URL (e.g. Keycloak realm URL)")
 	cmd.Flags().String("oidc-client-id", "", "OIDC client ID")
 	cmd.Flags().String("oidc-client-secret", "", "OIDC client secret")
@@ -106,8 +106,8 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 	if cmd.Flags().Changed("runtime-class") {
 		cfg.RuntimeClass, _ = cmd.Flags().GetString("runtime-class")
 	}
-	if cmd.Flags().Changed("default-env") {
-		cfg.DefaultCluster, _ = cmd.Flags().GetString("default-env")
+	if cmd.Flags().Changed("default-cluster") {
+		cfg.DefaultCluster, _ = cmd.Flags().GetString("default-cluster")
 	}
 
 	// Environment-scoped configuration
@@ -206,7 +206,7 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 
 		// Hint for next step if OIDC was configured
 		if env.OIDCIssuer != "" && env.OIDCClientID != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "\nNext step: run 'tntc login -e %s' to authenticate.\n", clusterName)
+			fmt.Fprintf(cmd.OutOrStdout(), "\nNext step: run 'tntc login -c %s' to authenticate.\n", clusterName)
 		}
 	}
 
