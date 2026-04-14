@@ -255,8 +255,11 @@ func ValidateContract(c *Contract) []string {
 			}
 			// Skip protocol-specific field validation for dynamic-target
 			if dep.Auth != nil {
-				if dep.Auth.Type == "" {
+				switch dep.Auth.Type {
+				case "":
 					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.type is required when auth is present", name))
+				case "bearer-token":
+					log.Printf("Deprecation warning: contract.dependencies[%q]: auth.type \"bearer-token\" is deprecated; use \"api-token\" instead", name)
 				}
 				if dep.Auth.Secret == "" {
 					errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))
@@ -307,8 +310,11 @@ func ValidateContract(c *Contract) []string {
 
 		// Auth validation
 		if dep.Auth != nil {
-			if dep.Auth.Type == "" {
+			switch dep.Auth.Type {
+			case "":
 				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.type is required when auth is present", name))
+			case "bearer-token":
+				log.Printf("Deprecation warning: contract.dependencies[%q]: auth.type \"bearer-token\" is deprecated; use \"api-token\" instead", name)
 			}
 			if dep.Auth.Secret == "" {
 				errs = append(errs, fmt.Sprintf("contract.dependencies[%q]: auth.secret is required when auth is present", name))

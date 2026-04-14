@@ -90,7 +90,7 @@ contract:
       host: api.github.com
       port: 443
       auth:
-        type: bearer-token
+        type: api-token
         secret: github.token
     postgres:
       protocol: postgresql

@@ -7,6 +7,78 @@ import (
 
 // --- Additional Contract Parsing Tests (Phase 1 Comprehensive Coverage) ---
 
+// TestParseContractApiTokenAuthType verifies that the new canonical auth type
+// "api-token" is accepted without errors or deprecation warnings.
+func TestParseContractApiTokenAuthType(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+    description: "Test node"
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: api-token
+        secret: github.token
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("api-token auth type should be accepted without errors, got: %v", errs)
+	}
+	if wf.Contract == nil {
+		t.Fatal("expected contract to be parsed")
+	}
+	dep := wf.Contract.Dependencies["github"]
+	if dep.Auth == nil || dep.Auth.Type != "api-token" {
+		t.Errorf("expected auth.type api-token, got %v", dep.Auth)
+	}
+}
+
+// TestParseContractBearerTokenDeprecated verifies that "bearer-token" is still
+// accepted (backwards compat) but will log a deprecation warning. The test
+// confirms it does NOT produce a validation error.
+func TestParseContractBearerTokenDeprecated(t *testing.T) {
+	yaml := `
+name: test-wf
+version: "1.0"
+triggers:
+  - type: manual
+nodes:
+  fetch:
+    path: ./nodes/fetch.ts
+    description: "Test node"
+edges: []
+contract:
+  version: "1"
+  dependencies:
+    github:
+      protocol: https
+      host: api.github.com
+      port: 443
+      auth:
+        type: bearer-token
+        secret: github.token
+`
+	wf, errs := Parse([]byte(yaml))
+	if len(errs) > 0 {
+		t.Fatalf("bearer-token should still be accepted (deprecated), got errors: %v", errs)
+	}
+	dep := wf.Contract.Dependencies["github"]
+	if dep.Auth == nil || dep.Auth.Type != "bearer-token" {
+		t.Errorf("expected auth.type bearer-token, got %v", dep.Auth)
+	}
+}
+
 func TestParseContractEmptyDependencies(t *testing.T) {
 	yaml := `
 name: test-wf
