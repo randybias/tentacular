@@ -194,7 +194,7 @@ func TestConfigure_DefaultEnv(t *testing.T) {
 	var out bytes.Buffer
 	cmd.SetOut(&out)
 
-	_ = cmd.Flags().Set("default-env", "staging")
+	_ = cmd.Flags().Set("default-cluster", "staging")
 
 	if err := cmd.RunE(cmd, nil); err != nil {
 		t.Fatalf("runConfigure: %v", err)

@@ -21,15 +21,15 @@ func NewWhoamiCmd() *cobra.Command {
 
 // whoamiResult is the structured output for JSON mode.
 type whoamiResult struct {
-	Email       string   `json:"email"`
-	Name        string   `json:"name,omitempty"`
-	Subject     string   `json:"subject"`
-	Issuer      string   `json:"issuer,omitempty"`
-	Provider    string   `json:"provider,omitempty"`
-	Environment string   `json:"environment"`
-	ExpiresAt   string   `json:"expires_at,omitempty"`
-	Groups      []string `json:"groups,omitempty"`
-	Expired     bool     `json:"expired"`
+	Email     string   `json:"email"`
+	Name      string   `json:"name,omitempty"`
+	Subject   string   `json:"subject"`
+	Issuer    string   `json:"issuer,omitempty"`
+	Provider  string   `json:"provider,omitempty"`
+	Cluster   string   `json:"cluster"`
+	ExpiresAt string   `json:"expires_at,omitempty"`
+	Groups    []string `json:"groups,omitempty"`
+	Expired   bool     `json:"expired"`
 }
 
 func runWhoami(cmd *cobra.Command, args []string) error {
@@ -52,7 +52,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("reading tokens: %w", err)
 	}
 	if store == nil {
-		return fmt.Errorf("not authenticated for environment %q; run 'tntc login -e %s'", clusterName, clusterName)
+		return fmt.Errorf("not authenticated for cluster %q; run 'tntc login -c %s'", clusterName, clusterName)
 	}
 
 	// Decode claims from access token for fresh info
@@ -61,9 +61,9 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 		// Fall back to stored email
 		if outputFormat == "json" {
 			result := whoamiResult{
-				Email:       store.Email,
-				Environment: clusterName,
-				Expired:     store.IsExpired(),
+				Email:   store.Email,
+				Cluster: clusterName,
+				Expired: store.IsExpired(),
 			}
 			if !store.IsExpired() {
 				result.ExpiresAt = store.ExpiresAt.Format(time.RFC3339)
@@ -71,7 +71,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 			return emitWhoamiJSON(cmd, result)
 		}
 		fmt.Fprintf(cmd.OutOrStdout(), "Email:       %s\n", store.Email)
-		fmt.Fprintf(cmd.OutOrStdout(), "Environment: %s\n", clusterName)
+		fmt.Fprintf(cmd.OutOrStdout(), "Cluster: %s\n", clusterName)
 		if store.IsExpired() {
 			fmt.Fprintln(cmd.OutOrStdout(), "Token:       EXPIRED")
 		} else {
@@ -100,15 +100,15 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 
 	if outputFormat == "json" {
 		result := whoamiResult{
-			Email:       email,
-			Name:        name,
-			Subject:     claims.Sub,
-			Issuer:      issuer,
-			Provider:    provider,
-			Environment: clusterName,
-			Expired:     expired,
-			ExpiresAt:   expiresAt,
-			Groups:      claims.Groups,
+			Email:     email,
+			Name:      name,
+			Subject:   claims.Sub,
+			Issuer:    issuer,
+			Provider:  provider,
+			Cluster:   clusterName,
+			Expired:   expired,
+			ExpiresAt: expiresAt,
+			Groups:    claims.Groups,
 		}
 		return emitWhoamiJSON(cmd, result)
 	}
@@ -135,7 +135,7 @@ func runWhoami(cmd *cobra.Command, args []string) error {
 		}
 		fmt.Fprintln(out)
 	}
-	fmt.Fprintf(out, "Environment: %s\n", clusterName)
+	fmt.Fprintf(out, "Cluster: %s\n", clusterName)
 
 	if expired {
 		fmt.Fprintln(out, "Token:       EXPIRED (run 'tntc login' to re-authenticate)")
