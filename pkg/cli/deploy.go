@@ -91,7 +91,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Apply config defaults: workflow.yaml > env config > config file
 	cfg := LoadConfig()
 
-	// Resolve --env: environment config provides namespace, runtime-class defaults.
+	// Resolve --cluster: cluster config provides namespace, runtime-class defaults.
 	if clusterName != "" {
 		env, envErr := cfg.LoadEnvironment(clusterName)
 		if envErr != nil {
