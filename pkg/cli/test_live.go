@@ -31,20 +31,20 @@ func runLiveTest(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no workflow.yaml found in %s", absDir)
 	}
 
-	envName := flagString(cmd, "env")
+	clusterName := flagString(cmd, "cluster")
 	keep, _ := cmd.Flags().GetBool("keep")
 	timeout, _ := cmd.Flags().GetDuration("timeout")
 
-	// Load environment configuration
-	env, err := ResolveEnvironment(envName)
+	// Load cluster configuration
+	env, err := ResolveEnvironment(clusterName)
 	if err != nil {
-		return fmt.Errorf("loading environment %q: %w", envName, err)
+		return fmt.Errorf("loading cluster %q: %w", clusterName, err)
 	}
 
 	// Determine status output writer (stderr when -o json)
 	w := StatusWriter(cmd)
 
-	_, _ = fmt.Fprintf(w, "Live test: environment=%s, namespace=%s\n", envName, env.Namespace)
+	_, _ = fmt.Fprintf(w, "Live test: cluster=%s, enclave=%s\n", clusterName, env.Namespace)
 
 	// Resolve MCP client
 	mcpClient, err := requireMCPClient(cmd)

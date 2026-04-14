@@ -24,7 +24,7 @@ func flagString(cmd *cobra.Command, name string) string {
 
 // resolveNamespace determines the target namespace using the cascade:
 // 1. deployment.namespace from workflow.yaml (when workflowDir is provided)
-// 2. env config namespace (from --env or default environment)
+// 2. cluster config namespace (from --cluster or default_cluster)
 // 3. global config namespace
 // 4. "default"
 func resolveNamespace(cmd *cobra.Command, workflowDir string) string {
