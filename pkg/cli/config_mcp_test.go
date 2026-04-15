@@ -32,8 +32,9 @@ clusters:
 	}
 }
 
-// TestMergeConfigDefaultEnv verifies project config overrides user's default_cluster.
-func TestMergeConfigDefaultEnv(t *testing.T) {
+// TestLoadConfigDefaultEnvUserOnly verifies that only user-level default_cluster
+// is loaded; project-level config is ignored.
+func TestLoadConfigDefaultEnvUserOnly(t *testing.T) {
 	origHome := os.Getenv("HOME")
 	tmpHome := t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
@@ -53,7 +54,7 @@ clusters:
     namespace: dev-ns
 `), 0o644)
 
-	// Project config: overrides default_cluster=staging
+	// Project config is present but should be ignored
 	projDir := filepath.Join(tmpDir, ".tentacular")
 	_ = os.MkdirAll(projDir, 0o755)
 	_ = os.WriteFile(filepath.Join(projDir, "config.yaml"), []byte(`default_cluster: staging
@@ -63,8 +64,9 @@ clusters:
 `), 0o644)
 
 	cfg := LoadConfig()
-	if cfg.DefaultCluster != "staging" {
-		t.Errorf("expected project default_cluster=staging to override user, got %q", cfg.DefaultCluster)
+	// User-level default_cluster should apply; project-level is ignored
+	if cfg.DefaultCluster != "dev" {
+		t.Errorf("expected user default_cluster=dev (project-level ignored), got %q", cfg.DefaultCluster)
 	}
 }
 

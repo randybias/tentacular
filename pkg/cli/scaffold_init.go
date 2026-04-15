@@ -26,8 +26,8 @@ func newScaffoldInitCmd() *cobra.Command {
 	cmd.Flags().String("params-file", "", "Apply parameter values from YAML file to workflow.yaml")
 	cmd.Flags().Bool("no-params", false, "Copy scaffold as-is without printing parameter prompts")
 	cmd.Flags().String("namespace", "", "Set deployment.namespace in workflow.yaml")
-	cmd.Flags().String("dir", "", "Override output directory (default: ~/tentacles/<tentacle-name>/)")
-	cmd.Flags().String("enclave", "", "Target enclave (scopes output to ~/tentacles/<enclave>/<name>/)")
+	cmd.Flags().String("dir", "", "Override output directory (default: ~/tentacular/<tentacle-name>/)")
+	cmd.Flags().String("enclave", "", "Target enclave (required when git-state is enabled; scopes output to ~/tentacular/<enclave>/<name>/)")
 	return cmd
 }
 
@@ -140,7 +140,7 @@ func resolveOutDir(dirOverride, enclaveName, tentacleName string, gitState GitSt
 		return filepath.Join(enclaveDir, tentacleName), nil
 	}
 	if gitState.Enabled {
-		return "", errors.New("git-state is enabled -- --enclave is required")
+		return "", errors.New("--enclave is required (pass it explicitly)")
 	}
 	tentaclesDir, err := scaffold.TentaclesDir()
 	if err != nil {

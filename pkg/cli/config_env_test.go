@@ -178,7 +178,8 @@ func TestLoadEnvironmentNoEnvironmentsDefined(t *testing.T) {
 	}
 }
 
-func TestProjectEnvOverridesUserEnv(t *testing.T) {
+func TestUserEnvIsLoaded(t *testing.T) {
+	// Project-level config is no longer supported. Only user-level config is loaded.
 	origHome := os.Getenv("HOME")
 	tmpHome := t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
@@ -200,7 +201,7 @@ func TestProjectEnvOverridesUserEnv(t *testing.T) {
 `
 	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(userYAML), 0o644)
 
-	// Project-level config overrides dev namespace only
+	// A project-level config is present but should be ignored
 	projDir := filepath.Join(tmpDir, ".tentacular")
 	_ = os.MkdirAll(projDir, 0o755)
 	projYAML := `clusters:
@@ -213,9 +214,9 @@ func TestProjectEnvOverridesUserEnv(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	// Project should override namespace
-	if env.Namespace != "project-dev-ns" {
-		t.Errorf("expected project-dev-ns, got %s", env.Namespace)
+	// User-level namespace should apply; project-level is ignored
+	if env.Namespace != "user-dev-ns" {
+		t.Errorf("expected user-dev-ns (project-level ignored), got %s", env.Namespace)
 	}
 }
 
@@ -262,32 +263,35 @@ func TestApplyConfigOverridesEmpty(t *testing.T) {
 	}
 }
 
-func TestMergeConfigWithEnvironments(t *testing.T) {
-	base := &TentacularConfig{
-		Registry:  "base-reg",
-		Namespace: "base-ns",
-		Clusters: map[string]EnvironmentConfig{
-			"dev": {Namespace: "base-dev-ns", RuntimeClass: "base-rc"},
-		},
-	}
-	override := &TentacularConfig{
-		Clusters: map[string]EnvironmentConfig{
-			"dev":     {Namespace: "override-dev-ns"},
-			"staging": {Namespace: "staging-ns"},
-		},
-	}
-	mergeConfig(base, override)
+func TestLoadConfigWithMultipleEnvironments(t *testing.T) {
+	// Verify that multiple clusters in user-level config are all loaded.
+	origHome := os.Getenv("HOME")
+	tmpHome := t.TempDir()
+	_ = os.Setenv("HOME", tmpHome)
+	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	if len(base.Clusters) != 2 {
-		t.Errorf("expected 2 environments after merge, got %d", len(base.Clusters))
+	userDir := filepath.Join(tmpHome, ".tentacular")
+	_ = os.MkdirAll(userDir, 0o755)
+	configYAML := `registry: base-reg
+namespace: base-ns
+clusters:
+  dev:
+    namespace: base-dev-ns
+    runtime_class: base-rc
+  staging:
+    namespace: staging-ns
+`
+	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte(configYAML), 0o644)
+
+	cfg := LoadConfig()
+	if len(cfg.Clusters) != 2 {
+		t.Errorf("expected 2 environments, got %d", len(cfg.Clusters))
 	}
-	// dev environment should be overridden
-	if base.Clusters["dev"].Namespace != "override-dev-ns" {
-		t.Errorf("expected override-dev-ns, got %s", base.Clusters["dev"].Namespace)
+	if cfg.Clusters["dev"].Namespace != "base-dev-ns" {
+		t.Errorf("expected base-dev-ns, got %s", cfg.Clusters["dev"].Namespace)
 	}
-	// staging should be added
-	if base.Clusters["staging"].Namespace != "staging-ns" {
-		t.Errorf("expected staging-ns, got %s", base.Clusters["staging"].Namespace)
+	if cfg.Clusters["staging"].Namespace != "staging-ns" {
+		t.Errorf("expected staging-ns, got %s", cfg.Clusters["staging"].Namespace)
 	}
 }
 

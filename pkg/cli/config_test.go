@@ -61,7 +61,8 @@ func TestLoadConfigUserLevel(t *testing.T) {
 	}
 }
 
-func TestLoadConfigProjectOverridesUser(t *testing.T) {
+func TestLoadConfigIgnoresProjectLevel(t *testing.T) {
+	// Project-level config is no longer loaded; only user-level applies.
 	origHome := os.Getenv("HOME")
 	tmpHome := t.TempDir()
 	_ = os.Setenv("HOME", tmpHome)
@@ -77,16 +78,16 @@ func TestLoadConfigProjectOverridesUser(t *testing.T) {
 	_ = os.MkdirAll(userDir, 0o755)
 	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte("registry: user-registry\nnamespace: user-ns\nruntime_class: user-rc\n"), 0o644)
 
-	// Create project-level config (overrides registry only)
+	// Create project-level config — should NOT be loaded
 	projDir := filepath.Join(tmpDir, ".tentacular")
 	_ = os.MkdirAll(projDir, 0o755)
 	_ = os.WriteFile(filepath.Join(projDir, "config.yaml"), []byte("registry: project-registry\n"), 0o644)
 
 	cfg := LoadConfig()
-	if cfg.Registry != "project-registry" {
-		t.Errorf("expected project-registry, got %s", cfg.Registry)
+	// User-level registry should win; project-level is ignored
+	if cfg.Registry != "user-registry" {
+		t.Errorf("expected user-registry (project-level ignored), got %s", cfg.Registry)
 	}
-	// Namespace and RuntimeClass should come from user config
 	if cfg.Namespace != "user-ns" {
 		t.Errorf("expected user-ns, got %s", cfg.Namespace)
 	}
@@ -95,25 +96,27 @@ func TestLoadConfigProjectOverridesUser(t *testing.T) {
 	}
 }
 
-func TestMergeConfigPartial(t *testing.T) {
-	base := &TentacularConfig{
-		Registry:     "base-reg",
-		Namespace:    "base-ns",
-		RuntimeClass: "base-rc",
+func TestLoadConfigOnlyUserLevel(t *testing.T) {
+	// LoadConfig reads only user-level config; this test verifies that
+	// fields are read correctly and no project-level file is consulted.
+	origHome := os.Getenv("HOME")
+	tmpHome := t.TempDir()
+	_ = os.Setenv("HOME", tmpHome)
+	defer func() { _ = os.Setenv("HOME", origHome) }()
+
+	userDir := filepath.Join(tmpHome, ".tentacular")
+	_ = os.MkdirAll(userDir, 0o755)
+	_ = os.WriteFile(filepath.Join(userDir, "config.yaml"), []byte("registry: base-reg\nnamespace: base-ns\nruntime_class: base-rc\n"), 0o644)
+
+	cfg := LoadConfig()
+	if cfg.Registry != "base-reg" {
+		t.Errorf("expected base-reg, got %s", cfg.Registry)
 	}
-	override := &TentacularConfig{
-		Registry: "override-reg",
-		// Namespace and RuntimeClass are empty — should not override
+	if cfg.Namespace != "base-ns" {
+		t.Errorf("expected base-ns, got %s", cfg.Namespace)
 	}
-	mergeConfig(base, override)
-	if base.Registry != "override-reg" {
-		t.Errorf("expected override-reg, got %s", base.Registry)
-	}
-	if base.Namespace != "base-ns" {
-		t.Errorf("expected base-ns unchanged, got %s", base.Namespace)
-	}
-	if base.RuntimeClass != "base-rc" {
-		t.Errorf("expected base-rc unchanged, got %s", base.RuntimeClass)
+	if cfg.RuntimeClass != "base-rc" {
+		t.Errorf("expected base-rc, got %s", cfg.RuntimeClass)
 	}
 }
 
@@ -144,30 +147,12 @@ func TestRunConfigureWritesUserConfig(t *testing.T) {
 	}
 }
 
-func TestRunConfigureWritesProjectConfig(t *testing.T) {
-	origDir, _ := os.Getwd()
-	tmpDir := t.TempDir()
-	_ = os.Chdir(tmpDir)
-	defer func() { _ = os.Chdir(origDir) }()
-
+func TestRunConfigureRejectsProjectFlag(t *testing.T) {
+	// --project flag has been removed; configure only writes user-level config.
 	cmd := NewConfigureCmd()
-	cmd.SetArgs([]string{"--default-namespace", "staging", "--project"})
-	if err := cmd.Execute(); err != nil {
-		t.Fatalf("configure --project failed: %v", err)
-	}
-
-	configPath := filepath.Join(tmpDir, ".tentacular", "config.yaml")
-	data, err := os.ReadFile(configPath)
-	if err != nil {
-		t.Fatalf("project config file not written: %v", err)
-	}
-
-	var cfg TentacularConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		t.Fatalf("invalid YAML in project config: %v", err)
-	}
-	if cfg.Namespace != "staging" {
-		t.Errorf("expected namespace staging, got %s", cfg.Namespace)
+	f := cmd.Flags().Lookup("project")
+	if f != nil {
+		t.Error("--project flag should not exist on configure command")
 	}
 }
 

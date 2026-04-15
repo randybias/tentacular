@@ -19,6 +19,8 @@ func NewConfigureCmd() *cobra.Command {
 		Short: "Set default configuration",
 		Long: `Set default configuration values for tntc.
 
+All settings are stored in ~/.tentacular/config.yaml (user-level).
+
 Without --cluster, sets top-level defaults (registry, namespace, runtime-class).
 With --cluster, creates or updates a cluster with OIDC, MCP, and Kubernetes settings.
 
@@ -43,7 +45,6 @@ Examples:
 	cmd.Flags().String("default-namespace", "", "Default Kubernetes namespace")
 	cmd.Flags().String("runtime-class", "", "Default RuntimeClass name")
 	cmd.Flags().String("default-cluster", "", "Set the default cluster name")
-	cmd.Flags().Bool("project", false, "Write to project config (.tentacular/config.yaml) instead of user config")
 
 	// Cluster-scoped flags (require --cluster)
 	cmd.Flags().String("oidc-issuer", "", "OIDC issuer URL (e.g. Keycloak realm URL)")
@@ -59,25 +60,19 @@ Examples:
 }
 
 func runConfigure(cmd *cobra.Command, args []string) error {
-	project, _ := cmd.Flags().GetBool("project")
 	clusterName := flagString(cmd, "cluster")
 	sso, _ := cmd.Flags().GetBool("sso")
 
-	// Determine config file path
-	var configPath string
-	if project {
-		configPath = filepath.Join(".tentacular", "config.yaml")
-	} else {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return fmt.Errorf("determining home directory: %w", err)
-		}
-		configPath = filepath.Join(home, ".tentacular", "config.yaml")
+	// Determine config file path (always user-level)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("determining home directory: %w", err)
 	}
+	configPath := filepath.Join(home, ".tentacular", "config.yaml")
 
 	// Load existing config
 	cfg := TentacularConfig{}
-	if data, err := os.ReadFile(configPath); err == nil { //nolint:gosec // reading config file
+	if data, readErr := os.ReadFile(configPath); readErr == nil { //nolint:gosec // reading config file
 		_ = yaml.Unmarshal(data, &cfg)
 	}
 
@@ -136,10 +131,10 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 
 		// --sso guided flow: prompt for missing OIDC fields
 		if sso {
-			var err error
-			env, err = ssoGuidedSetup(cmd, env)
-			if err != nil {
-				return err
+			var ssoErr error
+			env, ssoErr = ssoGuidedSetup(cmd, env)
+			if ssoErr != nil {
+				return ssoErr
 			}
 		}
 
@@ -147,13 +142,13 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 	}
 
 	// Write config
-	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil { //nolint:gosec // non-sensitive config directory
-		return fmt.Errorf("creating config directory: %w", err)
+	if mkdirErr := os.MkdirAll(filepath.Dir(configPath), 0o755); mkdirErr != nil { //nolint:gosec // non-sensitive config directory
+		return fmt.Errorf("creating config directory: %w", mkdirErr)
 	}
 
-	data, err := yaml.Marshal(&cfg)
-	if err != nil {
-		return fmt.Errorf("marshaling config: %w", err)
+	data, marshalErr := yaml.Marshal(&cfg)
+	if marshalErr != nil {
+		return fmt.Errorf("marshaling config: %w", marshalErr)
 	}
 
 	// Determine file permissions: 0o600 if any env has a client secret
@@ -163,8 +158,8 @@ func runConfigure(cmd *cobra.Command, args []string) error {
 		fmt.Fprintln(cmd.OutOrStderr(), "Warning: config contains oidc_client_secret; writing with restricted permissions (0600)")
 	}
 
-	if err := os.WriteFile(configPath, data, perm); err != nil { //nolint:gosec // perm is 0o644 or 0o600 depending on secret presence
-		return fmt.Errorf("writing config: %w", err)
+	if writeErr := os.WriteFile(configPath, data, perm); writeErr != nil { //nolint:gosec // perm is 0o644 or 0o600 depending on secret presence
+		return fmt.Errorf("writing config: %w", writeErr)
 	}
 
 	// Also tighten existing file if permissions are too open

@@ -65,7 +65,6 @@ func runStateInit(cmd *cobra.Command, _ []string) error {
 	dirs := []string{
 		filepath.Join(absPath, "enclaves"),
 		filepath.Join(absPath, "archive"),
-		filepath.Join(absPath, ".tentacular"),
 	}
 	for _, d := range dirs {
 		if err := os.MkdirAll(d, 0o700); err != nil {
@@ -80,15 +79,6 @@ func runStateInit(cmd *cobra.Command, _ []string) error {
 			if err := os.WriteFile(keepFile, []byte(""), 0o600); err != nil {
 				return fmt.Errorf("writing %s/.gitkeep: %w", d, err)
 			}
-		}
-	}
-
-	// Write .tentacular/config.yaml with defaults
-	configPath := filepath.Join(absPath, ".tentacular", "config.yaml")
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
-		configContent := fmt.Sprintf("# Tentacular git-state configuration\ngit_state:\n  repo_path: %s\n  enabled: true\n", absPath)
-		if err := os.WriteFile(configPath, []byte(configContent), 0o600); err != nil {
-			return fmt.Errorf("writing .tentacular/config.yaml: %w", err)
 		}
 	}
 
@@ -122,14 +112,18 @@ func runStateInit(cmd *cobra.Command, _ []string) error {
 	// Write README
 	readmePath := filepath.Join(absPath, "README.md")
 	if _, err := os.Stat(readmePath); os.IsNotExist(err) {
-		readmeContent := "# Tentacular Git-State Repository\n\nThis repository tracks tentacle source and metadata managed by `tntc`.\n\n## Structure\n\n- `enclaves/` -- tentacle source organized by enclave\n- `archive/` -- retired tentacles\n- `.tentacular/config.yaml` -- git-state configuration\n\n## Commit Convention\n\nUse [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):\n\n```\nfeat(enclave/tentacle): add initial scaffold\nfix(enclave/tentacle): correct API endpoint\nchore(enclave/tentacle): update secrets reference\n```\n"
+		readmeContent := "# Tentacular Git-State Repository\n\nThis repository tracks tentacle source and metadata managed by `tntc`.\n\n## Structure\n\n- `enclaves/` -- tentacle source organized by enclave\n- `archive/` -- retired tentacles\n\nConfiguration lives in `~/.tentacular/config.yaml` (user-level only).\n\n## Commit Convention\n\nUse [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/):\n\n```\nfeat(enclave/tentacle): add initial scaffold\nfix(enclave/tentacle): correct API endpoint\nchore(enclave/tentacle): update secrets reference\n```\n"
 		if err := os.WriteFile(readmePath, []byte(readmeContent), 0o644); err != nil { //nolint:gosec // README is non-sensitive
 			return fmt.Errorf("writing README.md: %w", err)
 		}
 	}
 
 	fmt.Printf("Initialized git-state repo at %s\n", absPath)
-	fmt.Printf("Next: add git_state.repo_path and git_state.enabled: true to ~/.tentacular/config.yaml\n")
+	fmt.Printf("\nNext: add the following to your ~/.tentacular/config.yaml:\n")
+	fmt.Printf("  workspace: %s\n", absPath)
+	fmt.Printf("  git_state:\n")
+	fmt.Printf("    enabled: true\n")
+	fmt.Printf("    repo_path: %s\n", absPath)
 	return nil
 }
 

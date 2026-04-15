@@ -464,13 +464,8 @@ func TestEnvironmentConfig_OIDCFields(t *testing.T) {
 	_ = os.Setenv("HOME", tmpHome)
 	defer func() { _ = os.Setenv("HOME", origHome) }()
 
-	origDir, _ := os.Getwd()
-	tmpDir := t.TempDir()
-	_ = os.Chdir(tmpDir)
-	defer func() { _ = os.Chdir(origDir) }()
-
-	// Write config with OIDC settings
-	configDir := filepath.Join(tmpDir, ".tentacular")
+	// Write config to user-level location
+	configDir := filepath.Join(tmpHome, ".tentacular")
 	_ = os.MkdirAll(configDir, 0o755)
 	configYAML := `clusters:
   staging:

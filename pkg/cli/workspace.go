@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/spf13/cobra"
@@ -19,10 +21,10 @@ The workspace contains:
   - .secrets/    shared secrets pool
   - .gitignore   ignoring .secrets.yaml, scratch/, .secrets/
 
-The workspace path is written to ~/.tentacular/config.yaml so that
-$shared secret references resolve from this directory.
+The workspace is git-initialized and the path is written to
+~/.tentacular/config.yaml with git_state.enabled: true.
 
-Default path: ~/tentacles`,
+Default path: ~/tentacular`,
 		Args: cobra.MaximumNArgs(1),
 		RunE: runInitWorkspace,
 	}
@@ -34,7 +36,7 @@ func runInitWorkspace(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("determining home directory: %w", err)
 	}
 
-	wsPath := filepath.Join(home, "tentacles")
+	wsPath := filepath.Join(home, "tentacular")
 	if len(args) > 0 {
 		wsPath = args[0]
 		wsPath = expandHome(wsPath)
@@ -68,6 +70,19 @@ scratch/
 		}
 	}
 
+	// Initialize git repo if not already one
+	gitInitialized := false
+	gitDir := filepath.Join(absPath, ".git")
+	if _, statErr := os.Stat(gitDir); os.IsNotExist(statErr) {
+		initCmd := exec.CommandContext(context.Background(), "git", "init", absPath) //nolint:gosec // absPath is caller-controlled
+		initCmd.Stdout = os.Stdout
+		initCmd.Stderr = os.Stderr
+		if runErr := initCmd.Run(); runErr != nil {
+			return fmt.Errorf("initializing git repo: %w", runErr)
+		}
+		gitInitialized = true
+	}
+
 	// Write workspace to config
 	configPath := filepath.Join(home, ".tentacular", "config.yaml")
 	cfg := TentacularConfig{}
@@ -76,6 +91,8 @@ scratch/
 	}
 
 	cfg.Workspace = absPath
+	cfg.GitState.Enabled = true
+	cfg.GitState.RepoPath = absPath
 
 	if mkdirErr3 := os.MkdirAll(filepath.Dir(configPath), 0o755); mkdirErr3 != nil { //nolint:gosec // non-sensitive config directory
 		return fmt.Errorf("creating config directory: %w", mkdirErr3)
@@ -92,6 +109,16 @@ scratch/
 	fmt.Printf("Workspace initialized at %s\n", absPath)
 	fmt.Printf("  .secrets/   — shared secrets pool\n")
 	fmt.Printf("  .gitignore  — default ignores\n")
+	if gitInitialized {
+		fmt.Printf("  .git/       — git repository\n")
+	}
 	fmt.Printf("\nWorkspace path written to %s\n", configPath)
+	fmt.Printf("  git_state.enabled: true\n")
+	fmt.Printf("  git_state.repo_path: %s\n", absPath)
+	if gitInitialized {
+		fmt.Printf("\nTo connect a remote:\n")
+		fmt.Printf("  git -C %s remote add origin <url>\n", absPath)
+		fmt.Printf("  git -C %s push -u origin main\n", absPath)
+	}
 	return nil
 }

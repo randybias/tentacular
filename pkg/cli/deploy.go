@@ -147,6 +147,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// capture provenance metadata for Deployment annotations.
 	var gitMeta GitMeta
 	if cfg.GitState.Enabled && cfg.GitState.RepoPath != "" {
+		if enclaveName == "" {
+			return emitDeployResult(cmd, "fail", "--enclave is required (pass it explicitly)", nil, startedAt)
+		}
 		if gitErr := checkGitStateClean(cfg.GitState.RepoPath, enclaveName, wf.Name); gitErr != nil {
 			return emitDeployResult(cmd, "fail", gitErr.Error(), nil, startedAt)
 		}
