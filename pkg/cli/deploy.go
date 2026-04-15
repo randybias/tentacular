@@ -141,6 +141,9 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 	// Git-state deploy gate: if git-state is enabled, verify the repo is clean
 	// for this enclave/tentacle before proceeding.
 	if cfg.GitState.Enabled && cfg.GitState.RepoPath != "" {
+		if enclaveName == "" {
+			return emitDeployResult(cmd, "fail", "--enclave is required (pass it explicitly)", nil, startedAt)
+		}
 		if gitErr := checkGitStateClean(cfg.GitState.RepoPath, enclaveName, wf.Name); gitErr != nil {
 			return emitDeployResult(cmd, "fail", gitErr.Error(), nil, startedAt)
 		}

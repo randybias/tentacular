@@ -45,12 +45,12 @@ type TentacularConfig struct {
 	ModuleProxy    ModuleProxyConfig            `yaml:"moduleProxy,omitempty"`
 }
 
-// LoadConfig returns merged config: project > user > defaults.
+// LoadConfig returns the user-level config from ~/.tentacular/config.yaml.
 // Missing files are silently ignored.
 func LoadConfig() TentacularConfig {
 	cfg := TentacularConfig{}
 
-	// 1. Load user-level (~/.tentacular/config.yaml)
+	// Load user-level (~/.tentacular/config.yaml)
 	home, _ := os.UserHomeDir()
 	if home != "" {
 		userPath := filepath.Join(home, ".tentacular", "config.yaml")
@@ -59,124 +59,5 @@ func LoadConfig() TentacularConfig {
 		}
 	}
 
-	// 2. Load project-level (.tentacular/config.yaml) — overrides user
-	projPath := filepath.Join(".tentacular", "config.yaml")
-	if data, err := os.ReadFile(projPath); err == nil { //nolint:gosec // reading project config file
-		var proj TentacularConfig
-		_ = yaml.Unmarshal(data, &proj)
-		mergeConfig(&cfg, &proj)
-	}
-
 	return cfg
-}
-
-func mergeConfig(base, override *TentacularConfig) {
-	if override.Workspace != "" {
-		base.Workspace = override.Workspace
-	}
-	if override.Registry != "" {
-		base.Registry = override.Registry
-	}
-	if override.Namespace != "" {
-		base.Namespace = override.Namespace
-	}
-	if override.RuntimeClass != "" {
-		base.RuntimeClass = override.RuntimeClass
-	}
-	if override.DefaultCluster != "" {
-		base.DefaultCluster = override.DefaultCluster
-	}
-	if len(override.Clusters) > 0 {
-		if base.Clusters == nil {
-			base.Clusters = make(map[string]EnvironmentConfig)
-		}
-		for k, v := range override.Clusters {
-			existing, ok := base.Clusters[k]
-			if !ok {
-				base.Clusters[k] = v
-				continue
-			}
-			mergeEnvConfig(&existing, &v)
-			base.Clusters[k] = existing
-		}
-	}
-	if override.ModuleProxy.Enabled {
-		base.ModuleProxy.Enabled = true
-	}
-	if override.ModuleProxy.Namespace != "" {
-		base.ModuleProxy.Namespace = override.ModuleProxy.Namespace
-	}
-	if override.ModuleProxy.Image != "" {
-		base.ModuleProxy.Image = override.ModuleProxy.Image
-	}
-	if override.ModuleProxy.Storage != "" {
-		base.ModuleProxy.Storage = override.ModuleProxy.Storage
-	}
-	if override.ModuleProxy.PVCSize != "" {
-		base.ModuleProxy.PVCSize = override.ModuleProxy.PVCSize
-	}
-	if override.GitState.Enabled {
-		base.GitState.Enabled = true
-	}
-	if override.GitState.RepoPath != "" {
-		base.GitState.RepoPath = override.GitState.RepoPath
-	}
-	if override.MCP.Endpoint != "" {
-		base.MCP.Endpoint = override.MCP.Endpoint
-	}
-	if override.Catalog.URL != "" {
-		base.Catalog.URL = override.Catalog.URL
-	}
-	if override.Catalog.CacheTTL != "" {
-		base.Catalog.CacheTTL = override.Catalog.CacheTTL
-	}
-	if override.Scaffold.URL != "" {
-		base.Scaffold.URL = override.Scaffold.URL
-	}
-	if override.Scaffold.CacheTTL != "" {
-		base.Scaffold.CacheTTL = override.Scaffold.CacheTTL
-	}
-}
-
-// mergeEnvConfig merges individual fields of an EnvironmentConfig override
-// into a base, preserving base fields that the override does not set.
-func mergeEnvConfig(base, override *EnvironmentConfig) {
-	if override.Context != "" {
-		base.Context = override.Context
-	}
-	if override.Namespace != "" {
-		base.Namespace = override.Namespace
-	}
-	if override.Image != "" {
-		base.Image = override.Image
-	}
-	if override.RuntimeClass != "" {
-		base.RuntimeClass = override.RuntimeClass
-	}
-	if len(override.ConfigOverrides) > 0 {
-		if base.ConfigOverrides == nil {
-			base.ConfigOverrides = make(map[string]any)
-		}
-		for k, v := range override.ConfigOverrides {
-			base.ConfigOverrides[k] = v
-		}
-	}
-	if override.SecretsSource != "" {
-		base.SecretsSource = override.SecretsSource
-	}
-	if override.Enforcement != "" {
-		base.Enforcement = override.Enforcement
-	}
-	if override.MCPEndpoint != "" {
-		base.MCPEndpoint = override.MCPEndpoint
-	}
-	if override.OIDCIssuer != "" {
-		base.OIDCIssuer = override.OIDCIssuer
-	}
-	if override.OIDCClientID != "" {
-		base.OIDCClientID = override.OIDCClientID
-	}
-	if override.OIDCClientSecret != "" {
-		base.OIDCClientSecret = override.OIDCClientSecret
-	}
 }

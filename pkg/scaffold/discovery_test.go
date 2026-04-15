@@ -595,7 +595,7 @@ func TestEnsurePrivateScaffoldsDirPermissions(t *testing.T) {
 // --- TentacleDirForEnclave ---
 
 // TestTentacleDirForEnclaveValid verifies that a valid enclave name returns
-// the correct path under ~/tentacles/<enclave>.
+// the correct path under ~/tentacular/<enclave>.
 func TestTentacleDirForEnclaveValid(t *testing.T) {
 	tmpHome := t.TempDir()
 	origHome := os.Getenv("HOME")
@@ -606,7 +606,7 @@ func TestTentacleDirForEnclaveValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	want := filepath.Join(tmpHome, "tentacles", "my-enclave")
+	want := filepath.Join(tmpHome, "tentacular", "my-enclave")
 	if got != want {
 		t.Errorf("got %q, want %q", got, want)
 	}

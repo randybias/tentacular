@@ -297,46 +297,12 @@ func TestConfigure_SecretPresent_FilePermissions0600(t *testing.T) {
 	}
 }
 
-func TestConfigure_ProjectConfig(t *testing.T) {
-	_, cleanup := setupConfigTest(t)
-	defer cleanup()
-
-	// Get the workdir (Chdir'd by setupConfigTest)
-	workdir, _ := os.Getwd()
-
+func TestConfigure_NoProjectFlag(t *testing.T) {
+	// --project flag has been removed; configure always writes user-level config.
 	cmd := NewConfigureCmd()
-	cmd.PersistentFlags().StringP("cluster", "c", "", "Target cluster")
-
-	var out bytes.Buffer
-	cmd.SetOut(&out)
-	cmd.SetErr(&out)
-
-	_ = cmd.Flags().Set("project", "true")
-	_ = cmd.PersistentFlags().Set("cluster", "dev")
-	_ = cmd.Flags().Set("oidc-issuer", "https://auth.example.com/realms/dev")
-	_ = cmd.Flags().Set("oidc-client-id", "devclient")
-
-	if err := cmd.RunE(cmd, nil); err != nil {
-		t.Fatalf("runConfigure --project: %v", err)
-	}
-
-	cfgPath := filepath.Join(workdir, ".tentacular", "config.yaml")
-	data, err := os.ReadFile(cfgPath)
-	if err != nil {
-		t.Fatalf("reading project config: %v", err)
-	}
-
-	var cfg TentacularConfig
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
-		t.Fatalf("parsing project config: %v", err)
-	}
-
-	env, ok := cfg.Clusters["dev"]
-	if !ok {
-		t.Fatal("dev environment not found in project config")
-	}
-	if env.OIDCIssuer != "https://auth.example.com/realms/dev" {
-		t.Errorf("oidc_issuer: got %q", env.OIDCIssuer)
+	f := cmd.Flags().Lookup("project")
+	if f != nil {
+		t.Error("--project flag should not exist on configure command")
 	}
 }
 

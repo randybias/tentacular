@@ -79,16 +79,16 @@ func QuickstartsDir() (string, error) {
 	return filepath.Join(home, ".tentacular", "quickstarts"), nil
 }
 
-// TentaclesDir returns ~/tentacles, the canonical tentacle workspace root.
+// TentaclesDir returns ~/tentacular, the canonical tentacle workspace root.
 func TentaclesDir() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, "tentacles"), nil
+	return filepath.Join(home, "tentacular"), nil
 }
 
-// TentacleDirForEnclave returns ~/tentacles/<enclaveName>, the workspace root
+// TentacleDirForEnclave returns ~/tentacular/<enclaveName>, the workspace root
 // for tentacles belonging to the given enclave.
 func TentacleDirForEnclave(enclaveName string) (string, error) {
 	if enclaveName == "" {

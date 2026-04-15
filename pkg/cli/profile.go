@@ -17,13 +17,8 @@ import (
 
 const profileFreshnessThreshold = time.Hour
 
-// resolveProfileDir returns the envprofiles directory alongside whichever
-// .tentacular/config.yaml is active: project-level (CWD) takes priority,
-// falling back to user-level (~/.tentacular/).
+// resolveProfileDir returns the envprofiles directory under ~/.tentacular/.
 func resolveProfileDir() string {
-	if _, err := os.Stat(filepath.Join(".tentacular", "config.yaml")); err == nil {
-		return filepath.Join(".tentacular", "envprofiles")
-	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return filepath.Join(".tentacular", "envprofiles") // last resort
@@ -89,7 +84,7 @@ type clusterProfileFn func(ctx context.Context, namespace string) ([]byte, error
 func runProfileAll(profileFn clusterProfileFn, output string, save, force bool) error {
 	cfg := LoadConfig()
 	if len(cfg.Clusters) == 0 {
-		return errors.New("no environments configured in .tentacular/config.yaml")
+		return errors.New("no environments configured in ~/.tentacular/config.yaml")
 	}
 
 	var errs []string
