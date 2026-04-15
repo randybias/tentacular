@@ -36,6 +36,7 @@ func NewDeployCmd() *cobra.Command {
 	cmd.Flags().Bool("verify", false, "Run workflow once after deploy to verify")
 	cmd.Flags().Bool("warn", false, "Audit mode: contract violations produce warnings instead of failures")
 	cmd.Flags().String("enclave", "", "Target enclave name (resolves to enclave namespace)")
+	cmd.Flags().Bool("no-push", false, "Skip git push step (emergency bypass; cluster state will diverge from git)")
 	return cmd
 }
 
@@ -46,7 +47,8 @@ type InternalDeployOptions struct {
 	Image           string
 	RuntimeClass    string
 	ImagePullPolicy string
-	Context         string // kubeconfig context override (bootstrap-only)
+	Context         string  // kubeconfig context override (bootstrap-only)
+	GitMeta         GitMeta // optional git provenance; non-empty fields are injected as annotations on the Deployment
 }
 
 // DeployResult holds the result of a deployment.
@@ -138,11 +140,34 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		}
 	}
 
+	noPush, _ := cmd.Flags().GetBool("no-push")
+
 	// Git-state deploy gate: if git-state is enabled, verify the repo is clean
-	// for this enclave/tentacle before proceeding.
+	// for this enclave/tentacle before proceeding, then push HEAD to remote and
+	// capture provenance metadata for Deployment annotations.
+	var gitMeta GitMeta
 	if cfg.GitState.Enabled && cfg.GitState.RepoPath != "" {
 		if gitErr := checkGitStateClean(cfg.GitState.RepoPath, enclaveName, wf.Name); gitErr != nil {
 			return emitDeployResult(cmd, "fail", gitErr.Error(), nil, startedAt)
+		}
+
+		branch, branchErr := getCurrentBranch(cfg.GitState.RepoPath)
+		if branchErr != nil {
+			return emitDeployResult(cmd, "fail", "reading git branch: "+branchErr.Error(), nil, startedAt)
+		}
+
+		if noPush {
+			_, _ = fmt.Fprintln(StatusWriter(cmd), "WARNING: --no-push bypasses remote sync; cluster state will diverge from git")
+		} else {
+			if pushErr := pushGitState(cfg.GitState.RepoPath, branch); pushErr != nil {
+				return emitDeployResult(cmd, "fail", "git push failed — deploy aborted: "+pushErr.Error(), nil, startedAt)
+			}
+		}
+
+		var metaErr error
+		gitMeta, metaErr = captureGitMeta(cfg.GitState.RepoPath)
+		if metaErr != nil {
+			return emitDeployResult(cmd, "fail", "reading git metadata: "+metaErr.Error(), nil, startedAt)
 		}
 	}
 
@@ -225,6 +250,7 @@ func runDeploy(cmd *cobra.Command, args []string) error {
 		Image:        imageTag,
 		RuntimeClass: runtimeClass,
 		StatusOut:    w,
+		GitMeta:      gitMeta,
 	}
 
 	deployResult, err := deployWorkflow(absDir, deployOpts, mcpClient)
@@ -430,6 +456,11 @@ func deployWorkflow(workflowDir string, opts InternalDeployOptions, mcpClient *m
 			return nil, fmt.Errorf("serializing manifest %s/%s: %w", m.Kind, m.Name, unmarshalErr)
 		}
 		mcpManifests = append(mcpManifests, obj)
+	}
+
+	// Inject git provenance annotations into the Deployment manifest (if any git metadata present).
+	if opts.GitMeta.SHA != "" {
+		injectGitAnnotations(mcpManifests, opts.GitMeta)
 	}
 
 	// Phase 3: Apply via MCP
