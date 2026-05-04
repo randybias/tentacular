@@ -44,3 +44,9 @@ CLAUDE.md
 coverage/
 .cache/
 coverage.out
+
+# tooling output
+.tentacular/envprofiles/
+bin/
+cli.test
+mcp.test
