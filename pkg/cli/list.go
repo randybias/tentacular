@@ -3,27 +3,40 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/spf13/cobra"
 )
 
 func NewListCmd() *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "list",
 		Short: "List deployed workflows",
 		Args:  cobra.NoArgs,
 		RunE:  runList,
 	}
+	cmd.Flags().String("enclave", "", "Target enclave name (resolves to enclave namespace)")
+	return cmd
 }
 
 func runList(cmd *cobra.Command, args []string) error {
-	namespace := resolveNamespace(cmd, "")
 	output, _ := cmd.Flags().GetString("output")
 
 	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
 		return err
+	}
+
+	enclaveFlagValue, _ := cmd.Flags().GetString("enclave")
+	cwd, _ := os.Getwd()
+	enclaveName, err := resolveEnclaveName(enclaveFlagValue, cwd)
+	if err != nil {
+		return err
+	}
+	namespace, err := resolveEnclaveNamespace(cmd, mcpClient, enclaveName)
+	if err != nil {
+		return fmt.Errorf("resolving enclave: %w", err)
 	}
 
 	workflows, err := mcpClient.WfList(cmd.Context(), namespace)
