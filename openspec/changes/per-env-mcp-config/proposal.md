@@ -39,12 +39,12 @@ reduce friction for users who primarily work against one cluster.
 default_env: dev
 environments:
   dev:
-    kubeconfig: ~/dev-secrets/kubeconfigs/dev.kubeconfig
+    kubeconfig: ~/.kube/configs/dev.kubeconfig
     namespace: tentacular-dev-wf
     mcp_endpoint: http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
     mcp_token_path: ~/.tentacular/tokens/dev-mcp-token
   prod:
-    kubeconfig: ~/dev-secrets/kubeconfigs/prod.kubeconfig
+    kubeconfig: ~/.kube/configs/prod.kubeconfig
     namespace: tentacular-prod-wf
     mcp_endpoint: http://tentacular-mcp.tentacular-system.svc.cluster.local:8080
     mcp_token_path: ~/.tentacular/tokens/prod-mcp-token
