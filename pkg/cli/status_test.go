@@ -12,6 +12,7 @@ import (
 )
 
 func TestStatusCmd_BasicOutput(t *testing.T) {
+	t.Setenv("TENTACULAR_ENCLAVE", "staging")
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
 		"enclave":   "staging",
@@ -20,10 +21,14 @@ func TestStatusCmd_BasicOutput(t *testing.T) {
 		"replicas":  3,
 		"available": 3,
 	})
+	enclaveJSON, _ := json.Marshal(map[string]any{"name": "staging"})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
 		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
+		},
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -71,6 +76,7 @@ func TestStatusCmd_BasicOutput(t *testing.T) {
 }
 
 func TestStatusCmd_NotReady(t *testing.T) {
+	t.Setenv("TENTACULAR_ENCLAVE", "default")
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
 		"enclave":   "default",
@@ -78,10 +84,14 @@ func TestStatusCmd_NotReady(t *testing.T) {
 		"replicas":  2,
 		"available": 1,
 	})
+	enclaveJSON, _ := json.Marshal(map[string]any{"name": "default"})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
 		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
+		},
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -120,6 +130,7 @@ func TestStatusCmd_NotReady(t *testing.T) {
 }
 
 func TestStatusCmd_DetailMode(t *testing.T) {
+	t.Setenv("TENTACULAR_ENCLAVE", "prod")
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "my-app",
 		"enclave":   "prod",
@@ -135,10 +146,14 @@ func TestStatusCmd_DetailMode(t *testing.T) {
 			{"type": "Warning", "reason": "BackOff", "message": "Back-off restarting failed container", "count": 3},
 		},
 	})
+	enclaveJSON, _ := json.Marshal(map[string]any{"name": "prod"})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
 		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
+		},
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -190,6 +205,7 @@ func TestStatusCmd_DetailMode(t *testing.T) {
 }
 
 func TestStatusCmd_JSONOutput(t *testing.T) {
+	t.Setenv("TENTACULAR_ENCLAVE", "default")
 	statusJSON, _ := json.Marshal(map[string]any{
 		"name":      "json-app",
 		"enclave":   "default",
@@ -197,10 +213,14 @@ func TestStatusCmd_JSONOutput(t *testing.T) {
 		"replicas":  1,
 		"available": 1,
 	})
+	enclaveJSON, _ := json.Marshal(map[string]any{"name": "default"})
 
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
 		"wf_status": func(_ map[string]any) (string, bool) {
 			return string(statusJSON), false
+		},
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)
@@ -243,9 +263,14 @@ func TestStatusCmd_JSONOutput(t *testing.T) {
 }
 
 func TestStatusCmd_ToolError(t *testing.T) {
+	t.Setenv("TENTACULAR_ENCLAVE", "default")
+	enclaveJSON, _ := json.Marshal(map[string]any{"name": "default"})
 	srv, _ := makeMCPTestServer(t, map[string]func(args map[string]any) (string, bool){
 		"wf_status": func(_ map[string]any) (string, bool) {
 			return "workflow not found: missing-app", true
+		},
+		"enclave_info": func(_ map[string]any) (string, bool) {
+			return string(enclaveJSON), false
 		},
 	})
 	defer closeMCPTestServer(srv)

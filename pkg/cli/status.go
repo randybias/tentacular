@@ -3,6 +3,7 @@ package cli
 import (
 	"encoding/json"
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -15,18 +16,29 @@ func NewStatusCmd() *cobra.Command {
 		RunE:  runStatus,
 	}
 	cmd.Flags().Bool("detail", false, "Show detailed status including pods, events, and resource limits")
+	cmd.Flags().String("enclave", "", "Target enclave name (resolves to enclave namespace)")
 	return cmd
 }
 
 func runStatus(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	namespace := resolveNamespace(cmd, ".")
 	output, _ := cmd.Flags().GetString("output")
 	detail, _ := cmd.Flags().GetBool("detail")
 
 	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
 		return err
+	}
+
+	enclaveFlagValue, _ := cmd.Flags().GetString("enclave")
+	cwd, _ := os.Getwd()
+	enclaveName, err := resolveEnclaveName(enclaveFlagValue, cwd)
+	if err != nil {
+		return err
+	}
+	namespace, err := resolveEnclaveNamespace(cmd, mcpClient, enclaveName)
+	if err != nil {
+		return fmt.Errorf("resolving enclave: %w", err)
 	}
 
 	status, err := mcpClient.WfStatus(cmd.Context(), namespace, name, detail)

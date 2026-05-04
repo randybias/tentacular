@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
@@ -15,17 +16,28 @@ func NewLogsCmd() *cobra.Command {
 		RunE:  runLogs,
 	}
 	cmd.Flags().Int64("tail", 100, "Number of recent log lines to show")
+	cmd.Flags().String("enclave", "", "Target enclave name (resolves to enclave namespace)")
 	return cmd
 }
 
 func runLogs(cmd *cobra.Command, args []string) error {
 	name := args[0]
-	namespace := resolveNamespace(cmd, ".")
 	tailLines, _ := cmd.Flags().GetInt64("tail")
 
 	mcpClient, err := requireMCPClient(cmd)
 	if err != nil {
 		return err
+	}
+
+	enclaveFlagValue, _ := cmd.Flags().GetString("enclave")
+	cwd, _ := os.Getwd()
+	enclaveName, err := resolveEnclaveName(enclaveFlagValue, cwd)
+	if err != nil {
+		return err
+	}
+	namespace, err := resolveEnclaveNamespace(cmd, mcpClient, enclaveName)
+	if err != nil {
+		return fmt.Errorf("resolving enclave: %w", err)
 	}
 
 	// Resolve pod name from workflow name via wf_pods
