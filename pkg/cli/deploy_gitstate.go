@@ -6,9 +6,20 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/randybias/tentacular/pkg/scaffold"
 )
+
+// RebaseConflictError is returned when a git rebase fails due to merge conflicts.
+// The caller must resolve the conflicts manually; the working tree is left clean
+// (rebase aborted) when this error is returned.
+type RebaseConflictError struct {
+	Message string   // human-readable summary
+	Files   []string // conflicted file paths
+}
+
+func (e *RebaseConflictError) Error() string { return e.Message }
 
 // checkGitStateClean verifies the git-state repo has no uncommitted changes
 // for the given enclave/tentacle path.
@@ -65,10 +76,10 @@ func getCurrentBranch(repoPath string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-// getGitRemoteURL returns the fetch URL of the given remote (typically "origin").
-// Returns an empty string if the remote is not configured or the command fails.
-func getGitRemoteURL(repoPath, remote string) string {
-	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "remote", "get-url", remote) //nolint:gosec // repoPath is config-controlled
+// getGitRemoteURL returns the fetch URL of the "origin" remote.
+// Returns an empty string if origin is not configured or the command fails.
+func getGitRemoteURL(repoPath string) string {
+	cmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "remote", "get-url", "origin") //nolint:gosec // repoPath is config-controlled
 	out, err := cmd.Output()
 	if err != nil {
 		// Remote may not be configured — return empty string silently.
@@ -89,16 +100,21 @@ func captureGitMeta(repoPath string) (GitMeta, error) {
 	if branchErr != nil {
 		branch = "" // non-fatal
 	}
-	repo := getGitRemoteURL(repoPath, "origin")
+	repo := getGitRemoteURL(repoPath)
 	return GitMeta{SHA: sha, Branch: branch, Repo: repo}, nil
 }
 
 // pushGitState pushes the current branch to its configured remote tracking branch.
 //
-// It first checks whether HEAD is ahead of the remote tracking ref:
-//   - If ahead: runs "git push" and returns any push error.
-//   - If equal (nothing to push): returns nil immediately.
-//   - If behind or diverged: returns an error — the caller must pull/rebase first.
+// Behavior by remote comparison state:
+//   - Equal: no-op, returns nil.
+//   - Ahead: pushes immediately.
+//   - Behind or diverged: rebases onto origin/<branch> first, then pushes.
+//     A real merge conflict aborts the rebase and returns *RebaseConflictError.
+//   - No upstream set: pushes to origin/<branch> directly.
+//
+// Push races (non-fast-forward rejection) trigger a fetch+rebase+retry loop
+// with exponential backoff (250ms, 500ms, 1s), up to 3 total attempts.
 //
 // The push uses whatever git credential helper is configured on the host; no
 // credentials are injected by this function.
@@ -107,61 +123,142 @@ func pushGitState(repoPath, branch string) error {
 		return errors.New("cannot push: not on a named branch (detached HEAD)")
 	}
 
-	// Fetch the remote tracking state so our comparison is current.
-	fetchCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "fetch", "--prune") //nolint:gosec // repoPath is config-controlled
-	if out, err := fetchCmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git fetch failed before push: %w\n%s", err, strings.TrimSpace(string(out)))
-	}
+	const maxAttempts = 3
+	backoff := []time.Duration{250 * time.Millisecond, 500 * time.Millisecond, time.Second}
 
-	// Determine whether we are ahead of, behind, or equal to the remote.
-	revListCmd := exec.CommandContext( //nolint:gosec // repoPath and branch are config-controlled
-		context.Background(),
-		"git", "-C", repoPath,
-		"rev-list", "--left-right", "--count",
-		"@{u}...HEAD",
-	)
-	out, err := revListCmd.Output()
-	if err != nil {
-		// No upstream tracking branch set — push anyway to origin/<branch>.
-		// This handles the case where the branch has never been pushed.
-		pushCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "push", "origin", branch) //nolint:gosec // repoPath and branch are config-controlled
-		if pushOut, pushErr := pushCmd.CombinedOutput(); pushErr != nil {
-			return fmt.Errorf("git push failed: %w\n%s", pushErr, strings.TrimSpace(string(pushOut)))
+	for attempt := range maxAttempts {
+		if attempt > 0 {
+			time.Sleep(backoff[attempt-1])
 		}
-		return nil
-	}
 
-	// Parse "behind\tahead" from rev-list output.
-	parts := strings.Fields(strings.TrimSpace(string(out)))
-	if len(parts) != 2 {
-		return fmt.Errorf("unexpected rev-list output: %q", strings.TrimSpace(string(out)))
-	}
-	var behind, ahead int
-	if _, scanErr := fmt.Sscan(parts[0], &behind); scanErr != nil {
-		return fmt.Errorf("parsing rev-list behind count: %w", scanErr)
-	}
-	if _, scanErr := fmt.Sscan(parts[1], &ahead); scanErr != nil {
-		return fmt.Errorf("parsing rev-list ahead count: %w", scanErr)
-	}
+		// Fetch the remote tracking state so our comparison is current.
+		fetchCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "fetch", "--prune") //nolint:gosec // repoPath is config-controlled
+		if fetchOut, fetchErr := fetchCmd.CombinedOutput(); fetchErr != nil {
+			return fmt.Errorf("git fetch failed before push: %w\n%s", fetchErr, strings.TrimSpace(string(fetchOut)))
+		}
 
-	if behind > 0 {
-		return fmt.Errorf(
-			"git-state repo is %d commit(s) behind remote; pull and rebase before deploying (git -C %s pull --rebase)",
-			behind, repoPath,
+		// Determine whether we are ahead of, behind, or equal to the remote.
+		revListCmd := exec.CommandContext( //nolint:gosec // repoPath and branch are config-controlled
+			context.Background(),
+			"git", "-C", repoPath,
+			"rev-list", "--left-right", "--count",
+			"@{u}...HEAD",
 		)
-	}
+		out, revErr := revListCmd.Output()
+		if revErr != nil {
+			// No upstream tracking branch set — push to origin/<branch>.
+			// This handles the case where the branch has never been pushed.
+			pushCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "push", "origin", branch) //nolint:gosec // repoPath and branch are config-controlled
+			if pushOut, pushErr := pushCmd.CombinedOutput(); pushErr != nil {
+				return fmt.Errorf("git push failed: %w\n%s", pushErr, strings.TrimSpace(string(pushOut)))
+			}
+			return nil
+		}
 
-	if ahead == 0 {
-		// Nothing to push — already in sync.
-		return nil
-	}
+		// Parse "behind\tahead" from rev-list output.
+		parts := strings.Fields(strings.TrimSpace(string(out)))
+		if len(parts) != 2 {
+			return fmt.Errorf("unexpected rev-list output: %q", strings.TrimSpace(string(out)))
+		}
+		var behind, ahead int
+		if _, scanErr := fmt.Sscan(parts[0], &behind); scanErr != nil {
+			return fmt.Errorf("parsing rev-list behind count: %w", scanErr)
+		}
+		if _, scanErr := fmt.Sscan(parts[1], &ahead); scanErr != nil {
+			return fmt.Errorf("parsing rev-list ahead count: %w", scanErr)
+		}
 
-	// We are ahead: push.
-	pushCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "push") //nolint:gosec // repoPath is config-controlled
-	if pushOut, pushErr := pushCmd.CombinedOutput(); pushErr != nil {
+		if behind > 0 {
+			// Auto-rebase onto the remote branch.
+			if rebaseErr := rebaseOntoRemote(repoPath, branch); rebaseErr != nil {
+				return rebaseErr
+			}
+			// After rebase, loop back to re-fetch and re-check before pushing.
+			continue
+		}
+
+		if ahead == 0 {
+			// Nothing to push — already in sync.
+			return nil
+		}
+
+		// We are ahead: push.
+		pushCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "push") //nolint:gosec // repoPath is config-controlled
+		pushOut, pushErr := pushCmd.CombinedOutput()
+		if pushErr == nil {
+			return nil
+		}
+
+		// If this is a non-fast-forward rejection, retry (push race).
+		if isNonFastForward(string(pushOut)) && attempt < maxAttempts-1 {
+			continue
+		}
 		return fmt.Errorf("git push failed: %w\n%s", pushErr, strings.TrimSpace(string(pushOut)))
 	}
-	return nil
+
+	return fmt.Errorf("git push failed after %d attempts: remote continues to reject (non-fast-forward)", maxAttempts)
+}
+
+// rebaseOntoRemote runs "git rebase origin/<branch>" in repoPath.
+// On conflict it aborts the rebase and returns *RebaseConflictError.
+func rebaseOntoRemote(repoPath, branch string) error {
+	upstream := "origin/" + branch
+	rebaseCmd := exec.CommandContext( //nolint:gosec // repoPath and branch are config-controlled
+		context.Background(),
+		"git", "-C", repoPath, "rebase", upstream,
+	)
+	rebaseOut, rebaseErr := rebaseCmd.CombinedOutput()
+	if rebaseErr == nil {
+		return nil
+	}
+
+	// Rebase failed — collect conflicted files and abort.
+	conflictFiles := collectConflictedFiles(repoPath)
+
+	// Abort the rebase to leave the working tree clean.
+	abortCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "rebase", "--abort") //nolint:gosec // repoPath is config-controlled
+	_ = abortCmd.Run()                                                                                // best-effort
+
+	if len(conflictFiles) > 0 {
+		return &RebaseConflictError{
+			Files:   conflictFiles,
+			Message: fmt.Sprintf("rebase conflict on %d file(s): %s; rebase aborted — resolve conflicts and redeploy", len(conflictFiles), strings.Join(conflictFiles, ", ")),
+		}
+	}
+
+	// Generic rebase failure (non-conflict, e.g. network error during patch apply).
+	return fmt.Errorf("git rebase %s failed: %w\n%s", upstream, rebaseErr, strings.TrimSpace(string(rebaseOut)))
+}
+
+// collectConflictedFiles returns the list of paths that are in a conflicted
+// state in the working tree (UU/AA/DD markers in git status --porcelain).
+func collectConflictedFiles(repoPath string) []string {
+	statusCmd := exec.CommandContext(context.Background(), "git", "-C", repoPath, "status", "--porcelain") //nolint:gosec // repoPath is config-controlled
+	out, err := statusCmd.Output()
+	if err != nil {
+		return nil
+	}
+	var files []string
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if len(line) < 3 {
+			continue
+		}
+		xy := line[:2]
+		// Conflict markers: UU, AA, DD, AU, UA, DU, UD
+		if strings.ContainsAny(string(xy[0]), "UAD") && strings.ContainsAny(string(xy[1]), "UAD") && xy != "  " {
+			files = append(files, strings.TrimSpace(line[3:]))
+		}
+	}
+	return files
+}
+
+// isNonFastForward returns true when the git push output indicates a
+// non-fast-forward rejection (i.e. someone pushed between our fetch and push).
+func isNonFastForward(output string) bool {
+	lower := strings.ToLower(output)
+	return strings.Contains(lower, "non-fast-forward") ||
+		strings.Contains(lower, "rejected") ||
+		strings.Contains(lower, "[rejected]")
 }
 
 // injectGitAnnotations merges git provenance annotations into the metadata.annotations
