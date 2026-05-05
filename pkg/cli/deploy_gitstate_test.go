@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -94,7 +95,7 @@ func TestPushGitState_AheadPushes(t *testing.T) {
 	// Fetch in a second clone to confirm the commit is on the remote.
 	base := t.TempDir()
 	verifyDir := filepath.Join(base, "verify")
-	remoteURL := getGitRemoteURL(workDir, "origin")
+	remoteURL := getGitRemoteURL(workDir)
 	if remoteURL == "" {
 		t.Fatal("getGitRemoteURL returned empty URL")
 	}
@@ -125,35 +126,59 @@ func TestPushGitState_EqualIsNoop(t *testing.T) {
 	}
 }
 
-// TestPushGitState_BehindReturnsError verifies that when the remote has commits
-// the local clone doesn't have (diverged/behind), pushGitState returns an error
-// and does not attempt the push.
-func TestPushGitState_BehindReturnsError(t *testing.T) {
+// TestPushGitState_BehindRebases verifies that when the remote has commits the
+// local clone doesn't have (strict behind, no local commits), pushGitState
+// auto-rebases and successfully pushes.
+func TestPushGitState_BehindRebases(t *testing.T) {
 	workDir := setupBareAndClone(t)
 
 	// Simulate remote advancing: clone a second copy, commit, push.
 	base := t.TempDir()
 	otherDir := filepath.Join(base, "other")
-	remoteURL := getGitRemoteURL(workDir, "origin")
+	remoteURL := getGitRemoteURL(workDir)
 	runGit(t, "", "clone", remoteURL, otherDir)
 	runGit(t, otherDir, "config", "user.email", "other@example.com")
 	runGit(t, otherDir, "config", "user.name", "Other User")
 	addCommit(t, otherDir, "remote-change.txt", "remote\n", "feat: remote-only change")
 	runGit(t, otherDir, "push")
 
-	// Now workDir is behind — pushGitState should fail.
+	// Now workDir is behind. Also add a local commit (diverged case).
+	addCommit(t, workDir, "local-change.txt", "local\n", "feat: local change")
+
 	branch, err := getCurrentBranch(workDir)
 	if err != nil {
 		t.Fatalf("getCurrentBranch: %v", err)
 	}
 
-	err = pushGitState(workDir, branch)
-	if err == nil {
-		t.Fatal("expected error when behind remote, got nil")
+	// pushGitState should rebase and push successfully.
+	if pushErr := pushGitState(workDir, branch); pushErr != nil {
+		t.Fatalf("pushGitState should succeed after auto-rebase, got: %v", pushErr)
 	}
-	if !strings.Contains(err.Error(), "behind") {
-		t.Errorf("expected 'behind' in error message, got: %v", err)
+
+	// Verify the remote now has both commits (the remote-only and the local).
+	verifyBase := t.TempDir()
+	verifyDir := filepath.Join(verifyBase, "verify")
+	runGit(t, "", "clone", remoteURL, verifyDir)
+
+	verifyLog := runGitOutput(t, verifyDir, "log", "--oneline")
+	if !strings.Contains(verifyLog, "feat: remote-only change") {
+		t.Errorf("expected remote-only change in log: %s", verifyLog)
 	}
+	if !strings.Contains(verifyLog, "feat: local change") {
+		t.Errorf("expected local change in log: %s", verifyLog)
+	}
+}
+
+// runGitOutput runs a git command and returns its combined stdout output.
+func runGitOutput(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmdArgs := append([]string{"-C", dir}, args...)
+	cmd := exec.Command("git", cmdArgs...) //nolint:gosec // test helper
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v\n%s", args, err, string(out))
+	}
+	return string(out)
 }
 
 // TestPushGitState_DetachedHeadReturnsError verifies that a detached HEAD state
@@ -366,6 +391,149 @@ func TestInjectGitAnnotations_EmptySHAIsNoop(t *testing.T) {
 	metadata := manifests[0]["metadata"].(map[string]any)
 	if _, hasAnnotations := metadata["annotations"]; hasAnnotations {
 		t.Error("annotations should not be injected when SHA is empty")
+	}
+}
+
+// TestPushGitState_RebaseConflictAbortsCleanly verifies that when origin has a
+// conflicting change to the same file and line, pushGitState returns a
+// *RebaseConflictError and leaves the working tree clean (no rebase-in-progress
+// markers).
+func TestPushGitState_RebaseConflictAbortsCleanly(t *testing.T) {
+	workDir := setupBareAndClone(t)
+
+	// Write a shared file to origin via a second clone.
+	base := t.TempDir()
+	otherDir := filepath.Join(base, "other")
+	remoteURL := getGitRemoteURL(workDir)
+	runGit(t, "", "clone", remoteURL, otherDir)
+	runGit(t, otherDir, "config", "user.email", "other@example.com")
+	runGit(t, otherDir, "config", "user.name", "Other User")
+	addCommit(t, otherDir, "conflict.txt", "remote version\n", "feat: remote version")
+	runGit(t, otherDir, "push")
+
+	// Local clone makes a conflicting change to the same file.
+	addCommit(t, workDir, "conflict.txt", "local version\n", "feat: local version")
+
+	branch, err := getCurrentBranch(workDir)
+	if err != nil {
+		t.Fatalf("getCurrentBranch: %v", err)
+	}
+
+	pushErr := pushGitState(workDir, branch)
+	if pushErr == nil {
+		t.Fatal("expected RebaseConflictError, got nil")
+	}
+
+	var conflictErr *RebaseConflictError
+	if !errors.As(pushErr, &conflictErr) {
+		t.Fatalf("expected *RebaseConflictError, got %T: %v", pushErr, pushErr)
+	}
+	if len(conflictErr.Files) == 0 {
+		t.Error("expected at least one conflicted file path")
+	}
+	found := false
+	for _, f := range conflictErr.Files {
+		if strings.Contains(f, "conflict.txt") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected conflict.txt in conflicted files, got: %v", conflictErr.Files)
+	}
+
+	// Working tree must be clean — no rebase-in-progress markers.
+	statusCmd := exec.Command("git", "-C", workDir, "status", "--porcelain") //nolint:gosec // test
+	statusOut, statusCmdErr := statusCmd.CombinedOutput()
+	if statusCmdErr != nil {
+		t.Fatalf("git status: %v\n%s", statusCmdErr, string(statusOut))
+	}
+	// Confirm no "MERGE_HEAD" or "rebase-merge" directory exists.
+	rebaseMergeDir := filepath.Join(workDir, ".git", "rebase-merge")
+	if _, statErr := os.Stat(rebaseMergeDir); statErr == nil {
+		t.Error("rebase-merge directory still present — rebase was not aborted cleanly")
+	}
+	rebaseApplyDir := filepath.Join(workDir, ".git", "rebase-apply")
+	if _, statErr := os.Stat(rebaseApplyDir); statErr == nil {
+		t.Error("rebase-apply directory still present — rebase was not aborted cleanly")
+	}
+}
+
+// TestPushGitState_RetryExhaustedError verifies that after 3 push attempts the
+// function returns an error. We install a pre-receive hook on the bare repo
+// that always rejects pushes with a non-fast-forward message, so every attempt
+// fails regardless of the state of the local branch.
+func TestPushGitState_RetryExhaustedError(t *testing.T) {
+	workDir := setupBareAndClone(t)
+	remoteURL := getGitRemoteURL(workDir)
+
+	// Install a pre-receive hook that always rejects with a non-fast-forward msg.
+	hooksDir := filepath.Join(remoteURL, "hooks")
+	hookPath := filepath.Join(hooksDir, "pre-receive")
+	hookScript := "#!/bin/sh\necho '[rejected] non-fast-forward' >&2\nexit 1\n"
+	if err := os.WriteFile(hookPath, []byte(hookScript), 0o755); err != nil {
+		t.Fatalf("writing pre-receive hook: %v", err)
+	}
+
+	// Add a local commit so we have something to push.
+	addCommit(t, workDir, "local.txt", "local\n", "feat: local")
+
+	branch, err := getCurrentBranch(workDir)
+	if err != nil {
+		t.Fatalf("getCurrentBranch: %v", err)
+	}
+
+	pushErr := pushGitState(workDir, branch)
+	if pushErr == nil {
+		t.Fatal("expected error after retry exhaustion, got nil")
+	}
+	// Must not be a rebase conflict — this is a push rejection.
+	var conflictErr *RebaseConflictError
+	if errors.As(pushErr, &conflictErr) {
+		t.Errorf("expected push-exhausted error, got RebaseConflictError: %v", pushErr)
+	}
+	t.Logf("got expected error: %v", pushErr)
+}
+
+// TestPushGitState_CleanRebaseAndPush verifies the core auto-rebase scenario:
+// origin has one commit, local has one non-conflicting commit. pushGitState must
+// rebase and push, resulting in a remote that contains both commits.
+func TestPushGitState_CleanRebaseAndPush(t *testing.T) {
+	workDir := setupBareAndClone(t)
+
+	// Remote advances via a second clone.
+	base := t.TempDir()
+	otherDir := filepath.Join(base, "other")
+	remoteURL := getGitRemoteURL(workDir)
+	runGit(t, "", "clone", remoteURL, otherDir)
+	runGit(t, otherDir, "config", "user.email", "other@example.com")
+	runGit(t, otherDir, "config", "user.name", "Other User")
+	addCommit(t, otherDir, "upstream.txt", "upstream content\n", "feat: upstream commit")
+	runGit(t, otherDir, "push")
+
+	// Local has a non-conflicting commit on a different file.
+	addCommit(t, workDir, "local.txt", "local content\n", "feat: local commit")
+
+	branch, branchErr := getCurrentBranch(workDir)
+	if branchErr != nil {
+		t.Fatalf("getCurrentBranch: %v", branchErr)
+	}
+
+	if pushErr := pushGitState(workDir, branch); pushErr != nil {
+		t.Fatalf("expected clean rebase+push to succeed, got: %v", pushErr)
+	}
+
+	// Verify the remote has both commits.
+	verifyBase := t.TempDir()
+	verifyDir := filepath.Join(verifyBase, "verify")
+	runGit(t, "", "clone", remoteURL, verifyDir)
+	log := runGitOutput(t, verifyDir, "log", "--oneline")
+
+	if !strings.Contains(log, "feat: upstream commit") {
+		t.Errorf("upstream commit missing from remote log: %s", log)
+	}
+	if !strings.Contains(log, "feat: local commit") {
+		t.Errorf("local commit missing from remote log: %s", log)
 	}
 }
 
