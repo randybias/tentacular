@@ -21,6 +21,7 @@ func NewStateCmd() *cobra.Command {
 	cmd.AddCommand(newStateInitCmd())
 	cmd.AddCommand(newStateStatusCmd())
 	cmd.AddCommand(newStateCommitCmd())
+	cmd.AddCommand(newStateRestoreCmd())
 	return cmd
 }
 
@@ -137,11 +138,15 @@ func newStateStatusCmd() *cobra.Command {
 		RunE:  runStateStatus,
 	}
 	cmd.Flags().Bool("assert-clean", false, "Exit non-zero if there are uncommitted changes in the git-state repo")
+	cmd.Flags().Bool("drift", false, "Report cluster-vs-git drift per tentacle (requires MCP connection)")
+	cmd.Flags().String("enclave", "", "Limit drift report to this enclave (requires --drift)")
 	return cmd
 }
 
 func runStateStatus(cmd *cobra.Command, _ []string) error {
 	assertClean, _ := cmd.Flags().GetBool("assert-clean")
+	driftMode, _ := cmd.Flags().GetBool("drift")
+	enclaveFlagValue, _ := cmd.Flags().GetString("enclave")
 
 	cfg := LoadConfig()
 	if !cfg.GitState.Enabled || cfg.GitState.RepoPath == "" {
@@ -220,6 +225,43 @@ func runStateStatus(cmd *cobra.Command, _ []string) error {
 		}
 	}
 
+	// Drift detection: compare cluster annotations vs local git HEAD.
+	if driftMode {
+		if err := runDriftReport(cmd, repoPath, enclaveFlagValue, enclaves); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// runDriftReport queries MCP for deployed tentacles and compares their
+// git-sha annotations against local HEAD in the git-state repo.
+func runDriftReport(cmd *cobra.Command, repoPath, enclaveFlagValue string, enclaves []string) error {
+	mcpClient, err := requireMCPClient(cmd)
+	if err != nil {
+		return fmt.Errorf("drift report requires MCP: %w", err)
+	}
+
+	// Filter enclaves if --enclave was specified.
+	targets := enclaves
+	if enclaveFlagValue != "" {
+		targets = []string{enclaveFlagValue}
+	}
+
+	fmt.Printf("\nDrift report:\n")
+	for _, enclave := range targets {
+		entries, driftErr := detectDrift(context.Background(), mcpClient, enclave, repoPath)
+		if driftErr != nil {
+			fmt.Printf("  %s: error querying cluster (%v)\n", enclave, driftErr)
+			continue
+		}
+		if len(entries) == 0 {
+			fmt.Printf("  %s: no deployed tentacles\n", enclave)
+			continue
+		}
+		writeDriftEntries(os.Stdout, entries)
+	}
 	return nil
 }
 
