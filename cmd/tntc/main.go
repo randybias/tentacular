@@ -38,6 +38,7 @@ func main() {
 
 	// Cluster commands
 	root.AddCommand(cli.NewClusterCmd())
+	root.AddCommand(cli.NewContractCmd())
 
 	// Configuration commands
 	root.AddCommand(cli.NewConfigureCmd())
